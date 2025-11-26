@@ -1,0 +1,730 @@
+import { SimulationParameters, Preset, GrowthScenarioConfig, MarketConditionConfig, FomoEvent, GrowthScenario, MarketCondition } from '@/types/simulation';
+
+/**
+ * Default parameters updated with 2024-2025 industry benchmarks.
+ * 
+ * === SOLANA NETWORK INTEGRATION (November 2025) ===
+ * All blockchain operations built on Solana mainnet-beta:
+ * - Ultra-low transaction fees: ~$0.00025 per transaction
+ * - High throughput: 4,000+ sustained TPS
+ * - Fast finality: ~400ms block time
+ * - SPL Token standard for VCoin
+ * - DEX integration via Jupiter aggregator
+ * 
+ * Solana DEX Ecosystem:
+ * - Jupiter: Aggregates 20+ DEXs for best prices
+ * - Raydium: Concentrated Liquidity (CLMM) pools
+ * - Orca Whirlpools: High-efficiency CLMM
+ * - Meteora: Dynamic fee pools
+ * - Phoenix: Order book DEX
+ * 
+ * Key changes from audit fixes:
+ * - Issue #1: Added retention model (apply_retention, retention params)
+ * - Issue #2: Realistic CAC ($75 NA, $25 Global, $8K HQ Creator)
+ * - Issue #3: Realistic conversion rate (1.5% vs 4%)
+ * - Issue #4: Realistic exchange metrics (10% adoption on Solana, $150 volume)
+ * - Issue #5: Sustainable token economics (5% burn, 3% buyback)
+ * - Issue #7: Platform maturity-adjusted CPM rates
+ * - Issue #8: Realistic posts per user (0.6 average, only 10% are creators)
+ * - Issue #11: Realistic profile sales (1/month, $25 avg)
+ * - Issue #12: NFT mints reduced to 0.1%
+ * - Issue #13: Compliance costs included
+ * 
+ * Nov 2025 Updates:
+ * - Full Solana integration with Jupiter/Raydium/Orca
+ * - Added Liquidity parameters for Solana DEXs (70%+ health target)
+ * - Added Staking parameters for SPL staking (10% APY)
+ * - Added Creator Economy (boost posts, premium DM)
+ * - Updated burn/buyback rates for 25-35% recapture target
+ */
+export const DEFAULT_PARAMETERS: SimulationParameters = {
+  // Platform Maturity (NEW)
+  platformMaturity: 'launch',
+  autoAdjustForMaturity: true,
+  
+  // Retention Model (NEW - Issue #1)
+  applyRetention: true,
+  retentionModelType: 'social_app',
+  platformAgeMonths: 6,
+  
+  // Compliance Costs (NEW - Issue #13)
+  includeComplianceCosts: false,  // Enable for realistic projections
+  
+  // Growth Scenario Settings (NEW - Nov 2025)
+  // Note: Starting users are calculated from marketing budget, not a separate input
+  growthScenario: 'base',
+  marketCondition: 'bull',
+  enableFomoEvents: true,
+  useGrowthScenarios: true,
+  
+  // Core parameters
+  tokenPrice: 0.03,
+  marketingBudget: 150000,
+  startingUsers: 0,
+  
+  // User acquisition (Issue #2 - Realistic CAC)
+  northAmericaBudgetPercent: 0.35,
+  globalLowIncomeBudgetPercent: 0.65,
+  cacNorthAmericaConsumer: 75,      // Was $50, now $75
+  cacGlobalLowIncomeConsumer: 25,   // Was $12, now $25
+  highQualityCreatorCAC: 8000,      // Was $3000, now $8000
+  midLevelCreatorCAC: 1500,         // Was $250, now $1500
+  highQualityCreatorsNeeded: 3,     // Reduced from 5
+  midLevelCreatorsNeeded: 15,       // Reduced from 30
+  
+  // Economic parameters (Updated Nov 2025)
+  burnRate: 0.05,                   // Updated: 3% -> 5% for better recapture
+  buybackPercent: 0.03,             // Updated: 2% -> 3% for better recapture
+  verificationRate: 0.02,           // Updated: 1.5% -> 2% (better product)
+  postsPerUser: 0.6,                // Was 3, now 0.6 (Issue #8)
+  creatorPercentage: 0.15,          // Updated: 10% -> 15% (creator-focused)
+  postsPerCreator: 6,               // NEW: 6 posts per creator (Issue #8)
+  adCPMMultiplier: 0.20,            // Updated: 20% fill rate (viable launch)
+  rewardAllocationPercent: 0.08,
+  
+  // Dynamic Reward Allocation (NEW - Nov 2025)
+  enableDynamicAllocation: true,    // Enable by default for realistic scaling
+  initialUsersForAllocation: 1000,  // Starting point for allocation scaling
+  targetUsersForMaxAllocation: 1000000, // User count for 90% allocation
+  maxPerUserMonthlyUsd: 50.0,       // $50 max per-user reward (inflation guard)
+  minPerUserMonthlyUsd: 0.10,       // $0.10 min per-user reward
+  
+  // Liquidity Parameters (NEW - Nov 2025)
+  initialLiquidityUsd: 100000,      // $100K minimum recommended
+  protocolOwnedLiquidity: 0.70,     // 70% POL target
+  liquidityLockMonths: 24,          // 2 year lock
+  targetLiquidityRatio: 0.15,       // 15%+ for health
+  
+  // Staking Parameters (NEW - Nov 2025)
+  stakingApy: 0.10,                 // 10% APY
+  stakerFeeDiscount: 0.30,          // 30% fee discount
+  minStakeAmount: 100,              // 100 VCoin minimum
+  stakeLockDays: 30,                // 30 day lock
+  
+  // Creator Economy Parameters (NEW - Nov 2025)
+  platformCreatorFee: 0.05,         // 5% platform fee on creator earnings
+  boostPostFeeVcoin: 5,             // 5 VCoin to boost a post
+  premiumDmFeeVcoin: 2,             // 2 VCoin to DM non-followers
+  premiumReactionFeeVcoin: 1,       // 1 VCoin for premium reactions
+  
+  // Module toggles
+  enableAdvertising: false,
+  enableMessaging: false,
+  enableCommunity: false,
+  enableExchange: true,
+  enableNft: false,                 // NEW: NFT toggle (Issue #12)
+  
+  // Identity Module pricing (USD)
+  basicPrice: 0,
+  verifiedPrice: 4,
+  premiumPrice: 12,
+  enterprisePrice: 59,
+  transferFee: 2,
+  saleCommission: 0.10,
+  monthlySales: 1,                  // Was 8, now 1 (Issue #11)
+  avgProfilePrice: 25,              // NEW: Was $100, now $25 (Issue #11)
+  
+  // Content Module pricing (VCoin) - Updated Nov 2025
+  // Note: Small fees help recapture and generate revenue
+  textPostFeeVcoin: 0,              // Keep free for engagement
+  imagePostFeeVcoin: 0.5,           // Small fee for image posts
+  videoPostFeeVcoin: 1,             // Small fee for video posts
+  nftMintFeeVcoin: 50,              // Updated: 25 -> 50 for better recapture
+  nftMintPercentage: 0.005,         // Updated: 0.5% (was 0.1%, increased for visible revenue)
+  premiumContentVolumeVcoin: 1000,  // Increased for better revenue
+  contentSaleVolumeVcoin: 500,      // Increased for better revenue
+  contentSaleCommission: 0.10,
+  
+  // Community Module pricing (USD)
+  smallCommunityFee: 0,
+  mediumCommunityFee: 3,
+  largeCommunityFee: 10,
+  enterpriseCommunityFee: 35,
+  eventHostingFee: 2,
+  communityVerificationFee: 8,
+  communityAnalyticsFee: 5,
+  
+  // Advertising Module pricing (USD) - Updated Nov 2025
+  bannerCPM: 0.50,                  // Updated: $0.50 (viable launch)
+  videoCPM: 2.00,                   // Updated: $2.00 (viable launch)
+  promotedPostFee: 1.00,
+  campaignManagementFee: 20,
+  adAnalyticsFee: 15,
+  
+  // Messaging Module pricing (USD)
+  encryptedDMFee: 0,
+  groupChatFee: 0.25,
+  fileTransferFee: 0.02,
+  voiceCallFee: 0.01,
+  messageStorageFee: 0.50,
+  messagingPremiumFee: 2,
+  
+  // Exchange/Wallet Module - Updated Nov 2025
+  exchangeSwapFeePercent: 0.005,    // 0.5% swap fee (industry standard)
+  exchangeWithdrawalFee: 1.50,
+  exchangeUserAdoptionRate: 0.10,   // 10% for token platform
+  exchangeAvgMonthlyVolume: 150,    // $150 avg volume
+  exchangeWithdrawalsPerUser: 0.5,  // 0.5 withdrawals/user
+  
+  // Reward Distribution
+  textPostPoints: 3,
+  imagePostPoints: 6,
+  audioPostPoints: 10,
+  shortVideoPoints: 15,
+  postVideosPoints: 25,
+  musicPoints: 20,
+  podcastPoints: 30,
+  audioBookPoints: 45,
+  likePoints: 0.2,
+  commentPoints: 2,
+  sharePoints: 3,
+  followPoints: 0.5,
+  maxPostsPerDay: 15,
+  maxLikesPerDay: 50,
+  maxCommentsPerDay: 30,
+  highQualityMultiplier: 1.5,
+  verifiedMultiplier: 1.15,
+  premiumMultiplier: 1.3,
+  day7Decay: 40,
+  day30Decay: 8,
+  maxDailyRewardUSD: 15,
+};
+
+/**
+ * Platform maturity presets - auto-adjust key parameters
+ * Nov 2025: Made launch settings viable for profitability
+ */
+export const MATURITY_ADJUSTMENTS = {
+  launch: {
+    cacMultiplier: 1.3,
+    conversionRate: 0.015,
+    adFillRate: 0.20,
+    bannerCpm: 0.50,
+    videoCpm: 2.00,
+    profileSalesMonthly: 1,
+    avgProfilePrice: 20,
+    nftPercentage: 0.001,
+    creatorPercentage: 0.12,
+  },
+  growing: {
+    cacMultiplier: 1.15,
+    conversionRate: 0.025,
+    adFillRate: 0.40,
+    bannerCpm: 3.00,
+    videoCpm: 10.00,
+    profileSalesMonthly: 8,
+    avgProfilePrice: 60,
+    nftPercentage: 0.005,
+    creatorPercentage: 0.15,
+  },
+  established: {
+    cacMultiplier: 1.0,
+    conversionRate: 0.04,
+    adFillRate: 0.70,
+    bannerCpm: 8.00,
+    videoCpm: 25.00,
+    profileSalesMonthly: 20,
+    avgProfilePrice: 100,
+    nftPercentage: 0.01,
+    creatorPercentage: 0.18,
+  },
+};
+
+export const PRESETS: Preset[] = [
+  {
+    name: 'conservative',
+    label: 'Lean Bootstrap ($50K/yr)',
+    icon: '🌱',
+    description: 'Conservative growth with minimal spend, realistic for seed stage',
+    parameters: {
+      tokenPrice: 0.03,
+      marketingBudget: 50000,
+      platformMaturity: 'launch',
+      northAmericaBudgetPercent: 0.30,
+      globalLowIncomeBudgetPercent: 0.70,
+      cacNorthAmericaConsumer: 80,
+      cacGlobalLowIncomeConsumer: 30,
+      highQualityCreatorCAC: 5000,
+      highQualityCreatorsNeeded: 2,
+      midLevelCreatorCAC: 1000,
+      midLevelCreatorsNeeded: 10,
+      burnRate: 0.02,
+      buybackPercent: 0.01,
+      verificationRate: 0.01,
+      postsPerUser: 0.4,
+      adCPMMultiplier: 0.15,           // Increased from 0.08 to show ad revenue
+      rewardAllocationPercent: 0.06,
+      nftMintFeeVcoin: 25,
+      nftMintPercentage: 0.005,        // 0.5% NFT mints (increased from 0.1%)
+      premiumContentVolumeVcoin: 200,
+      contentSaleVolumeVcoin: 100,
+      // Module toggles (explicit)
+      enableAdvertising: false,
+      enableMessaging: false,
+      enableCommunity: false,
+      enableExchange: true,
+      enableNft: false,
+      // Ad rates for lean scenario
+      bannerCPM: 0.50,
+      videoCPM: 2.00,
+    },
+  },
+  {
+    name: 'base',
+    label: 'Base Case ($150K/yr)',
+    icon: '⚖️',
+    description: 'Balanced growth strategy for Series A',
+    parameters: {
+      ...DEFAULT_PARAMETERS,
+      // Ensure NFT produces visible revenue when enabled
+      nftMintPercentage: 0.005,        // 0.5% NFT mints (increased from 0.1%)
+    },
+  },
+  {
+    name: 'aggressive',
+    label: 'Growth Phase ($250K/yr)',
+    icon: '🚀',
+    description: 'Aggressive acquisition for established platform',
+    parameters: {
+      tokenPrice: 0.03,
+      marketingBudget: 250000,
+      platformMaturity: 'growing',
+      northAmericaBudgetPercent: 0.40,
+      globalLowIncomeBudgetPercent: 0.60,
+      cacNorthAmericaConsumer: 70,
+      cacGlobalLowIncomeConsumer: 22,
+      highQualityCreatorCAC: 10000,
+      highQualityCreatorsNeeded: 5,
+      midLevelCreatorCAC: 2000,
+      midLevelCreatorsNeeded: 25,
+      burnRate: 0.04,
+      buybackPercent: 0.03,
+      verificationRate: 0.02,
+      postsPerUser: 0.8,
+      adCPMMultiplier: 0.35,           // Better fill rate for growing platform
+      rewardAllocationPercent: 0.10,
+      bannerCPM: 2.00,
+      videoCPM: 6.00,
+      nftMintFeeVcoin: 30,
+      nftMintPercentage: 0.01,         // 1% NFT mints for growing platform
+      premiumContentVolumeVcoin: 1500,
+      contentSaleVolumeVcoin: 800,
+      verifiedPrice: 5,
+      premiumPrice: 15,
+      // Module toggles (explicit)
+      enableAdvertising: true,         // Enabled for growth phase
+      enableMessaging: false,
+      enableCommunity: true,           // Enabled for growth phase
+      enableExchange: true,
+      enableNft: true,                 // Enabled for growth phase
+    },
+  },
+  {
+    name: 'bull',
+    label: 'Year 2+ Scale ($400K/yr)',
+    icon: '📈',
+    description: 'Established platform with strong brand',
+    parameters: {
+      tokenPrice: 0.06,
+      marketingBudget: 400000,
+      platformMaturity: 'established',
+      northAmericaBudgetPercent: 0.45,
+      globalLowIncomeBudgetPercent: 0.55,
+      cacNorthAmericaConsumer: 60,
+      cacGlobalLowIncomeConsumer: 20,
+      highQualityCreatorCAC: 12000,
+      highQualityCreatorsNeeded: 8,
+      midLevelCreatorCAC: 2500,
+      midLevelCreatorsNeeded: 40,
+      burnRate: 0.05,
+      buybackPercent: 0.04,
+      verificationRate: 0.03,
+      postsPerUser: 1.0,
+      adCPMMultiplier: 0.60,
+      rewardAllocationPercent: 0.12,
+      bannerCPM: 8.00,
+      videoCPM: 25.00,
+      nftMintFeeVcoin: 35,
+      nftMintPercentage: 0.02,         // 2% NFT mints for established platform
+      premiumContentVolumeVcoin: 5000,
+      contentSaleVolumeVcoin: 3000,
+      verifiedPrice: 5,
+      premiumPrice: 15,
+      monthlySales: 15,
+      avgProfilePrice: 80,
+      // Module toggles (all enabled for scale)
+      enableAdvertising: true,
+      enableMessaging: true,
+      enableCommunity: true,
+      enableExchange: true,
+      enableNft: true,
+    },
+  },
+];
+
+// Configuration constants
+export const CONFIG = {
+  SUPPLY: {
+    TOTAL: 1_000_000_000,
+    TGE_CIRCULATING: 158_800_000,
+    LIQUIDITY: 100_000_000,
+    REWARDS_ALLOCATION: 700_000_000,
+    REWARDS_DURATION_MONTHS: 120,
+  },
+  
+  MONTHLY_EMISSION: 5_833_333,
+  
+  FEE_DISTRIBUTION: {
+    BURN: 0.20,
+    TREASURY: 0.50,
+    REWARDS: 0.30,
+  },
+  
+  FEE_COLLECTION_RATE: 0.10,
+  
+  // === SOLANA NETWORK CONFIGURATION (November 2025) ===
+  SOLANA: {
+    // Network info
+    NETWORK: 'mainnet-beta',
+    CLUSTER_URL: 'https://api.mainnet-beta.solana.com',
+    
+    // Transaction costs (in USD at ~$50 SOL)
+    BASE_TX_FEE_USD: 0.00025,
+    PRIORITY_FEE_USD: 0.0001,
+    TOKEN_ACCOUNT_RENT_USD: 0.10,
+    
+    // Performance
+    BLOCK_TIME_MS: 400,
+    FINALITY_SLOTS: 32,
+    SUSTAINED_TPS: 4000,
+    
+    // Token program
+    TOKEN_PROGRAM: 'spl-token',
+    TOKEN_STANDARD: 'SPL Token',
+  },
+  
+  // === SOLANA DEX CONFIGURATION ===
+  SOLANA_DEX: {
+    // Primary aggregator
+    JUPITER: {
+      PLATFORM_FEE: 0,  // Free to use
+      API_URL: 'https://quote-api.jup.ag/v6',
+      VERSION: 'v6',
+    },
+    
+    // AMM pools
+    RAYDIUM: {
+      STANDARD_FEE: 0.0025,  // 0.25%
+      CLMM_FEE_LOW: 0.0001,  // 0.01%
+      CLMM_FEE_MEDIUM: 0.0005,  // 0.05%
+      CLMM_FEE_HIGH: 0.0025,  // 0.25%
+    },
+    ORCA: {
+      STANDARD_FEE: 0.003,  // 0.30%
+      WHIRLPOOL_FEE: 0.0001,  // 0.01% minimum
+    },
+    METEORA: {
+      DYNAMIC_FEE_MIN: 0.0001,  // 0.01%
+      DYNAMIC_FEE_MAX: 0.01,  // 1%
+    },
+    
+    // Slippage defaults
+    DEFAULT_SLIPPAGE_BPS: 50,  // 0.5%
+    MAX_SLIPPAGE_BPS: 300,  // 3%
+  },
+  
+  // === SOLANA STAKING ===
+  SOLANA_STAKING: {
+    PROGRAM_TYPE: 'spl_token_staking',
+    FRAMEWORK: 'anchor',
+    STAKE_ACCOUNT_RENT_SOL: 0.00203928,
+    EPOCH_DURATION_DAYS: 2,
+    BLOCKS_PER_DAY: 216000,
+    REWARD_FREQUENCY: 'per_block',
+    INSTANT_UNSTAKE_PENALTY: 0.02,  // 2%
+  },
+  
+  STAKING: {
+    GENERAL_STAKING_CAP_PERCENT: 0.15,
+    IDENTITY_PREMIUM_MULTIPLIER: 5,
+    CONTENT_BOOST_MULTIPLIER: 3,
+    ADVERTISING_CAMPAIGN_MULTIPLIER: 10,
+    MESSAGING_PREMIUM_MULTIPLIER: 5,
+    IDENTITY_CAP_PERCENT: 0.40,
+  },
+  
+  SPECIAL_RECAPTURE: {
+    FILE_FEES: 0.70,
+  },
+  
+  MODULE_REVENUE_SHARE: {
+    IDENTITY: 0.05,
+    CONTENT: 0.40,
+    REWARDS: 0.20,
+    COMMUNITY: 0.10,
+    ADVERTISING: 0.15,
+    MESSAGING: 0.10,
+  },
+  
+  // Issue #5: More conservative caps
+  ABSOLUTE_CAPS: {
+    MAX_RECAPTURE_RATE: 0.80,       // Was 0.95
+    MONTHLY_BURN_LIMIT: 0.05,       // Was 0.10
+    MONTHLY_BUYBACK_LIMIT: 0.03,    // Was 0.05
+    MONTHLY_STAKING_LIMIT: 0.10,    // Was 0.15
+  },
+  
+  // Issue #12: NFT percentage balanced for visible revenue while realistic
+  USER_DISTRIBUTION: {
+    IDENTITY_TIERS: { BASIC: 0.00, VERIFIED: 0.75, PREMIUM: 0.20, ENTERPRISE: 0.05 },
+    CONTENT_TYPES: { TEXT: 0.65, IMAGE: 0.30, VIDEO: 0.045, NFT: 0.005 },  // NFT: 0.5%
+    COMMUNITY_SIZES: { SMALL: 0.50, MEDIUM: 0.30, LARGE: 0.15, ENTERPRISE: 0.05 },
+    AD_FORMATS: { BANNER: 0.70, VIDEO: 0.30 },
+  },
+  
+  // Issue #17: Documented activity rates
+  ACTIVITY_RATES: {
+    PROFILE_TRANSFERS: 0.02,
+    PREMIUM_SUBSCRIBERS: 0.015,
+    CREATOR_PERCENTAGE: 0.10,
+    POSTS_PER_CREATOR: 6,
+    BOOSTED_POSTS: 0.05,
+    PROMOTED_POSTS: 0.03,
+    ADVERTISERS: 0.005,
+    AD_ANALYTICS_SUBSCRIBERS: 0.10,
+    USERS_PER_COMMUNITY: 15,
+    COMMUNITY_EVENTS: 0.15,
+    VERIFIED_COMMUNITIES: 0.05,
+    COMMUNITY_ANALYTICS_ELIGIBLE: 0.10,
+    MESSAGES_PER_USER: 50,
+    REGULAR_MESSAGES: 0.85,
+    ENCRYPTED_MESSAGES: 0.15,
+    GROUP_CHAT_USERS: 0.20,
+    FILES_PER_USER: 3,
+    CALL_USERS: 0.05,
+    AVG_CALL_MINUTES: 15,
+    STORAGE_SUBSCRIBERS: 0.10,
+    MESSAGING_PREMIUM_USERS: 0.08,
+    ADS_PER_USER: 30,
+    EXCHANGE_ADOPTION: 0.05,
+  },
+  
+  // Issue #9: Cost scaling (updated Nov 2025 - Solana network optimization)
+  // Solana advantages: ~$0.00025/tx, free RPC tiers, no gas volatility
+  COST_SCALING: {
+    IDENTITY: { BASE: 10, PER_USER: 0.01, THRESHOLD: 100, SOLANA_TX: 0.00025 },
+    CONTENT: { BASE: 20, PER_USER: 0.02, THRESHOLD: 100, PER_POST: 0.002, SOLANA_TX: 0.00025 },
+    ADVERTISING: { BASE: 5, PER_USER: 0.005, THRESHOLD: 100, SOLANA_TX: 0.00025 },
+    COMMUNITY: { BASE: 5, PER_USER: 0.005, THRESHOLD: 100, SOLANA_TX: 0.00025 },
+    MESSAGING: { BASE: 10, PER_USER: 0.01, THRESHOLD: 100, SOLANA_TX: 0.00025 },
+    REWARDS: { BASE: 10, PER_USER: 0.003, THRESHOLD: 100, SOLANA_TX: 0.00025 },
+    EXCHANGE: { BASE: 5, PER_USER: 0.01, THRESHOLD: 25, SOLANA_TX: 0.00025 },  // Jupiter DEX routing
+  },
+  
+  // Issue #11: Realistic marketplace
+  MARKETPLACE: {
+    AVG_PROFILE_PRICE_USD: 25,
+    AVG_NFT_PRICE_USD: 15,
+  },
+  
+  CAPS: {
+    ADVERTISING_BUYBACK: 0.80,
+    ADVERTISING_DEPOSITS: 0.25,
+    IDENTITY_STAKING: 0.40,
+    CONTENT_STAKING: 0.40,
+    COMMUNITY_STAKING: 0.40,
+    MESSAGING_STAKING: 0.40,
+  },
+  
+  // Issue #13: Compliance cost defaults (scaled for early-stage)
+  COMPLIANCE_DEFAULTS: {
+    KYC_AML_MONTHLY: 500,
+    LEGAL_MONTHLY: 1000,
+    INSURANCE_MONTHLY: 500,
+    AUDIT_QUARTERLY: 2500,
+    GDPR_MONTHLY: 250,
+  },
+  
+  // Retention curves (Issue #1)
+  RETENTION_CURVES: {
+    social_app: { 1: 0.25, 3: 0.12, 6: 0.08, 12: 0.04 },
+    crypto_app: { 1: 0.20, 3: 0.08, 6: 0.05, 12: 0.025 },
+    gaming: { 1: 0.30, 3: 0.12, 6: 0.06, 12: 0.03 },
+    utility: { 1: 0.40, 3: 0.25, 6: 0.18, 12: 0.12 },
+    vcoin: { 1: 0.22, 3: 0.10, 6: 0.06, 12: 0.03 },
+  },
+};
+
+export const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8001';
+export const WS_BASE_URL = process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:8001';
+
+// === GROWTH SCENARIO CONFIGURATIONS (November 2025) ===
+
+/**
+ * FOMO Events for each scenario
+ * Based on research for March 2026 - March 2027 token launch window
+ */
+export const FOMO_EVENTS: Record<GrowthScenario, FomoEvent[]> = {
+  conservative: [
+    { month: 1, eventType: 'tge_launch', impactMultiplier: 2.5, description: 'Token Generation Event - modest launch', durationDays: 14 },
+    { month: 4, eventType: 'feature_launch', impactMultiplier: 1.3, description: 'V2 feature release', durationDays: 14 },
+    { month: 8, eventType: 'partnership', impactMultiplier: 1.4, description: 'Partnership with niche platform', durationDays: 14 },
+    { month: 11, eventType: 'holiday', impactMultiplier: 1.2, description: 'Holiday season marketing push', durationDays: 14 },
+  ],
+  base: [
+    { month: 1, eventType: 'tge_launch', impactMultiplier: 5.0, description: 'Token Generation Event - strong launch', durationDays: 14 },
+    { month: 2, eventType: 'influencer', impactMultiplier: 1.8, description: 'Mid-tier crypto influencer endorsements', durationDays: 14 },
+    { month: 4, eventType: 'exchange_listing', impactMultiplier: 2.0, description: 'Tier-2 CEX listing', durationDays: 14 },
+    { month: 6, eventType: 'milestone', impactMultiplier: 1.5, description: '10K active users milestone', durationDays: 14 },
+    { month: 8, eventType: 'partnership', impactMultiplier: 1.6, description: 'Strategic Web3 partnership', durationDays: 14 },
+    { month: 11, eventType: 'holiday', impactMultiplier: 1.4, description: 'Holiday campaign with bonus rewards', durationDays: 14 },
+    { month: 12, eventType: 'feature_launch', impactMultiplier: 1.3, description: 'Major platform upgrade', durationDays: 14 },
+  ],
+  bullish: [
+    { month: 1, eventType: 'tge_launch', impactMultiplier: 12.0, description: 'Viral Token Generation Event', durationDays: 14 },
+    { month: 1, eventType: 'influencer', impactMultiplier: 3.0, description: 'Top-tier crypto influencer adoption', durationDays: 14 },
+    { month: 2, eventType: 'viral_moment', impactMultiplier: 2.5, description: 'Viral content moment', durationDays: 14 },
+    { month: 3, eventType: 'exchange_listing', impactMultiplier: 3.0, description: 'Tier-1 CEX listing (Binance/Coinbase)', durationDays: 14 },
+    { month: 5, eventType: 'milestone', impactMultiplier: 2.0, description: '50K active users milestone', durationDays: 14 },
+    { month: 6, eventType: 'partnership', impactMultiplier: 2.5, description: 'Major Web2 platform partnership', durationDays: 14 },
+    { month: 8, eventType: 'feature_launch', impactMultiplier: 1.8, description: 'Revolutionary AI feature launch', durationDays: 14 },
+    { month: 10, eventType: 'milestone', impactMultiplier: 1.6, description: '100K users milestone', durationDays: 14 },
+    { month: 11, eventType: 'holiday', impactMultiplier: 1.5, description: 'Holiday season viral campaign', durationDays: 14 },
+    { month: 12, eventType: 'exchange_listing', impactMultiplier: 2.0, description: 'Additional major exchange listings', durationDays: 14 },
+  ],
+};
+
+/**
+ * Growth Scenario Configurations
+ * Based on research data for March 2026 - March 2027 token launch window:
+ * - Bitcoin halving cycle (18 months post-halving)
+ * - Global crypto users: 850M-1B projected
+ * - Solana ecosystem growth
+ * - SocialFi market trends
+ */
+export const GROWTH_SCENARIOS: Record<GrowthScenario, GrowthScenarioConfig> = {
+  conservative: {
+    name: 'Conservative',
+    description: 'Cautious growth with focus on retention over acquisition. Assumes modest marketing budget, organic-first approach, and potential market headwinds.',
+    waitlistConversionRate: 0.40,
+    month1FomoMultiplier: 2.5,
+    monthlyGrowthRates: [0.25, 0.10, 0.00, -0.05, -0.03, 0.02, 0.03, 0.05, 0.02, 0.01, 0.04, 0.03],
+    month1Retention: 0.18,
+    month3Retention: 0.08,
+    month6Retention: 0.04,
+    month12Retention: 0.02,
+    viralCoefficient: 0.3,
+    tokenPriceStart: 0.03,
+    tokenPriceMonth6Multiplier: 0.66,
+    tokenPriceEndMultiplier: 1.0,
+    fomoEvents: FOMO_EVENTS.conservative,
+    expectedMonth1Users: 3300,
+    expectedMonth12Mau: 3000,
+  },
+  base: {
+    name: 'Base',
+    description: 'Balanced growth scenario based on comparable SocialFi launches. Assumes solid execution, reasonable marketing spend, and neutral-to-positive market conditions.',
+    waitlistConversionRate: 0.50,
+    month1FomoMultiplier: 5.0,
+    monthlyGrowthRates: [0.40, 0.25, 0.15, 0.20, 0.10, 0.12, 0.08, 0.10, 0.06, 0.05, 0.08, 0.07],
+    month1Retention: 0.22,
+    month3Retention: 0.10,
+    month6Retention: 0.06,
+    month12Retention: 0.035,
+    viralCoefficient: 0.5,
+    tokenPriceStart: 0.03,
+    tokenPriceMonth6Multiplier: 2.0,
+    tokenPriceEndMultiplier: 3.5,
+    fomoEvents: FOMO_EVENTS.base,
+    expectedMonth1Users: 5800,
+    expectedMonth12Mau: 14500,
+  },
+  bullish: {
+    name: 'Bullish',
+    description: 'Aggressive growth scenario assuming viral adoption, strong market conditions (bull market), major partnerships, and successful influencer campaigns.',
+    waitlistConversionRate: 0.60,
+    month1FomoMultiplier: 12.0,
+    monthlyGrowthRates: [0.80, 0.50, 0.35, 0.25, 0.30, 0.25, 0.15, 0.18, 0.12, 0.15, 0.12, 0.18],
+    month1Retention: 0.28,
+    month3Retention: 0.15,
+    month6Retention: 0.10,
+    month12Retention: 0.06,
+    viralCoefficient: 0.8,
+    tokenPriceStart: 0.03,
+    tokenPriceMonth6Multiplier: 4.0,
+    tokenPriceEndMultiplier: 7.0,
+    fomoEvents: FOMO_EVENTS.bullish,
+    expectedMonth1Users: 12800,
+    expectedMonth12Mau: 62500,
+  },
+};
+
+/**
+ * Market Condition Configurations
+ * Affects growth rates, retention, and token price trajectories
+ */
+export const MARKET_CONDITIONS: Record<MarketCondition, MarketConditionConfig> = {
+  bear: {
+    name: 'Bear Market',
+    description: 'Crypto winter conditions - reduced interest, lower liquidity, higher CAC, risk-off sentiment.',
+    growthMultiplier: 0.6,
+    retentionMultiplier: 0.8,
+    priceMultiplier: 0.5,
+    fomoMultiplier: 0.7,
+    cacMultiplier: 1.5,
+  },
+  neutral: {
+    name: 'Neutral Market',
+    description: 'Sideways market - stable conditions, balanced interest, normal acquisition costs.',
+    growthMultiplier: 1.0,
+    retentionMultiplier: 1.0,
+    priceMultiplier: 1.0,
+    fomoMultiplier: 1.0,
+    cacMultiplier: 1.0,
+  },
+  bull: {
+    name: 'Bull Market',
+    description: 'Crypto bull run - high interest, increased liquidity, lower CAC, risk-on sentiment, FOMO amplified.',
+    growthMultiplier: 1.5,
+    retentionMultiplier: 1.1,
+    priceMultiplier: 2.0,
+    fomoMultiplier: 1.5,
+    cacMultiplier: 0.7,
+  },
+};
+
+/**
+ * Default growth scenario parameters
+ * Note: Starting users come from marketing budget calculations
+ */
+export const DEFAULT_GROWTH_SCENARIO_PARAMS = {
+  growthScenario: 'base' as GrowthScenario,
+  marketCondition: 'bull' as MarketCondition,
+  enableFomoEvents: true,
+  useGrowthScenarios: true,
+};
+
+/**
+ * Growth scenario summary table for quick reference
+ * Based on 1,000 waitlist users under Bull market conditions
+ */
+export const GROWTH_SCENARIO_SUMMARY = {
+  conservative: {
+    month1Users: '~3,300',
+    month12Mau: '~3,000',
+    tokenPriceChange: '0.66x → 1.0x',
+    description: 'Slow, steady, retention-focused',
+  },
+  base: {
+    month1Users: '~5,800',
+    month12Mau: '~14,500',
+    tokenPriceChange: '2x → 3.5x',
+    description: 'Balanced SocialFi benchmark',
+  },
+  bullish: {
+    month1Users: '~12,800',
+    month12Mau: '~62,500',
+    tokenPriceChange: '4x → 7x',
+    description: 'Viral adoption, bull market',
+  },
+};
