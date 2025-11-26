@@ -76,7 +76,7 @@ function calculateMonthlyProjections(
   // Separate token-based revenue (affected by price) from USD-fixed revenue
   // Staking, Content fees, etc. are in VCoin - their USD value scales with token price
   const stakingRevenue = baseResult.staking?.revenue || 0;
-  const contentVcoinRevenue = (baseResult.content?.breakdown?.postFeesVcoin || 0) * baseTokenPrice;
+  const contentVcoinRevenue = (Number(baseResult.content?.breakdown?.postFeesVcoin) || 0) * baseTokenPrice;
   const tokenBasedRevenue = stakingRevenue + contentVcoinRevenue;
   const usdFixedRevenue = baseRevenue - tokenBasedRevenue;
   

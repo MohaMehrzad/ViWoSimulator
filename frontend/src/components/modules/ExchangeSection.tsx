@@ -266,7 +266,7 @@ export function ExchangeSection({ result, parameters }: ExchangeSectionProps) {
           </div>
           <div className="bg-emerald-50 rounded-lg p-4 border border-emerald-200">
             <div className="text-sm text-emerald-600 mb-1">Annual Trading Volume</div>
-            <div className="text-2xl font-bold text-emerald-700">{formatCurrency((exchange.breakdown.totalTradingVolume || 0) * 12)}</div>
+            <div className="text-2xl font-bold text-emerald-700">{formatCurrency((Number(exchange.breakdown.totalTradingVolume) || 0) * 12)}</div>
           </div>
         </div>
       </div>

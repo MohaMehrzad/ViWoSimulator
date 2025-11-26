@@ -48,7 +48,9 @@ export const RetentionModelSelector: React.FC<RetentionModelSelectorProps> = ({
   applyRetention,
   onApplyRetentionChange,
 }) => {
-  const currentCurve = CONFIG.RETENTION_CURVES[modelType] || CONFIG.RETENTION_CURVES.social_app;
+  // Handle 'custom' type which isn't in CONFIG.RETENTION_CURVES
+  const curveKey = modelType === 'custom' ? 'social_app' : modelType;
+  const currentCurve = CONFIG.RETENTION_CURVES[curveKey as keyof typeof CONFIG.RETENTION_CURVES] || CONFIG.RETENTION_CURVES.social_app;
 
   return (
     <div className="bg-slate-800/50 rounded-lg p-4 border border-slate-700">

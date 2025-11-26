@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { SimulationType, PercentileKey } from '@/types/simulation';
+import { SimulationType, PercentileKey, SimulationResult, MonteCarloResult, AgentBasedResult } from '@/types/simulation';
 import { formatNumber } from '@/lib/utils';
 
 interface SimulationDashboardProps {
@@ -10,15 +10,15 @@ interface SimulationDashboardProps {
     isLoading: boolean;
     error: string | null;
     progress: number;
-    result: unknown;
-    monteCarloResult: unknown;
-    agentBasedResult: unknown;
+    result: SimulationResult | null;
+    monteCarloResult: MonteCarloResult | null;
+    agentBasedResult: AgentBasedResult | null;
     selectedPercentile: PercentileKey;
     setSimulationType: (type: SimulationType) => void;
     setSelectedPercentile: (percentile: PercentileKey) => void;
-    runDeterministic: () => Promise<unknown>;
-    runMonteCarlo: (iterations: number) => Promise<unknown>;
-    runAgentBased: (agentCount: number, duration: number) => Promise<unknown>;
+    runDeterministic: () => Promise<SimulationResult | void>;
+    runMonteCarlo: (iterations: number) => Promise<MonteCarloResult | void>;
+    runAgentBased: (agentCount: number, duration: number) => Promise<AgentBasedResult | void>;
     cancelSimulation: () => void;
   };
   activeSection: string;

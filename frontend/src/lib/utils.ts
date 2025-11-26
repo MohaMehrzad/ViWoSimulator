@@ -4,8 +4,19 @@ export function cn(...inputs: ClassValue[]) {
   return clsx(inputs);
 }
 
-export function formatNumber(num: number | undefined | null): string {
-  if (num === undefined || num === null || isNaN(num)) {
+export function formatNumber(num: number | string | boolean | undefined | null): string {
+  if (num === undefined || num === null) {
+    return '0';
+  }
+  if (typeof num === 'boolean') {
+    return num ? '1' : '0';
+  }
+  if (typeof num === 'string') {
+    const parsed = parseFloat(num);
+    if (isNaN(parsed)) return num;
+    num = parsed;
+  }
+  if (isNaN(num)) {
     return '0';
   }
   if (num >= 1_000_000) {
@@ -17,8 +28,15 @@ export function formatNumber(num: number | undefined | null): string {
   }
 }
 
-export function formatCurrency(value: number | undefined | null, decimals: number = 0): string {
-  if (value === undefined || value === null || !isFinite(value)) return '$0';
+export function formatCurrency(value: number | string | boolean | undefined | null, decimals: number = 0): string {
+  if (value === undefined || value === null) return '$0';
+  if (typeof value === 'boolean') return '$0';
+  if (typeof value === 'string') {
+    const parsed = parseFloat(value);
+    if (isNaN(parsed)) return '$0';
+    value = parsed;
+  }
+  if (!isFinite(value)) return '$0';
   return '$' + value.toLocaleString(undefined, {
     minimumFractionDigits: decimals,
     maximumFractionDigits: decimals,
@@ -102,24 +120,29 @@ export function getRecaptureStatus(rate: number): { color: string; label: string
 }
 
 // Deep merge objects
-export function deepMerge<T extends Record<string, unknown>>(target: T, source: Partial<T>): T {
-  const output = { ...target };
+export function deepMerge<T extends object>(target: T, source: Partial<T>): T {
+  const output = { ...target } as T;
   
   for (const key in source) {
-    if (source[key] !== undefined) {
-      if (
-        typeof source[key] === 'object' &&
-        source[key] !== null &&
-        !Array.isArray(source[key]) &&
-        typeof target[key] === 'object' &&
-        target[key] !== null
-      ) {
-        output[key] = deepMerge(
-          target[key] as Record<string, unknown>,
-          source[key] as Record<string, unknown>
-        ) as T[Extract<keyof T, string>];
-      } else {
-        output[key] = source[key] as T[Extract<keyof T, string>];
+    if (Object.prototype.hasOwnProperty.call(source, key)) {
+      const sourceValue = source[key as keyof T];
+      const targetValue = target[key as keyof T];
+      
+      if (sourceValue !== undefined) {
+        if (
+          typeof sourceValue === 'object' &&
+          sourceValue !== null &&
+          !Array.isArray(sourceValue) &&
+          typeof targetValue === 'object' &&
+          targetValue !== null
+        ) {
+          (output as Record<string, unknown>)[key] = deepMerge(
+            targetValue as object,
+            sourceValue as object
+          );
+        } else {
+          (output as Record<string, unknown>)[key] = sourceValue;
+        }
       }
     }
   }

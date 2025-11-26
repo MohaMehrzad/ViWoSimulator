@@ -42,7 +42,7 @@ export function ExportButtons({ parameters, result, onImportParameters }: Export
   const handleExportCsv = () => {
     if (!result) return;
     const timestamp = new Date().toISOString().split('T')[0];
-    exportToCsvClient(result as Record<string, unknown>, `viwo-results-${timestamp}`);
+    exportToCsvClient(result, `viwo-results-${timestamp}`);
   };
 
   const handleImport = async (event: React.ChangeEvent<HTMLInputElement>) => {

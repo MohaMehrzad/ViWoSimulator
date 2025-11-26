@@ -112,8 +112,8 @@ export function exportToJsonClient(data: unknown, filename: string = 'export'): 
   downloadBlob(blob, `${filename}.json`);
 }
 
-export function exportToCsvClient(data: Record<string, unknown>, filename: string = 'export'): void {
-  const flatData = flattenObject(data);
+export function exportToCsvClient(data: object, filename: string = 'export'): void {
+  const flatData = flattenObject(data as Record<string, unknown>);
   const headers = Object.keys(flatData).join(',');
   const values = Object.values(flatData).map(v => 
     typeof v === 'string' ? `"${v}"` : v
