@@ -10,19 +10,21 @@ interface RetentionCurveChartProps {
   showComparison?: boolean;
 }
 
-const CURVE_COLORS: Record<RetentionModelType, string> = {
+const CURVE_COLORS: Record<string, string> = {
   social_app: 'emerald',
   crypto_app: 'amber',
   gaming: 'purple',
   utility: 'blue',
+  vcoin: 'cyan',
   custom: 'slate',
 };
 
-const CURVE_NAMES: Record<RetentionModelType, string> = {
+const CURVE_NAMES: Record<string, string> = {
   social_app: 'Social App',
   crypto_app: 'Crypto App',
   gaming: 'Gaming',
   utility: 'Utility',
+  vcoin: 'VCoin',
   custom: 'Custom',
 };
 
@@ -31,7 +33,9 @@ export const RetentionCurveChart: React.FC<RetentionCurveChartProps> = ({
   actualRetention,
   showComparison = false,
 }) => {
-  const curve = CONFIG.RETENTION_CURVES[modelType] || CONFIG.RETENTION_CURVES.social_app;
+  // Handle 'custom' type which isn't in CONFIG.RETENTION_CURVES
+  const curveKey = modelType === 'custom' ? 'social_app' : modelType;
+  const curve = CONFIG.RETENTION_CURVES[curveKey as keyof typeof CONFIG.RETENTION_CURVES] || CONFIG.RETENTION_CURVES.social_app;
   
   // Generate points for smooth curve (interpolate between defined points)
   const generateCurvePoints = (retentionCurve: Record<number, number>) => {
@@ -186,15 +190,15 @@ export const RetentionCurveChart: React.FC<RetentionCurveChartProps> = ({
         <div className="mt-4 pt-4 border-t border-slate-700">
           <h4 className="text-sm font-medium text-slate-300 mb-2">Compare with other models:</h4>
           <div className="grid grid-cols-4 gap-2 text-xs">
-            {(Object.keys(CONFIG.RETENTION_CURVES) as RetentionModelType[])
-              .filter(type => type !== modelType)
+            {(Object.keys(CONFIG.RETENTION_CURVES) as Array<keyof typeof CONFIG.RETENTION_CURVES>)
+              .filter(type => type !== curveKey)
               .map((type) => (
                 <button
                   key={type}
                   className={`p-2 rounded border border-slate-600 bg-slate-700/50 hover:bg-slate-600/50 transition-all`}
                 >
-                  <div className={`text-${CURVE_COLORS[type]}-400 font-medium`}>
-                    {CURVE_NAMES[type]}
+                  <div className={`text-${CURVE_COLORS[type as RetentionModelType] || 'slate'}-400 font-medium`}>
+                    {CURVE_NAMES[type as RetentionModelType] || type}
                   </div>
                   <div className="text-slate-400 mt-1">
                     M12: {((CONFIG.RETENTION_CURVES[type][12] || 0) * 100).toFixed(0)}%
