@@ -179,7 +179,7 @@ export const RetentionCurveChart: React.FC<RetentionCurveChartProps> = ({
           <div key={month} className="text-center">
             <div className="text-slate-400 text-xs mb-1">Month {month}</div>
             <div className={`text-${color}-400 font-semibold`}>
-              {((curve[month] || 0) * 100).toFixed(0)}%
+              {(((curve as Record<number, number>)[month] || 0) * 100).toFixed(0)}%
             </div>
           </div>
         ))}
