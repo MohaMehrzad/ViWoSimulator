@@ -2,6 +2,7 @@
 
 import { SimulationResult, SimulationParameters } from '@/types/simulation';
 import { formatNumber, formatCurrency, getMarginStatus, getRecaptureStatus } from '@/lib/utils';
+import { GROWTH_SCENARIOS, MARKET_CONDITIONS, MARKET_CYCLE_2025_2030 } from '@/lib/constants';
 
 interface SummarySectionProps {
   result: SimulationResult;
@@ -13,11 +14,37 @@ export function SummarySection({ result, parameters }: SummarySectionProps) {
   const marginStatus = getMarginStatus(totals.margin);
   const recaptureStatus = getRecaptureStatus(recapture.recaptureRate);
   
-  // NEW: Liquidity and Staking health metrics
+  // Liquidity and Staking health metrics
   const liquidityHealthScore = liquidity?.healthScore || 0;
-  const liquidityMeets70 = liquidity?.meets70Target || liquidityHealthScore >= 70;
+  const liquidityMeets70 = liquidityHealthScore >= 70;
   const stakingHealthy = staking?.isHealthy || false;
   const stakingParticipation = staking?.participationRate || 0;
+  
+  // Governance metrics
+  const governance = result.governance;
+  const governanceParticipation = governance?.effectiveParticipationRate || governance?.votingParticipationRate || 0;
+  
+  // Token metrics - ensure all values are numbers
+  const tokenMetrics = result.tokenMetrics;
+  const tokenVelocity = Number(tokenMetrics?.velocity?.velocity ?? 0) || 0;
+  const realYield = Number(tokenMetrics?.realYield?.annualRealYield ?? 0) || 0;
+  const valueAccrual = Number(tokenMetrics?.valueAccrual?.totalScore ?? 0) || 0;
+  
+  // Future modules
+  const futureModulesEnabled = {
+    vchain: parameters.enableVchain || false,
+    marketplace: parameters.enableMarketplace || false,
+    businessHub: parameters.enableBusinessHub || false,
+    crossPlatform: parameters.enableCrossPlatform || false,
+  };
+  const enabledFutureModulesCount = Object.values(futureModulesEnabled).filter(Boolean).length;
+  
+  // Growth scenario info
+  const useGrowthScenarios = parameters.useGrowthScenarios || false;
+  const scenario = parameters.growthScenario || 'base';
+  const marketCondition = parameters.marketCondition || 'bull';
+  const scenarioConfig = GROWTH_SCENARIOS[scenario];
+  const marketConfig = MARKET_CONDITIONS[marketCondition];
   
   // Issue #1 Fix: Guard against division by zero for both totalUsers and blendedCAC
   const arpu = customerAcquisition.totalUsers > 0 
@@ -27,12 +54,10 @@ export function SummarySection({ result, parameters }: SummarySectionProps) {
     ? arpu / customerAcquisition.blendedCAC 
     : 0;
 
-  const modules = [
+  const coreModules = [
     { name: 'Identity', data: result.identity, icon: '🆔', enabled: true },
     { name: 'Content', data: result.content, icon: '📄', enabled: true },
-    { name: 'Community', data: result.community, icon: '👥', enabled: parameters.enableCommunity },
     { name: 'Advertising', data: result.advertising, icon: '📢', enabled: parameters.enableAdvertising },
-    { name: 'Messaging', data: result.messaging, icon: '💬', enabled: parameters.enableMessaging },
     { name: 'Exchange', data: result.exchange, icon: '💱', enabled: parameters.enableExchange },
   ];
 
@@ -49,25 +74,63 @@ export function SummarySection({ result, parameters }: SummarySectionProps) {
     enabled: true,
   };
 
-  const enabledModules = [...modules.filter(m => m.enabled), platformFeesModule];
+  // Staking as a module
+  const stakingModule = {
+    name: 'Staking',
+    data: {
+      revenue: staking?.revenue || 0,
+      costs: staking?.costs || 0,
+      profit: staking?.profit || 0,
+      margin: staking?.margin || 0,
+    },
+    icon: '🔒',
+    enabled: true,
+  };
 
-  // Calculate projections
-  const monthlyGrowthRate = 0.05; // 5% monthly growth assumption
-  const year1Revenue = totals.revenue * 12 * (1 + monthlyGrowthRate * 6); // Average growth
-  const year1Profit = totals.profit * 12 * (1 + monthlyGrowthRate * 6);
+  const enabledModules = [...coreModules.filter(m => m.enabled), stakingModule, platformFeesModule];
+
+  // Calculate projections using scenario if available
+  const baseGrowthRate = useGrowthScenarios 
+    ? (scenarioConfig?.monthlyGrowthRates?.[5] || 0.05) 
+    : 0.05;
+  const priceMultiplier = useGrowthScenarios 
+    ? (scenarioConfig?.tokenPriceEndMultiplier || 1) * (marketConfig?.priceMultiplier || 1)
+    : 1.5;
+  
+  // Year 1 projections with growth
+  const year1Revenue = totals.revenue * 12 * (1 + baseGrowthRate * 6);
+  const year1Profit = totals.profit * 12 * (1 + baseGrowthRate * 6);
+  const year1EndUsers = customerAcquisition.totalUsers * Math.pow(1 + baseGrowthRate, 12);
+  
+  // 5-year projections (simplified)
+  const fiveYearMultiplier = useGrowthScenarios ? 3 : 2;
+  const fiveYearRevenue = year1Revenue * fiveYearMultiplier;
+  const fiveYearProfit = year1Profit * fiveYearMultiplier;
 
   return (
     <section className="space-y-8">
       {/* Executive Summary Header */}
       <div className="bg-gradient-to-r from-gray-800 to-gray-900 rounded-2xl p-6 text-white">
-        <div className="flex items-center gap-3 mb-4">
-          <span className="text-4xl">📈</span>
-          <div>
-            <h2 className="text-2xl font-bold">Executive Summary</h2>
-            <p className="text-gray-400">Complete economic model overview</p>
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-3">
+            <span className="text-4xl">📈</span>
+            <div>
+              <h2 className="text-2xl font-bold">Executive Summary</h2>
+              <p className="text-gray-400">Complete ViWO Token Economy Overview</p>
+            </div>
           </div>
+          {useGrowthScenarios && (
+            <div className={`px-4 py-2 rounded-xl ${
+              scenario === 'bullish' ? 'bg-emerald-500/20 border border-emerald-400' :
+              scenario === 'conservative' ? 'bg-blue-500/20 border border-blue-400' :
+              'bg-purple-500/20 border border-purple-400'
+            }`}>
+              <div className="text-sm font-semibold">{scenarioConfig?.name} Scenario</div>
+              <div className="text-xs text-gray-300">{marketConfig?.name} Market</div>
+            </div>
+          )}
         </div>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-6">
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mt-6">
           <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4 text-center">
             <div className={`text-2xl font-bold ${marginStatus.color.replace('text-', 'text-')}`}>
               {formatCurrency(totals.revenue)}
@@ -91,6 +154,12 @@ export function SummarySection({ result, parameters }: SummarySectionProps) {
               {recapture.recaptureRate.toFixed(1)}%
             </div>
             <div className="text-xs text-gray-400 uppercase font-semibold">Recapture Rate</div>
+          </div>
+          <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4 text-center">
+            <div className="text-2xl font-bold text-amber-400">
+              ${parameters.tokenPrice.toFixed(2)}
+            </div>
+            <div className="text-xs text-gray-400 uppercase font-semibold">Token Price</div>
           </div>
         </div>
       </div>
@@ -307,20 +376,254 @@ export function SummarySection({ result, parameters }: SummarySectionProps) {
 
       {/* Annual Projections */}
       <div className="bg-white rounded-xl border border-gray-200 p-6">
-        <h3 className="font-bold text-lg mb-4">📅 Annual Projections (5% monthly growth)</h3>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="bg-emerald-50 rounded-lg p-4 border border-emerald-200">
-            <div className="text-sm text-emerald-600 mb-1">Year 1 Revenue</div>
-            <div className="text-2xl font-bold text-emerald-700">{formatCurrency(year1Revenue)}</div>
+        <h3 className="font-bold text-lg mb-4">📅 Financial Projections</h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {/* Year 1 */}
+          <div className="bg-gradient-to-br from-emerald-50 to-green-50 rounded-xl p-5 border border-emerald-200">
+            <div className="flex items-center gap-2 mb-3">
+              <span className="text-2xl">🚀</span>
+              <h4 className="font-bold text-emerald-800">Year 1 Projection</h4>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <div className="text-xs text-emerald-600">Revenue</div>
+                <div className="text-xl font-bold text-emerald-700">{formatCurrency(year1Revenue)}</div>
+              </div>
+              <div>
+                <div className="text-xs text-emerald-600">Profit</div>
+                <div className="text-xl font-bold text-emerald-700">{formatCurrency(year1Profit)}</div>
+              </div>
+              <div>
+                <div className="text-xs text-emerald-600">End Users</div>
+                <div className="text-xl font-bold text-emerald-700">{formatNumber(year1EndUsers)}</div>
+              </div>
+              <div>
+                <div className="text-xs text-emerald-600">Token Price</div>
+                <div className="text-xl font-bold text-amber-600">
+                  ${(parameters.tokenPrice * (useGrowthScenarios ? priceMultiplier : 1.5)).toFixed(2)}
+                </div>
+              </div>
+            </div>
           </div>
-          <div className="bg-emerald-50 rounded-lg p-4 border border-emerald-200">
-            <div className="text-sm text-emerald-600 mb-1">Year 1 Profit</div>
-            <div className="text-2xl font-bold text-emerald-700">{formatCurrency(year1Profit)}</div>
+          
+          {/* 5-Year */}
+          <div className="bg-gradient-to-br from-purple-50 to-indigo-50 rounded-xl p-5 border border-purple-200">
+            <div className="flex items-center gap-2 mb-3">
+              <span className="text-2xl">🎯</span>
+              <h4 className="font-bold text-purple-800">5-Year Projection</h4>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <div className="text-xs text-purple-600">Total Revenue</div>
+                <div className="text-xl font-bold text-purple-700">${(fiveYearRevenue / 1_000_000).toFixed(2)}M</div>
+              </div>
+              <div>
+                <div className="text-xs text-purple-600">Total Profit</div>
+                <div className="text-xl font-bold text-purple-700">${(fiveYearProfit / 1_000_000).toFixed(2)}M</div>
+              </div>
+              <div>
+                <div className="text-xs text-purple-600">Future Modules</div>
+                <div className="text-xl font-bold text-purple-700">{enabledFutureModulesCount}/4</div>
+              </div>
+              <div>
+                <div className="text-xs text-purple-600">Market Cycles</div>
+                <div className="text-sm font-bold text-purple-700">
+                  {Object.keys(MARKET_CYCLE_2025_2030 || {}).length} years
+                </div>
+              </div>
+            </div>
           </div>
-          <div className="bg-emerald-50 rounded-lg p-4 border border-emerald-200">
-            <div className="text-sm text-emerald-600 mb-1">Est. Y1 Users</div>
-            <div className="text-2xl font-bold text-emerald-700">
-              {formatNumber(customerAcquisition.totalUsers * Math.pow(1.05, 12))}
+        </div>
+      </div>
+      
+      {/* Token Metrics & Governance */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {/* Token Metrics */}
+        <div className="bg-white rounded-xl border border-gray-200 p-6">
+          <h3 className="font-bold text-lg mb-4 flex items-center gap-2">
+            <span>📊</span> Token Health Metrics
+          </h3>
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <span className="text-gray-600">Token Velocity</span>
+              <span className={`font-bold ${tokenVelocity < 10 ? 'text-emerald-600' : tokenVelocity < 20 ? 'text-amber-600' : 'text-red-600'}`}>
+                {tokenVelocity.toFixed(2)}x
+              </span>
+            </div>
+            <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+              <div 
+                className={`h-full ${tokenVelocity < 10 ? 'bg-emerald-500' : tokenVelocity < 20 ? 'bg-amber-500' : 'bg-red-500'}`}
+                style={{ width: `${Math.min(100, (tokenVelocity / 30) * 100)}%` }}
+              />
+            </div>
+            <div className="text-xs text-gray-500">Lower is better (store of value). Target: &lt;10x</div>
+            
+            <div className="flex items-center justify-between mt-4">
+              <span className="text-gray-600">Real Yield APY</span>
+              <span className={`font-bold ${realYield > 5 ? 'text-emerald-600' : realYield > 2 ? 'text-amber-600' : 'text-gray-600'}`}>
+                {realYield.toFixed(1)}%
+              </span>
+            </div>
+            
+            <div className="flex items-center justify-between">
+              <span className="text-gray-600">Value Accrual Score</span>
+              <span className={`font-bold ${valueAccrual >= 70 ? 'text-emerald-600' : valueAccrual >= 50 ? 'text-amber-600' : 'text-red-600'}`}>
+                {valueAccrual.toFixed(0)}/100
+              </span>
+            </div>
+            
+            <div className="flex items-center justify-between">
+              <span className="text-gray-600">Staking APY</span>
+              <span className="font-bold text-indigo-600">
+                {(staking?.stakingApy || (parameters.stakingApy || 0.10) * 100).toFixed(1)}%
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* Governance */}
+        <div className="bg-white rounded-xl border border-gray-200 p-6">
+          <h3 className="font-bold text-lg mb-4 flex items-center gap-2">
+            <span>🗳️</span> Governance & DAO
+          </h3>
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <span className="text-gray-600">Participation Rate</span>
+              <span className={`font-bold ${governanceParticipation >= 30 ? 'text-emerald-600' : governanceParticipation >= 15 ? 'text-amber-600' : 'text-red-600'}`}>
+                {governanceParticipation.toFixed(1)}%
+              </span>
+            </div>
+            <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+              <div 
+                className={`h-full ${governanceParticipation >= 30 ? 'bg-emerald-500' : governanceParticipation >= 15 ? 'bg-amber-500' : 'bg-red-500'}`}
+                style={{ width: `${Math.min(100, governanceParticipation)}%` }}
+              />
+            </div>
+            <div className="text-xs text-gray-500">Target: 30%+ participation</div>
+            
+            <div className="bg-slate-50 rounded-lg p-3 mt-4">
+              <div className="text-sm text-slate-600 mb-2">veVCoin Voting Power</div>
+              <div className="text-xs text-slate-500">
+                • 1 week lock = 1x voting power<br/>
+                • 4 year lock = 4x voting power<br/>
+                • Quorum: 4% of voting supply
+              </div>
+            </div>
+            
+            <div className="flex items-center justify-between mt-2">
+              <span className="text-gray-600">Staking Participation</span>
+              <span className="font-bold text-indigo-600">
+                {stakingParticipation.toFixed(1)}%
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      {/* Future Modules Overview */}
+      {enabledFutureModulesCount > 0 && (
+        <div className="bg-gradient-to-r from-purple-50 to-indigo-50 rounded-xl border border-purple-200 p-6">
+          <h3 className="font-bold text-lg mb-4 flex items-center gap-2">
+            <span>🔮</span> Enabled Future Modules ({enabledFutureModulesCount}/4)
+          </h3>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            {futureModulesEnabled.crossPlatform && (
+              <div className="bg-white rounded-lg p-3 text-center border border-purple-100">
+                <span className="text-2xl">🌐</span>
+                <div className="font-semibold text-sm mt-1">Cross-Platform</div>
+                <div className="text-xs text-gray-500">Month 15</div>
+              </div>
+            )}
+            {futureModulesEnabled.marketplace && (
+              <div className="bg-white rounded-lg p-3 text-center border border-purple-100">
+                <span className="text-2xl">🛒</span>
+                <div className="font-semibold text-sm mt-1">Marketplace</div>
+                <div className="text-xs text-gray-500">Month 18</div>
+              </div>
+            )}
+            {futureModulesEnabled.businessHub && (
+              <div className="bg-white rounded-lg p-3 text-center border border-purple-100">
+                <span className="text-2xl">💼</span>
+                <div className="font-semibold text-sm mt-1">Business Hub</div>
+                <div className="text-xs text-gray-500">Month 21</div>
+              </div>
+            )}
+            {futureModulesEnabled.vchain && (
+              <div className="bg-white rounded-lg p-3 text-center border border-purple-100">
+                <span className="text-2xl">🔗</span>
+                <div className="font-semibold text-sm mt-1">VChain</div>
+                <div className="text-xs text-gray-500">Month 24</div>
+              </div>
+            )}
+          </div>
+          <div className="mt-4 text-sm text-purple-700">
+            These modules will add additional revenue streams as they launch. See the 5-Year Projection in Overview for detailed impact.
+          </div>
+        </div>
+      )}
+      
+      {/* Liquidity & Staking Summary */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="bg-white rounded-xl border border-gray-200 p-6">
+          <h3 className="font-bold text-lg mb-4 flex items-center gap-2">
+            <span>💧</span> Liquidity Status
+          </h3>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="bg-blue-50 rounded-lg p-3 border border-blue-100">
+              <div className="text-xs text-blue-600">Health Score</div>
+              <div className={`text-xl font-bold ${liquidityMeets70 ? 'text-emerald-600' : 'text-amber-600'}`}>
+                {liquidityHealthScore.toFixed(0)}%
+              </div>
+            </div>
+            <div className="bg-blue-50 rounded-lg p-3 border border-blue-100">
+              <div className="text-xs text-blue-600">Pool Depth</div>
+              <div className="text-xl font-bold text-blue-700">
+                ${formatNumber(liquidity?.initialLiquidity || parameters.initialLiquidityUsd || 0)}
+              </div>
+            </div>
+            <div className="bg-blue-50 rounded-lg p-3 border border-blue-100">
+              <div className="text-xs text-blue-600">Slippage (1K)</div>
+              <div className="text-xl font-bold text-blue-700">
+                {((liquidity?.slippage1k || 0) * 100).toFixed(2)}%
+              </div>
+            </div>
+            <div className="bg-blue-50 rounded-lg p-3 border border-blue-100">
+              <div className="text-xs text-blue-600">POL Ratio</div>
+              <div className="text-xl font-bold text-blue-700">
+                {(liquidity?.protocolOwnedPercent || (parameters.protocolOwnedLiquidity || 0.3) * 100).toFixed(0)}%
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        <div className="bg-white rounded-xl border border-gray-200 p-6">
+          <h3 className="font-bold text-lg mb-4 flex items-center gap-2">
+            <span>🔒</span> Staking Summary
+          </h3>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="bg-indigo-50 rounded-lg p-3 border border-indigo-100">
+              <div className="text-xs text-indigo-600">Staked Supply</div>
+              <div className="text-xl font-bold text-indigo-700">
+                {formatNumber(staking?.totalStaked || 0)}
+              </div>
+            </div>
+            <div className="bg-indigo-50 rounded-lg p-3 border border-indigo-100">
+              <div className="text-xs text-indigo-600">Participation</div>
+              <div className="text-xl font-bold text-indigo-700">
+                {stakingParticipation.toFixed(1)}%
+              </div>
+            </div>
+            <div className="bg-indigo-50 rounded-lg p-3 border border-indigo-100">
+              <div className="text-xs text-indigo-600">APY</div>
+              <div className="text-xl font-bold text-emerald-600">
+                {(staking?.stakingApy || (parameters.stakingApy || 0.10) * 100).toFixed(1)}%
+              </div>
+            </div>
+            <div className="bg-indigo-50 rounded-lg p-3 border border-indigo-100">
+              <div className="text-xs text-indigo-600">Fee Revenue</div>
+              <div className="text-xl font-bold text-indigo-700">
+                ${(staking?.revenue || 0).toFixed(0)}
+              </div>
             </div>
           </div>
         </div>

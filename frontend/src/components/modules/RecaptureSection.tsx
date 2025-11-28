@@ -17,16 +17,18 @@ export function RecaptureSection({ result, parameters }: RecaptureSectionProps) 
       amount: recapture.burns, 
       icon: '🔥', 
       color: 'bg-red-500',
-      description: 'Permanently destroyed tokens',
-      rate: parameters.burnRate
+      description: 'Destroyed from collected fees',
+      rate: parameters.burnRate,
+      rateLabel: 'Burn Rate'
     },
     { 
       name: 'Buybacks', 
       amount: recapture.buybacks, 
       icon: '💰', 
       color: 'bg-purple-500',
-      description: 'Tokens purchased from market',
-      rate: parameters.buybackPercent
+      description: `Bought from market ($${(recapture.buybackUsdSpent || 0).toLocaleString()} spent)`,
+      rate: parameters.buybackPercent,
+      rateLabel: '% of Revenue'
     },
     { 
       name: 'Staking', 
@@ -34,7 +36,8 @@ export function RecaptureSection({ result, parameters }: RecaptureSectionProps) 
       icon: '🔒', 
       color: 'bg-blue-500',
       description: 'Tokens locked in staking',
-      rate: null
+      rate: null,
+      rateLabel: null
     },
     { 
       name: 'Treasury', 
@@ -42,7 +45,8 @@ export function RecaptureSection({ result, parameters }: RecaptureSectionProps) 
       icon: '🏦', 
       color: 'bg-amber-500',
       description: 'Tokens held in protocol treasury',
-      rate: null
+      rate: null,
+      rateLabel: null
     },
   ];
 
@@ -139,7 +143,7 @@ export function RecaptureSection({ result, parameters }: RecaptureSectionProps) 
               <div className="text-xs text-gray-600">{flow.description}</div>
               {flow.rate !== null && (
                 <div className="mt-2 text-xs bg-gray-200 rounded px-2 py-1 inline-block">
-                  Rate: {(flow.rate * 100).toFixed(0)}%
+                  {flow.rateLabel}: {(flow.rate * 100).toFixed(0)}%
                 </div>
               )}
             </div>

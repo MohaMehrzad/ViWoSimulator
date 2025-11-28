@@ -39,6 +39,30 @@ export function useSimulation() {
     selectedPercentile: 'p50',
   });
 
+  const [isInitialized, setIsInitialized] = useState(false);
+
+  // Load saved defaults after component mounts (client-side only)
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const saved = localStorage.getItem('vcoin_simulator_defaults');
+        if (saved) {
+          const savedParams = JSON.parse(saved);
+          // Merge saved parameters with defaults to ensure any new parameters are included
+          const mergedParams = deepMerge(DEFAULT_PARAMETERS, savedParams);
+          setState(prev => ({
+            ...prev,
+            parameters: mergedParams,
+          }));
+        }
+      } catch (error) {
+        console.error('Failed to load saved defaults:', error);
+      }
+    }
+    // Mark as initialized after attempting to load saved defaults
+    setIsInitialized(true);
+  }, []);
+
   const wsRef = useRef<WebSocket | null>(null);
   const jobIdRef = useRef<string | null>(null);
 
@@ -273,6 +297,7 @@ export function useSimulation() {
   return {
     ...state,
     activeResult,
+    isInitialized,
     updateParameter,
     updateParameters,
     resetParameters,

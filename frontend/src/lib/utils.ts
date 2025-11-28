@@ -69,23 +69,11 @@ export const moduleColors = {
     border: 'border-pink-500',
     light: 'bg-pink-50',
   },
-  community: {
-    bg: 'bg-emerald-500',
-    text: 'text-emerald-500',
-    border: 'border-emerald-500',
-    light: 'bg-emerald-50',
-  },
   advertising: {
     bg: 'bg-blue-500',
     text: 'text-blue-500',
     border: 'border-blue-500',
     light: 'bg-blue-50',
-  },
-  messaging: {
-    bg: 'bg-cyan-500',
-    text: 'text-cyan-500',
-    border: 'border-cyan-500',
-    light: 'bg-cyan-50',
   },
   rewards: {
     bg: 'bg-amber-500',

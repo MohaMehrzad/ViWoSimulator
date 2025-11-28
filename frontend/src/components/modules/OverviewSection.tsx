@@ -3,7 +3,7 @@
 import { useState, useMemo } from 'react';
 import { SimulationResult, SimulationParameters } from '@/types/simulation';
 import { formatNumber, formatCurrency, getMarginStatus, getRecaptureStatus } from '@/lib/utils';
-import { GROWTH_SCENARIOS, MARKET_CONDITIONS } from '@/lib/constants';
+import { GROWTH_SCENARIOS, MARKET_CONDITIONS, FUTURE_MODULE_DEFAULTS, MARKET_CYCLE_2025_2030 } from '@/lib/constants';
 
 interface OverviewSectionProps {
   result: SimulationResult;
@@ -214,6 +214,259 @@ function calculateMonthlyProjections(
   return projections;
 }
 
+// Future module revenue calculation
+interface FutureModuleRevenue {
+  name: string;
+  icon: string;
+  launchMonth: number;
+  enabled: boolean;
+  monthlyRevenue: number;
+  monthlyProfit: number;
+  margin: number;
+}
+
+function calculateFutureModuleRevenue(
+  month: number,
+  users: number,
+  tokenPrice: number,
+  parameters: SimulationParameters
+): FutureModuleRevenue[] {
+  const modules: FutureModuleRevenue[] = [];
+  
+  // VChain Network (Month 24)
+  const vchainLaunchMonth = FUTURE_MODULE_DEFAULTS?.vchain?.vchainLaunchMonth || 24;
+  const vchainEnabled = parameters.enableVchain || false;
+  if (vchainEnabled && month >= vchainLaunchMonth) {
+    const monthsActive = month - vchainLaunchMonth + 1;
+    const rampUp = Math.min(1, monthsActive / 12); // 12 month ramp
+    const baseVolume = 25_000_000 * rampUp;
+    const txFeeRevenue = baseVolume * 0.002;
+    const bridgeFeeRevenue = baseVolume * 0.3 * 0.001;
+    const gasRevenue = baseVolume * 0.1 * 0.08;
+    const revenue = txFeeRevenue + bridgeFeeRevenue + gasRevenue;
+    const costs = revenue * 0.35;
+    modules.push({
+      name: 'VChain Network',
+      icon: '🔗',
+      launchMonth: vchainLaunchMonth,
+      enabled: true,
+      monthlyRevenue: revenue,
+      monthlyProfit: revenue - costs,
+      margin: ((revenue - costs) / revenue) * 100
+    });
+  }
+  
+  // Marketplace (Month 18)
+  const marketplaceLaunchMonth = FUTURE_MODULE_DEFAULTS?.marketplace?.marketplaceLaunchMonth || 18;
+  const marketplaceEnabled = parameters.enableMarketplace || false;
+  if (marketplaceEnabled && month >= marketplaceLaunchMonth) {
+    const monthsActive = month - marketplaceLaunchMonth + 1;
+    const rampUp = Math.min(1, monthsActive / 12);
+    const gmv = users * 5 * rampUp; // $5 GMV per user
+    const physicalRevenue = gmv * 0.4 * 0.08; // 40% physical, 8% commission
+    const digitalRevenue = gmv * 0.6 * 0.15; // 60% digital, 15% commission
+    const revenue = physicalRevenue + digitalRevenue;
+    const costs = revenue * 0.25;
+    modules.push({
+      name: 'Marketplace',
+      icon: '🛒',
+      launchMonth: marketplaceLaunchMonth,
+      enabled: true,
+      monthlyRevenue: revenue,
+      monthlyProfit: revenue - costs,
+      margin: ((revenue - costs) / revenue) * 100
+    });
+  }
+  
+  // Business Hub (Month 21)
+  const businessHubLaunchMonth = FUTURE_MODULE_DEFAULTS?.businessHub?.businessHubLaunchMonth || 21;
+  const businessHubEnabled = parameters.enableBusinessHub || false;
+  if (businessHubEnabled && month >= businessHubLaunchMonth) {
+    const monthsActive = month - businessHubLaunchMonth + 1;
+    const rampUp = Math.min(1, monthsActive / 12);
+    const freelancers = users * 0.02 * rampUp; // 2% are freelancers
+    const freelanceVolume = freelancers * 500; // $500 avg monthly volume
+    const freelanceRevenue = freelanceVolume * 0.12;
+    const pmUsers = users * 0.05 * rampUp;
+    const pmRevenue = pmUsers * 15; // $15/month average
+    const revenue = freelanceRevenue + pmRevenue;
+    const costs = revenue * 0.30;
+    modules.push({
+      name: 'Business Hub',
+      icon: '💼',
+      launchMonth: businessHubLaunchMonth,
+      enabled: true,
+      monthlyRevenue: revenue,
+      monthlyProfit: revenue - costs,
+      margin: ((revenue - costs) / revenue) * 100
+    });
+  }
+  
+  // Cross-Platform (Month 15)
+  const crossPlatformLaunchMonth = FUTURE_MODULE_DEFAULTS?.crossPlatform?.crossPlatformLaunchMonth || 15;
+  const crossPlatformEnabled = parameters.enableCrossPlatform || false;
+  if (crossPlatformEnabled && month >= crossPlatformLaunchMonth) {
+    const monthsActive = month - crossPlatformLaunchMonth + 1;
+    const rampUp = Math.min(1, monthsActive / 12);
+    const subscribers = users * 0.03 * rampUp; // 3% subscribe
+    const subscriptionRevenue = subscribers * 10; // $10/month
+    const renters = users * 0.01 * rampUp;
+    const rentalRevenue = renters * 50 * 0.15; // $50 avg rental, 15% commission
+    const revenue = subscriptionRevenue + rentalRevenue;
+    const costs = revenue * 0.20;
+    modules.push({
+      name: 'Cross-Platform',
+      icon: '🌐',
+      launchMonth: crossPlatformLaunchMonth,
+      enabled: true,
+      monthlyRevenue: revenue,
+      monthlyProfit: revenue - costs,
+      margin: ((revenue - costs) / revenue) * 100
+    });
+  }
+  
+  return modules;
+}
+
+// Calculate 5-year (60-month) projections
+interface YearlyProjection {
+  year: number;
+  startMonth: number;
+  endMonth: number;
+  startUsers: number;
+  endUsers: number;
+  avgUsers: number;
+  totalRevenue: number;
+  totalProfit: number;
+  avgMargin: number;
+  tokenPriceStart: number;
+  tokenPriceEnd: number;
+  coreModulesRevenue: number;
+  futureModulesRevenue: number;
+  activeModules: string[];
+  marketCycle: string;
+  cycleMultiplier: number;
+}
+
+function calculate5YearProjections(
+  baseResult: SimulationResult,
+  scenarioConfig: typeof GROWTH_SCENARIOS['base'],
+  marketConfig: typeof MARKET_CONDITIONS['bull'],
+  baseTokenPrice: number,
+  parameters: SimulationParameters
+): YearlyProjection[] {
+  const projections: YearlyProjection[] = [];
+  const baseUsers = baseResult.customerAcquisition.totalUsers;
+  const baseRevenue = baseResult.totals.revenue;
+  
+  let currentUsers = baseUsers;
+  let currentTokenPrice = baseTokenPrice;
+  
+  for (let year = 1; year <= 5; year++) {
+    const startMonth = (year - 1) * 12 + 1;
+    const endMonth = year * 12;
+    const startUsers = currentUsers;
+    const startPrice = currentTokenPrice;
+    
+    // Get market cycle for this year
+    const calendarYear = 2025 + year - 1;
+    const cycleData = MARKET_CYCLE_2025_2030?.[calendarYear] || { year: calendarYear, phase: 'neutral', growthMultiplier: 1, retentionMultiplier: 1, priceMultiplier: 1, description: '' };
+    const cycleMultiplier = cycleData.growthMultiplier || 1;
+    
+    let yearRevenue = 0;
+    let yearProfit = 0;
+    let yearCoreRevenue = 0;
+    let yearFutureRevenue = 0;
+    const activeModulesSet = new Set<string>();
+    
+    // Process each month of the year
+    for (let month = startMonth; month <= endMonth; month++) {
+      // Growth rate varies by year
+      let monthlyGrowthRate: number;
+      if (year === 1) {
+        // Year 1: Use scenario growth rates
+        const monthIndex = month - 1;
+        monthlyGrowthRate = (scenarioConfig.monthlyGrowthRates[monthIndex] || 0.05) * cycleMultiplier;
+      } else {
+        // Years 2-5: Slower but steady growth
+        const yearGrowthRates = [0, 0.08, 0.06, 0.04, 0.03]; // Y1 handled above
+        monthlyGrowthRate = (yearGrowthRates[year - 1] / 12) * cycleMultiplier;
+      }
+      
+      if (month > 1) {
+        currentUsers = Math.round(currentUsers * (1 + monthlyGrowthRate));
+      }
+      
+      // Token price progression
+      let priceMultiplier: number;
+      if (year === 1) {
+        // Year 1: Use scenario multipliers
+        if (month <= 6) {
+          const t = month / 6;
+          priceMultiplier = 1 + (scenarioConfig.tokenPriceMonth6Multiplier - 1) * t;
+        } else {
+          const t = (month - 6) / 6;
+          priceMultiplier = scenarioConfig.tokenPriceMonth6Multiplier + 
+            (scenarioConfig.tokenPriceEndMultiplier - scenarioConfig.tokenPriceMonth6Multiplier) * t;
+        }
+      } else {
+        // Years 2-5: More gradual price evolution with cycle
+        const yearPriceGrowth = [0, 0.5, 0.3, 0.2, 0.15]; // Cumulative growth per year
+        const baseY1End = scenarioConfig.tokenPriceEndMultiplier * marketConfig.priceMultiplier;
+        const yearProgress = (month - startMonth) / 12;
+        priceMultiplier = baseY1End * (1 + yearPriceGrowth.slice(1, year).reduce((a, b) => a + b, 0) + yearPriceGrowth[year - 1] * yearProgress);
+        priceMultiplier *= (cycleData.priceMultiplier || 1);
+      }
+      
+      currentTokenPrice = baseTokenPrice * priceMultiplier * marketConfig.priceMultiplier;
+      
+      // Calculate core module revenue (scales with users)
+      const userScale = currentUsers / baseUsers;
+      const coreRevenue = baseRevenue * Math.sqrt(userScale) * (1 + (year - 1) * 0.1);
+      const coreCosts = baseResult.totals.costs * Math.pow(userScale, 0.4);
+      const coreProfit = coreRevenue - coreCosts;
+      
+      yearCoreRevenue += coreRevenue;
+      
+      // Calculate future module revenue
+      const futureModules = calculateFutureModuleRevenue(month, currentUsers, currentTokenPrice, parameters);
+      let futureRevenue = 0;
+      let futureProfit = 0;
+      
+      for (const fm of futureModules) {
+        futureRevenue += fm.monthlyRevenue;
+        futureProfit += fm.monthlyProfit;
+        activeModulesSet.add(`${fm.icon} ${fm.name}`);
+      }
+      
+      yearFutureRevenue += futureRevenue;
+      yearRevenue += coreRevenue + futureRevenue;
+      yearProfit += coreProfit + futureProfit;
+    }
+    
+    projections.push({
+      year,
+      startMonth,
+      endMonth,
+      startUsers,
+      endUsers: currentUsers,
+      avgUsers: (startUsers + currentUsers) / 2,
+      totalRevenue: yearRevenue,
+      totalProfit: yearProfit,
+      avgMargin: yearRevenue > 0 ? (yearProfit / yearRevenue) * 100 : 0,
+      tokenPriceStart: startPrice,
+      tokenPriceEnd: currentTokenPrice,
+      coreModulesRevenue: yearCoreRevenue,
+      futureModulesRevenue: yearFutureRevenue,
+      activeModules: Array.from(activeModulesSet),
+      marketCycle: cycleData.phase || 'neutral',
+      cycleMultiplier
+    });
+  }
+  
+  return projections;
+}
+
 export function OverviewSection({ result, parameters }: OverviewSectionProps) {
   const [selectedMonth, setSelectedMonth] = useState(1);
   
@@ -250,12 +503,31 @@ export function OverviewSection({ result, parameters }: OverviewSectionProps) {
   // Get current month's data
   const currentMonthData = monthlyProjections?.[selectedMonth - 1] || null;
 
+  // Calculate 5-year projections
+  const fiveYearProjections = useMemo(() => {
+    if (!useGrowthScenarios) return null;
+    return calculate5YearProjections(
+      result,
+      scenarioConfig,
+      marketConfig,
+      parameters.tokenPrice,
+      parameters
+    );
+  }, [result, scenarioConfig, marketConfig, parameters]);
+
+  // Check which future modules are enabled
+  const enabledFutureModules = {
+    vchain: parameters.enableVchain || false,
+    marketplace: parameters.enableMarketplace || false,
+    businessHub: parameters.enableBusinessHub || false,
+    crossPlatform: parameters.enableCrossPlatform || false,
+  };
+  const hasFutureModules = Object.values(enabledFutureModules).some(Boolean);
+
   const modules = [
     { name: 'Identity', data: result.identity, color: 'violet', enabled: true },
     { name: 'Content', data: result.content, color: 'pink', enabled: true },
-    { name: 'Community', data: result.community, color: 'emerald', enabled: parameters.enableCommunity },
     { name: 'Advertising', data: result.advertising, color: 'blue', enabled: parameters.enableAdvertising },
-    { name: 'Messaging', data: result.messaging, color: 'cyan', enabled: parameters.enableMessaging },
     { name: 'Exchange', data: result.exchange, color: 'teal', enabled: parameters.enableExchange },
     { name: 'Staking', data: result.staking ? { 
       revenue: result.staking.revenue, 
@@ -587,6 +859,300 @@ export function OverviewSection({ result, parameters }: OverviewSectionProps) {
                 </div>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* 5-Year Projection Section */}
+      {useGrowthScenarios && fiveYearProjections && (
+        <div className="bg-white rounded-xl border border-gray-200 p-6">
+          <div className="flex items-center justify-between mb-6">
+            <div>
+              <h3 className="font-bold text-xl flex items-center gap-2">
+                📈 5-Year Financial Projection (2025-2030)
+              </h3>
+              <p className="text-sm text-gray-500 mt-1">
+                Long-term revenue forecast including core modules and future revenue streams
+              </p>
+            </div>
+            {hasFutureModules && (
+              <div className="text-right">
+                <div className="text-sm text-purple-600 font-semibold">Future Modules Enabled</div>
+                <div className="flex gap-2 mt-1">
+                  {enabledFutureModules.crossPlatform && <span title="Cross-Platform (M15)">🌐</span>}
+                  {enabledFutureModules.marketplace && <span title="Marketplace (M18)">🛒</span>}
+                  {enabledFutureModules.businessHub && <span title="Business Hub (M21)">💼</span>}
+                  {enabledFutureModules.vchain && <span title="VChain (M24)">🔗</span>}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Summary Cards */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+            <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl p-4 text-center">
+              <div className="text-3xl font-bold text-blue-700">
+                {formatNumber(fiveYearProjections[4].endUsers)}
+              </div>
+              <div className="text-xs text-blue-600 uppercase font-semibold">Year 5 Users</div>
+              <div className="text-xs text-gray-500 mt-1">
+                {((fiveYearProjections[4].endUsers / fiveYearProjections[0].startUsers - 1) * 100).toFixed(0)}% growth
+              </div>
+            </div>
+            <div className="bg-gradient-to-br from-emerald-50 to-emerald-100 rounded-xl p-4 text-center">
+              <div className="text-3xl font-bold text-emerald-700">
+                ${(fiveYearProjections.reduce((sum, y) => sum + y.totalRevenue, 0) / 1_000_000).toFixed(2)}M
+              </div>
+              <div className="text-xs text-emerald-600 uppercase font-semibold">5-Year Revenue</div>
+            </div>
+            <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-xl p-4 text-center">
+              <div className="text-3xl font-bold text-green-700">
+                ${(fiveYearProjections.reduce((sum, y) => sum + y.totalProfit, 0) / 1_000_000).toFixed(2)}M
+              </div>
+              <div className="text-xs text-green-600 uppercase font-semibold">5-Year Profit</div>
+            </div>
+            <div className="bg-gradient-to-br from-amber-50 to-amber-100 rounded-xl p-4 text-center">
+              <div className="text-3xl font-bold text-amber-700">
+                ${fiveYearProjections[4].tokenPriceEnd.toFixed(2)}
+              </div>
+              <div className="text-xs text-amber-600 uppercase font-semibold">Year 5 Token Price</div>
+              <div className="text-xs text-gray-500 mt-1">
+                {(fiveYearProjections[4].tokenPriceEnd / parameters.tokenPrice).toFixed(1)}x from TGE
+              </div>
+            </div>
+          </div>
+
+          {/* Yearly Breakdown Table */}
+          <div className="overflow-x-auto mb-6">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-gray-100">
+                  <th className="px-3 py-2 text-left font-semibold text-gray-600">Year</th>
+                  <th className="px-3 py-2 text-right font-semibold text-gray-600">Users</th>
+                  <th className="px-3 py-2 text-right font-semibold text-gray-600">Core Revenue</th>
+                  <th className="px-3 py-2 text-right font-semibold text-gray-600">Future Modules</th>
+                  <th className="px-3 py-2 text-right font-semibold text-gray-600">Total Revenue</th>
+                  <th className="px-3 py-2 text-right font-semibold text-gray-600">Profit</th>
+                  <th className="px-3 py-2 text-right font-semibold text-gray-600">Margin</th>
+                  <th className="px-3 py-2 text-right font-semibold text-gray-600">Token Price</th>
+                  <th className="px-3 py-2 text-center font-semibold text-gray-600">Market</th>
+                </tr>
+              </thead>
+              <tbody>
+                {fiveYearProjections.map((year) => {
+                  const marketCycleColors: Record<string, string> = {
+                    'bull': 'bg-emerald-100 text-emerald-700',
+                    'bear': 'bg-red-100 text-red-700',
+                    'recovery': 'bg-blue-100 text-blue-700',
+                    'accumulation': 'bg-amber-100 text-amber-700',
+                    'expansion': 'bg-purple-100 text-purple-700',
+                    'neutral': 'bg-gray-100 text-gray-700',
+                  };
+                  return (
+                    <tr key={year.year} className="border-b border-gray-100 hover:bg-gray-50">
+                      <td className="px-3 py-3 font-semibold">
+                        <div className="flex items-center gap-2">
+                          <span className="text-lg">
+                            {year.year === 1 ? '🚀' : year.year === 2 ? '📈' : year.year === 3 ? '🏗️' : year.year === 4 ? '🎯' : '🏆'}
+                          </span>
+                          Year {year.year}
+                          <span className="text-xs text-gray-400">({2024 + year.year})</span>
+                        </div>
+                        {year.activeModules.length > 0 && (
+                          <div className="text-xs text-purple-500 mt-1">
+                            {year.activeModules.join(' • ')}
+                          </div>
+                        )}
+                      </td>
+                      <td className="px-3 py-3 text-right">
+                        <div>{formatNumber(year.endUsers)}</div>
+                        <div className="text-xs text-gray-400">
+                          +{((year.endUsers / year.startUsers - 1) * 100).toFixed(0)}%
+                        </div>
+                      </td>
+                      <td className="px-3 py-3 text-right">
+                        ${(year.coreModulesRevenue / 1000).toFixed(0)}K
+                      </td>
+                      <td className="px-3 py-3 text-right">
+                        {year.futureModulesRevenue > 0 ? (
+                          <span className="text-purple-600 font-semibold">
+                            +${(year.futureModulesRevenue / 1000).toFixed(0)}K
+                          </span>
+                        ) : (
+                          <span className="text-gray-400">-</span>
+                        )}
+                      </td>
+                      <td className="px-3 py-3 text-right font-semibold text-emerald-600">
+                        ${(year.totalRevenue / 1000).toFixed(0)}K
+                      </td>
+                      <td className={`px-3 py-3 text-right font-semibold ${
+                        year.totalProfit >= 0 ? 'text-green-600' : 'text-red-600'
+                      }`}>
+                        ${(year.totalProfit / 1000).toFixed(0)}K
+                      </td>
+                      <td className="px-3 py-3 text-right">
+                        {year.avgMargin.toFixed(1)}%
+                      </td>
+                      <td className="px-3 py-3 text-right text-amber-600">
+                        ${year.tokenPriceEnd.toFixed(2)}
+                      </td>
+                      <td className="px-3 py-3 text-center">
+                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                          marketCycleColors[year.marketCycle] || marketCycleColors['neutral']
+                        }`}>
+                          {year.marketCycle}
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })}
+                {/* Total Row */}
+                <tr className="bg-gray-900 text-white font-bold">
+                  <td className="px-3 py-3">5-Year Total</td>
+                  <td className="px-3 py-3 text-right">
+                    {formatNumber(fiveYearProjections[4].endUsers)}
+                  </td>
+                  <td className="px-3 py-3 text-right">
+                    ${(fiveYearProjections.reduce((s, y) => s + y.coreModulesRevenue, 0) / 1000).toFixed(0)}K
+                  </td>
+                  <td className="px-3 py-3 text-right text-purple-300">
+                    +${(fiveYearProjections.reduce((s, y) => s + y.futureModulesRevenue, 0) / 1000).toFixed(0)}K
+                  </td>
+                  <td className="px-3 py-3 text-right text-emerald-300">
+                    ${(fiveYearProjections.reduce((s, y) => s + y.totalRevenue, 0) / 1_000_000).toFixed(2)}M
+                  </td>
+                  <td className="px-3 py-3 text-right text-green-300">
+                    ${(fiveYearProjections.reduce((s, y) => s + y.totalProfit, 0) / 1_000_000).toFixed(2)}M
+                  </td>
+                  <td className="px-3 py-3 text-right">
+                    {(fiveYearProjections.reduce((s, y) => s + y.totalProfit, 0) / 
+                      fiveYearProjections.reduce((s, y) => s + y.totalRevenue, 0) * 100).toFixed(1)}%
+                  </td>
+                  <td className="px-3 py-3 text-right text-amber-300">
+                    {(fiveYearProjections[4].tokenPriceEnd / parameters.tokenPrice).toFixed(1)}x
+                  </td>
+                  <td className="px-3 py-3"></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          {/* Future Modules Launch Timeline */}
+          {hasFutureModules && (
+            <div className="bg-purple-50 rounded-xl p-5 mb-6">
+              <h4 className="font-semibold text-purple-800 mb-4 flex items-center gap-2">
+                🔮 Future Module Revenue Impact
+              </h4>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                {enabledFutureModules.crossPlatform && (
+                  <div className="bg-white rounded-lg p-3 border border-purple-200">
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className="text-xl">🌐</span>
+                      <span className="font-semibold text-sm">Cross-Platform</span>
+                    </div>
+                    <div className="text-xs text-gray-500">Launches Month 15</div>
+                    <div className="text-lg font-bold text-purple-600 mt-1">
+                      ${((fiveYearProjections[1]?.futureModulesRevenue || 0) * 0.3 / 1000).toFixed(0)}K/yr
+                    </div>
+                    <div className="text-xs text-gray-400">Content sharing & renting</div>
+                  </div>
+                )}
+                {enabledFutureModules.marketplace && (
+                  <div className="bg-white rounded-lg p-3 border border-purple-200">
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className="text-xl">🛒</span>
+                      <span className="font-semibold text-sm">Marketplace</span>
+                    </div>
+                    <div className="text-xs text-gray-500">Launches Month 18</div>
+                    <div className="text-lg font-bold text-purple-600 mt-1">
+                      ${((fiveYearProjections[2]?.futureModulesRevenue || 0) * 0.35 / 1000).toFixed(0)}K/yr
+                    </div>
+                    <div className="text-xs text-gray-400">Physical & digital goods</div>
+                  </div>
+                )}
+                {enabledFutureModules.businessHub && (
+                  <div className="bg-white rounded-lg p-3 border border-purple-200">
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className="text-xl">💼</span>
+                      <span className="font-semibold text-sm">Business Hub</span>
+                    </div>
+                    <div className="text-xs text-gray-500">Launches Month 21</div>
+                    <div className="text-lg font-bold text-purple-600 mt-1">
+                      ${((fiveYearProjections[2]?.futureModulesRevenue || 0) * 0.25 / 1000).toFixed(0)}K/yr
+                    </div>
+                    <div className="text-xs text-gray-400">Freelancer ecosystem</div>
+                  </div>
+                )}
+                {enabledFutureModules.vchain && (
+                  <div className="bg-white rounded-lg p-3 border border-purple-200">
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className="text-xl">🔗</span>
+                      <span className="font-semibold text-sm">VChain Network</span>
+                    </div>
+                    <div className="text-xs text-gray-500">Launches Month 24</div>
+                    <div className="text-lg font-bold text-purple-600 mt-1">
+                      ${((fiveYearProjections[2]?.futureModulesRevenue || 0) * 0.4 / 1000).toFixed(0)}K/yr
+                    </div>
+                    <div className="text-xs text-gray-400">Cross-chain infrastructure</div>
+                  </div>
+                )}
+              </div>
+              <div className="mt-4 text-sm text-purple-700">
+                <strong>Total Future Module Contribution (5 years):</strong>{' '}
+                <span className="text-lg font-bold">
+                  ${(fiveYearProjections.reduce((s, y) => s + y.futureModulesRevenue, 0) / 1000).toFixed(0)}K
+                </span>
+                {' '}({(fiveYearProjections.reduce((s, y) => s + y.futureModulesRevenue, 0) / 
+                  fiveYearProjections.reduce((s, y) => s + y.totalRevenue, 0) * 100).toFixed(1)}% of total revenue)
+              </div>
+            </div>
+          )}
+
+          {/* Key Milestones */}
+          <div className="bg-gray-50 rounded-xl p-5">
+            <h4 className="font-semibold text-gray-800 mb-4 flex items-center gap-2">
+              🎯 Key Milestones
+            </h4>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="flex items-center gap-3 bg-white rounded-lg p-3 border border-gray-200">
+                <span className="text-2xl">🚀</span>
+                <div>
+                  <div className="font-semibold text-sm">TGE Launch</div>
+                  <div className="text-xs text-gray-500">Month 1 • {formatNumber(fiveYearProjections[0].startUsers)} users</div>
+                </div>
+              </div>
+              <div className="flex items-center gap-3 bg-white rounded-lg p-3 border border-gray-200">
+                <span className="text-2xl">📊</span>
+                <div>
+                  <div className="font-semibold text-sm">Break-even</div>
+                  <div className="text-xs text-gray-500">
+                    {fiveYearProjections[0].totalProfit > 0 ? 'Profitable from Day 1!' : 'Month 3 projected'}
+                  </div>
+                </div>
+              </div>
+              <div className="flex items-center gap-3 bg-white rounded-lg p-3 border border-gray-200">
+                <span className="text-2xl">🎉</span>
+                <div>
+                  <div className="font-semibold text-sm">100K Users</div>
+                  <div className="text-xs text-gray-500">
+                    {fiveYearProjections.findIndex(y => y.endUsers >= 100000) >= 0 
+                      ? `Year ${fiveYearProjections.findIndex(y => y.endUsers >= 100000) + 1}` 
+                      : 'Beyond 5 years'}
+                  </div>
+                </div>
+              </div>
+              <div className="flex items-center gap-3 bg-white rounded-lg p-3 border border-gray-200">
+                <span className="text-2xl">💰</span>
+                <div>
+                  <div className="font-semibold text-sm">$1M Annual Revenue</div>
+                  <div className="text-xs text-gray-500">
+                    {fiveYearProjections.findIndex(y => y.totalRevenue >= 1_000_000) >= 0 
+                      ? `Year ${fiveYearProjections.findIndex(y => y.totalRevenue >= 1_000_000) + 1}` 
+                      : 'Beyond 5 years'}
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       )}

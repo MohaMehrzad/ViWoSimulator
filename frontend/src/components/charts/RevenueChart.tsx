@@ -25,13 +25,6 @@ export function RevenueChart({ result }: RevenueChartProps) {
       color: '#ec4899',
     },
     {
-      name: 'Community',
-      revenue: result.community.revenue,
-      costs: result.community.costs,
-      profit: result.community.profit,
-      color: '#10b981',
-    },
-    {
       name: 'Advertising',
       revenue: result.advertising.revenue,
       costs: result.advertising.costs,
@@ -39,10 +32,10 @@ export function RevenueChart({ result }: RevenueChartProps) {
       color: '#3b82f6',
     },
     {
-      name: 'Messaging',
-      revenue: result.messaging.revenue,
-      costs: result.messaging.costs,
-      profit: result.messaging.profit,
+      name: 'Exchange',
+      revenue: result.exchange.revenue,
+      costs: result.exchange.costs,
+      profit: result.exchange.profit,
       color: '#06b6d4',
     },
   ];

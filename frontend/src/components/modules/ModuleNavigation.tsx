@@ -1,39 +1,63 @@
 'use client';
 
+import { PageTab } from '@/components/Header';
+
 interface ModuleNavigationProps {
   activeSection: string;
   onSectionChange: (section: string) => void;
+  activeTab: PageTab;
   enabledModules: {
     advertising: boolean;
-    messaging: boolean;
-    community: boolean;
     exchange: boolean;
   };
 }
 
-const SECTIONS = [
+// Section type definition
+type ModuleKey = 'advertising' | 'exchange';
+
+interface SectionConfig {
+  id: string;
+  label: string;
+  icon: string;
+  alwaysShow?: boolean;
+  moduleKey?: ModuleKey;
+}
+
+// Year 1 sections - focused on first 12 months
+const YEAR1_SECTIONS: SectionConfig[] = [
   { id: 'overview', label: 'Overview', icon: '📊', alwaysShow: true },
-  { id: 'tokenomics', label: 'Tokenomics', icon: '🪙', alwaysShow: true },
+  { id: 'prelaunch', label: 'Pre-Launch', icon: '🚀', alwaysShow: true },
   { id: 'identity', label: 'Identity', icon: '🆔', alwaysShow: true },
   { id: 'content', label: 'Content', icon: '📄', alwaysShow: true },
-  { id: 'community', label: 'Community', icon: '👥', moduleKey: 'community' as const },
-  { id: 'advertising', label: 'Advertising', icon: '📢', moduleKey: 'advertising' as const },
-  { id: 'messaging', label: 'Messaging', icon: '💬', moduleKey: 'messaging' as const },
-  { id: 'exchange', label: 'Exchange', icon: '💱', moduleKey: 'exchange' as const },
+  { id: 'advertising', label: 'Advertising', icon: '📢', moduleKey: 'advertising' },
+  { id: 'exchange', label: 'Exchange', icon: '💱', moduleKey: 'exchange' },
   { id: 'rewards', label: 'Rewards', icon: '🎁', alwaysShow: true },
   { id: 'recapture', label: 'Recapture Flow', icon: '🔄', alwaysShow: true },
   { id: 'liquidity', label: 'Liquidity', icon: '💧', alwaysShow: true },
   { id: 'staking', label: 'Staking', icon: '🔒', alwaysShow: true },
+];
+
+// 5-Year sections - focused on long-term projections
+const YEAR5_SECTIONS: SectionConfig[] = [
+  { id: 'overview', label: 'Overview', icon: '📈', alwaysShow: true },
+  { id: 'prelaunch', label: 'Pre-Launch', icon: '🚀', alwaysShow: true },
+  { id: 'tokenomics', label: 'Tokenomics', icon: '🪙', alwaysShow: true },
+  { id: 'governance', label: 'Governance', icon: '🗳️', alwaysShow: true },
   { id: 'velocity', label: 'Velocity', icon: '⚡', alwaysShow: true },
-  { id: 'summary', label: 'Summary', icon: '📈', alwaysShow: true },
+  { id: 'token-metrics', label: 'Token Metrics', icon: '📊', alwaysShow: true },
+  { id: 'future-modules', label: 'Future Modules', icon: '🔮', alwaysShow: true },
+  { id: 'summary', label: 'Summary', icon: '✅', alwaysShow: true },
 ];
 
 export function ModuleNavigation({ 
   activeSection, 
   onSectionChange,
+  activeTab,
   enabledModules 
 }: ModuleNavigationProps) {
-  const visibleSections = SECTIONS.filter(section => {
+  const sections = activeTab === 'year1' ? YEAR1_SECTIONS : YEAR5_SECTIONS;
+  
+  const visibleSections = sections.filter(section => {
     if (section.alwaysShow) return true;
     if (section.moduleKey) {
       return enabledModules[section.moduleKey];
@@ -42,27 +66,31 @@ export function ModuleNavigation({
   });
 
   return (
-    <nav className="bg-white border-b border-gray-200 px-6 py-4 sticky top-0 z-50 shadow-sm">
-      <ul className="flex flex-wrap gap-2">
-        {visibleSections.map((section) => (
-          <li key={section.id}>
-            <button
-              onClick={() => onSectionChange(section.id)}
-              className={`flex items-center gap-1.5 px-4 py-2 rounded-lg font-semibold text-sm 
-                         transition-all hover:-translate-y-0.5
-                         ${activeSection === section.id 
-                           ? 'bg-gray-900 text-white' 
-                           : 'bg-gray-50 border border-gray-200 text-gray-900 hover:bg-gray-100'
-                         }`}
-            >
-              <span>{section.icon}</span>
-              {section.label}
-            </button>
-          </li>
-        ))}
-      </ul>
+    <nav className="bg-white border-b border-gray-200 px-6 py-4 sticky top-16 z-40 shadow-sm">
+      <div className="flex items-center gap-4">
+        <div className="flex items-center gap-2 text-sm font-semibold text-gray-500 border-r border-gray-200 pr-4">
+          <span>{activeTab === 'year1' ? '📅' : '📈'}</span>
+          <span>{activeTab === 'year1' ? 'Year 1' : '5-Year'}</span>
+        </div>
+        <ul className="flex flex-wrap gap-2">
+          {visibleSections.map((section) => (
+            <li key={section.id}>
+              <button
+                onClick={() => onSectionChange(section.id)}
+                className={`flex items-center gap-1.5 px-4 py-2 rounded-lg font-semibold text-sm 
+                           transition-all hover:-translate-y-0.5
+                           ${activeSection === section.id 
+                             ? 'bg-gray-900 text-white' 
+                             : 'bg-gray-50 border border-gray-200 text-gray-900 hover:bg-gray-100'
+                           }`}
+              >
+                <span>{section.icon}</span>
+                {section.label}
+              </button>
+            </li>
+          ))}
+        </ul>
+      </div>
     </nav>
   );
 }
-
-

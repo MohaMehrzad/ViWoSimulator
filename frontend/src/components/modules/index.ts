@@ -1,11 +1,11 @@
 export { ModuleNavigation } from './ModuleNavigation';
 export { OverviewSection } from './OverviewSection';
+export { Year1Overview } from './Year1Overview';
+export { Year5Overview } from './Year5Overview';
 export { TokenomicsSection } from './TokenomicsSection';
 export { IdentitySection } from './IdentitySection';
 export { ContentSection } from './ContentSection';
-export { CommunitySection } from './CommunitySection';
 export { AdvertisingSection } from './AdvertisingSection';
-export { MessagingSection } from './MessagingSection';
 export { ExchangeSection } from './ExchangeSection';
 export { RewardsSection } from './RewardsSection';
 export { RecaptureSection } from './RecaptureSection';
@@ -14,3 +14,9 @@ export { StakingSection } from './StakingSection';
 export { VelocitySection } from './VelocitySection';
 export { SummarySection } from './SummarySection';
 export { FomoTimeline } from './FomoTimeline';
+// NEW: Nov 2025
+export { GovernanceSection } from './GovernanceSection';
+export { TokenMetricsSection } from './TokenMetricsSection';
+export { FutureModulesSection } from './FutureModulesSection';
+// Pre-Launch Modules (Nov 2025)
+export { PreLaunchSection } from './PreLaunchSection';

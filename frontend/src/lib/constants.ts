@@ -1,4 +1,14 @@
-import { SimulationParameters, Preset, GrowthScenarioConfig, MarketConditionConfig, FomoEvent, GrowthScenario, MarketCondition } from '@/types/simulation';
+import { 
+  SimulationParameters, 
+  Preset, 
+  GrowthScenarioConfig, 
+  MarketConditionConfig, 
+  FomoEvent, 
+  GrowthScenario, 
+  MarketCondition,
+  MarketCycleYearConfig,
+  MarketCycle2025_2030,
+} from '@/types/simulation';
 
 /**
  * Default parameters updated with 2024-2025 industry benchmarks.
@@ -105,18 +115,16 @@ export const DEFAULT_PARAMETERS: SimulationParameters = {
   minStakeAmount: 100,              // 100 VCoin minimum
   stakeLockDays: 30,                // 30 day lock
   
-  // Creator Economy Parameters (NEW - Nov 2025)
-  platformCreatorFee: 0.05,         // 5% platform fee on creator earnings
-  boostPostFeeVcoin: 5,             // 5 VCoin to boost a post
-  premiumDmFeeVcoin: 2,             // 2 VCoin to DM non-followers
-  premiumReactionFeeVcoin: 1,       // 1 VCoin for premium reactions
-  
   // Module toggles
   enableAdvertising: false,
-  enableMessaging: false,
-  enableCommunity: false,
   enableExchange: true,
-  enableNft: false,                 // NEW: NFT toggle (Issue #12)
+  enableNft: true,                  // NFT enabled by default
+  
+  // Future Modules (disabled by default)
+  enableVchain: false,
+  enableMarketplace: false,
+  enableBusinessHub: false,
+  enableCrossPlatform: false,
   
   // Identity Module pricing (USD)
   basicPrice: 0,
@@ -129,24 +137,11 @@ export const DEFAULT_PARAMETERS: SimulationParameters = {
   avgProfilePrice: 25,              // NEW: Was $100, now $25 (Issue #11)
   
   // Content Module pricing (VCoin) - Updated Nov 2025
-  // Note: Small fees help recapture and generate revenue
-  textPostFeeVcoin: 0,              // Keep free for engagement
-  imagePostFeeVcoin: 0.5,           // Small fee for image posts
-  videoPostFeeVcoin: 1,             // Small fee for video posts
   nftMintFeeVcoin: 50,              // Updated: 25 -> 50 for better recapture
   nftMintPercentage: 0.005,         // Updated: 0.5% (was 0.1%, increased for visible revenue)
   premiumContentVolumeVcoin: 1000,  // Increased for better revenue
   contentSaleVolumeVcoin: 500,      // Increased for better revenue
   contentSaleCommission: 0.10,
-  
-  // Community Module pricing (USD)
-  smallCommunityFee: 0,
-  mediumCommunityFee: 3,
-  largeCommunityFee: 10,
-  enterpriseCommunityFee: 35,
-  eventHostingFee: 2,
-  communityVerificationFee: 8,
-  communityAnalyticsFee: 5,
   
   // Advertising Module pricing (USD) - Updated Nov 2025
   bannerCPM: 0.50,                  // Updated: $0.50 (viable launch)
@@ -154,14 +149,6 @@ export const DEFAULT_PARAMETERS: SimulationParameters = {
   promotedPostFee: 1.00,
   campaignManagementFee: 20,
   adAnalyticsFee: 15,
-  
-  // Messaging Module pricing (USD)
-  encryptedDMFee: 0,
-  groupChatFee: 0.25,
-  fileTransferFee: 0.02,
-  voiceCallFee: 0.01,
-  messageStorageFee: 0.50,
-  messagingPremiumFee: 2,
   
   // Exchange/Wallet Module - Updated Nov 2025
   exchangeSwapFeePercent: 0.005,    // 0.5% swap fee (industry standard)
@@ -264,10 +251,8 @@ export const PRESETS: Preset[] = [
       contentSaleVolumeVcoin: 100,
       // Module toggles (explicit)
       enableAdvertising: false,
-      enableMessaging: false,
-      enableCommunity: false,
       enableExchange: true,
-      enableNft: false,
+      enableNft: true,
       // Ad rates for lean scenario
       bannerCPM: 0.50,
       videoCPM: 2.00,
@@ -317,8 +302,6 @@ export const PRESETS: Preset[] = [
       premiumPrice: 15,
       // Module toggles (explicit)
       enableAdvertising: true,         // Enabled for growth phase
-      enableMessaging: false,
-      enableCommunity: true,           // Enabled for growth phase
       enableExchange: true,
       enableNft: true,                 // Enabled for growth phase
     },
@@ -358,8 +341,6 @@ export const PRESETS: Preset[] = [
       avgProfilePrice: 80,
       // Module toggles (all enabled for scale)
       enableAdvertising: true,
-      enableMessaging: true,
-      enableCommunity: true,
       enableExchange: true,
       enableNft: true,
     },
@@ -586,9 +567,7 @@ export const CONFIG = {
     IDENTITY: 0.05,
     CONTENT: 0.40,
     REWARDS: 0.20,
-    COMMUNITY: 0.10,
     ADVERTISING: 0.15,
-    MESSAGING: 0.10,
   },
   
   // Issue #5: More conservative caps
@@ -617,19 +596,6 @@ export const CONFIG = {
     PROMOTED_POSTS: 0.03,
     ADVERTISERS: 0.005,
     AD_ANALYTICS_SUBSCRIBERS: 0.10,
-    USERS_PER_COMMUNITY: 15,
-    COMMUNITY_EVENTS: 0.15,
-    VERIFIED_COMMUNITIES: 0.05,
-    COMMUNITY_ANALYTICS_ELIGIBLE: 0.10,
-    MESSAGES_PER_USER: 50,
-    REGULAR_MESSAGES: 0.85,
-    ENCRYPTED_MESSAGES: 0.15,
-    GROUP_CHAT_USERS: 0.20,
-    FILES_PER_USER: 3,
-    CALL_USERS: 0.05,
-    AVG_CALL_MINUTES: 15,
-    STORAGE_SUBSCRIBERS: 0.10,
-    MESSAGING_PREMIUM_USERS: 0.08,
     ADS_PER_USER: 30,
     EXCHANGE_ADOPTION: 0.05,
   },
@@ -640,8 +606,6 @@ export const CONFIG = {
     IDENTITY: { BASE: 10, PER_USER: 0.01, THRESHOLD: 100, SOLANA_TX: 0.00025 },
     CONTENT: { BASE: 20, PER_USER: 0.02, THRESHOLD: 100, PER_POST: 0.002, SOLANA_TX: 0.00025 },
     ADVERTISING: { BASE: 5, PER_USER: 0.005, THRESHOLD: 100, SOLANA_TX: 0.00025 },
-    COMMUNITY: { BASE: 5, PER_USER: 0.005, THRESHOLD: 100, SOLANA_TX: 0.00025 },
-    MESSAGING: { BASE: 10, PER_USER: 0.01, THRESHOLD: 100, SOLANA_TX: 0.00025 },
     REWARDS: { BASE: 10, PER_USER: 0.003, THRESHOLD: 100, SOLANA_TX: 0.00025 },
     EXCHANGE: { BASE: 5, PER_USER: 0.01, THRESHOLD: 25, SOLANA_TX: 0.00025 },  // Jupiter DEX routing
   },
@@ -657,8 +621,6 @@ export const CONFIG = {
     ADVERTISING_DEPOSITS: 0.25,
     IDENTITY_STAKING: 0.40,
     CONTENT_STAKING: 0.40,
-    COMMUNITY_STAKING: 0.40,
-    MESSAGING_STAKING: 0.40,
   },
   
   // Issue #13: Compliance cost defaults (scaled for early-stage)
@@ -852,4 +814,128 @@ export const GROWTH_SCENARIO_SUMMARY = {
     tokenPriceChange: '4x → 7x',
     description: 'Viral adoption, bull market',
   },
+};
+
+// === 5-YEAR MARKET CYCLE ANALYSIS (2025-2030) ===
+/**
+ * Bitcoin Halving April 2024 - Market cycle analysis for 2025-2030
+ * Based on historical halving cycles and 2024-2025 market conditions
+ */
+export const MARKET_CYCLE_2025_2030: MarketCycle2025_2030 = {
+  2025: {
+    year: 2025,
+    phase: 'Early Bull / Post-Halving Rally',
+    growthMultiplier: 1.3,
+    retentionMultiplier: 1.1,
+    priceMultiplier: 1.5,
+    description: 'Bitcoin halving (April 2024) effect in full swing. Increased crypto interest, new users entering market. Altcoin season typically begins 12-18 months post-halving.',
+  },
+  2026: {
+    year: 2026,
+    phase: 'Peak Bull / Altcoin Season',
+    growthMultiplier: 1.6,
+    retentionMultiplier: 1.15,
+    priceMultiplier: 2.5,
+    description: 'Peak of bull cycle expected. Maximum FOMO, highest valuations. Social tokens and SocialFi projects see maximum interest. Token launch timing optimal (March 2026 TGE).',
+  },
+  2027: {
+    year: 2027,
+    phase: 'Late Bull / Distribution',
+    growthMultiplier: 1.2,
+    retentionMultiplier: 1.0,
+    priceMultiplier: 1.8,
+    description: 'Distribution phase begins. Smart money taking profits. New user acquisition slows but platform maturity increases. Focus on retention and utility over speculation.',
+  },
+  2028: {
+    year: 2028,
+    phase: 'Bear / Accumulation',
+    growthMultiplier: 0.7,
+    retentionMultiplier: 0.85,
+    priceMultiplier: 0.5,
+    description: 'Next halving approaches (expected April 2028). Bear market conditions. CAC increases, retention becomes critical. Building phase - focus on product and community.',
+  },
+  2029: {
+    year: 2029,
+    phase: 'Recovery / New Cycle Begins',
+    growthMultiplier: 1.1,
+    retentionMultiplier: 1.0,
+    priceMultiplier: 1.0,
+    description: 'Post-halving recovery begins. Market sentiment improving. Platform is mature with established user base. Positioned for next growth cycle.',
+  },
+  2030: {
+    year: 2030,
+    phase: 'Early Bull / Mature Platform',
+    growthMultiplier: 1.4,
+    retentionMultiplier: 1.1,
+    priceMultiplier: 1.5,
+    description: 'New bull cycle in progress. Platform has 4+ years of operation. Established brand, lower CAC, high retention. Expansion into new markets and features.',
+  },
+};
+
+// === FUTURE MODULE DEFAULT PARAMETERS (2026-2028) ===
+/**
+ * Default configurations for future modules
+ * All disabled by default - enable individually when ready
+ */
+export const FUTURE_MODULE_DEFAULTS = {
+  vchain: {
+    enableVchain: false,
+    vchainLaunchMonth: 24,
+    vchainTxFeePercent: 0.002,
+    vchainBridgeFeePercent: 0.001,
+    vchainGasMarkupPercent: 0.08,
+    vchainMonthlyTxVolumeUsd: 25_000_000,
+    vchainMonthlyBridgeVolumeUsd: 50_000_000,
+    vchainValidatorApy: 0.10,
+    vchainMinValidatorStake: 100000,
+    vchainValidatorCount: 100,
+    vchainEnterpriseClients: 10,
+    vchainAvgEnterpriseRevenue: 5000,
+  },
+  marketplace: {
+    enableMarketplace: false,
+    marketplaceLaunchMonth: 18,
+    marketplacePhysicalCommission: 0.08,  // 8% (industry: 8-15%)
+    marketplaceDigitalCommission: 0.15,   // 15% (industry: 15-30%)
+    marketplaceNftCommission: 0.025,      // 2.5%
+    marketplaceServiceCommission: 0.08,   // 8%
+    marketplaceMonthlyGmvUsd: 5_000_000,
+    marketplaceActiveSellers: 1000,
+  },
+  businessHub: {
+    enableBusinessHub: false,
+    businessHubLaunchMonth: 21,
+    freelancerCommissionRate: 0.12,       // 12% (industry: 10-20%)
+    freelancerMonthlyTransactionsUsd: 500_000,
+    freelancerActiveCount: 5000,
+    fundingPortalMonthlyVolume: 2_000_000,
+    fundingPlatformFee: 0.04,             // 4%
+  },
+  crossPlatform: {
+    enableCrossPlatform: false,
+    crossPlatformLaunchMonth: 15,
+    crossPlatformRentalCommission: 0.15,  // 15% (industry: 15-20%)
+    crossPlatformMonthlyRentalVolume: 500_000,
+    crossPlatformActiveRenters: 5000,
+    crossPlatformActiveOwners: 1000,
+  },
+};
+
+/**
+ * Validated commission rates based on industry benchmarks
+ * Source: Amazon, eBay, Upwork, Fiverr, App Store, Steam (Nov 2025)
+ */
+export const VALIDATED_COMMISSION_RATES = {
+  // Marketplace
+  physicalGoods: { min: 0.05, max: 0.15, default: 0.08, benchmark: 'Amazon 8-15%' },
+  digitalGoods: { min: 0.08, max: 0.25, default: 0.15, benchmark: 'Steam/App Store 15-30%' },
+  nftSales: { min: 0.01, max: 0.10, default: 0.025, benchmark: 'OpenSea 2.5%' },
+  services: { min: 0.03, max: 0.15, default: 0.08, benchmark: 'Similar to physical goods' },
+  
+  // Freelancer
+  freelancerEarnings: { min: 0.08, max: 0.20, default: 0.12, benchmark: 'Upwork 10-20%, Fiverr 20%' },
+  
+  // Cross-Platform
+  accountRental: { min: 0.10, max: 0.25, default: 0.15, benchmark: 'Influencer platforms 15-20%' },
+  contentLicensing: { min: 0.10, max: 0.30, default: 0.20, benchmark: 'Getty/Shutterstock 15-50%' },
 };

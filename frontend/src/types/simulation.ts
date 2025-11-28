@@ -178,6 +178,303 @@ export interface GrowthProjectionResult {
   viralCoefficient: number;
 }
 
+// === FUTURE MODULE PARAMETERS (November 2025) ===
+
+export interface VChainParameters {
+  enableVchain: boolean;
+  vchainLaunchMonth: number;
+  // Transaction fees
+  vchainTxFeePercent: number;
+  vchainMinTxFeeUsd?: number;
+  vchainMaxTxFeeUsd?: number;
+  // Bridge fees
+  vchainBridgeFeePercent: number;
+  // Gas abstraction
+  vchainGasMarkupPercent: number;
+  // Volume projections
+  vchainMonthlyTxVolumeUsd: number;
+  vchainMonthlyBridgeVolumeUsd: number;
+  // Validator economics
+  vchainValidatorApy: number;
+  vchainMinValidatorStake: number;
+  vchainValidatorCount: number;
+  // Enterprise API
+  vchainEnterpriseClients: number;
+  vchainAvgEnterpriseRevenue: number;
+}
+
+export interface MarketplaceParameters {
+  enableMarketplace: boolean;
+  marketplaceLaunchMonth: number;
+  // Commission rates
+  marketplacePhysicalCommission: number;
+  marketplaceDigitalCommission: number;
+  marketplaceNftCommission: number;
+  marketplaceServiceCommission: number;
+  marketplaceMaxCommissionUsd?: number;
+  // Payment processing
+  marketplaceCryptoPaymentFee?: number;
+  marketplaceEscrowFee?: number;
+  // Volume projections
+  marketplaceMonthlyGmvUsd: number;
+  marketplaceGmvPhysicalPercent?: number;
+  marketplaceGmvDigitalPercent?: number;
+  marketplaceGmvNftPercent?: number;
+  marketplaceGmvServicesPercent?: number;
+  // Seller metrics
+  marketplaceActiveSellers: number;
+  marketplaceVerifiedSellerRate?: number;
+  marketplaceStoreSubscriptionRate?: number;
+  // Listing fees
+  marketplaceFeaturedListingFee?: number;
+  marketplaceStoreSubscriptionFee?: number;
+  // Advertising
+  marketplaceAdCpc?: number;
+  marketplaceMonthlyAdClicks?: number;
+}
+
+export interface BusinessHubParameters {
+  enableBusinessHub: boolean;
+  businessHubLaunchMonth: number;
+  // Freelancer platform
+  freelancerJobPostingFee?: number;
+  freelancerCommissionRate: number;
+  freelancerEscrowFee?: number;
+  freelancerMonthlyTransactionsUsd: number;
+  freelancerActiveCount: number;
+  // Startup launchpad
+  startupMonthlyRegistrations?: number;
+  startupRegistrationFee?: number;
+  acceleratorParticipants?: number;
+  acceleratorFee?: number;
+  // Funding portal
+  fundingPortalMonthlyVolume: number;
+  fundingPlatformFee: number;
+  investorNetworkMembers?: number;
+  investorNetworkFee?: number;
+  // Project management SaaS
+  pmProfessionalUsers?: number;
+  pmProfessionalFee?: number;
+  pmBusinessUsers?: number;
+  pmBusinessFee?: number;
+  pmEnterpriseUsers?: number;
+  pmEnterpriseFee?: number;
+  // Learning academy
+  academyMonthlyCoursesSales?: number;
+  academyAvgCoursePrice?: number;
+  academyPlatformShare?: number;
+  academySubscriptionUsers?: number;
+  academySubscriptionFee?: number;
+}
+
+export interface CrossPlatformParameters {
+  enableCrossPlatform: boolean;
+  crossPlatformLaunchMonth: number;
+  // Content sharing subscriptions
+  crossPlatformCreatorTierFee?: number;
+  crossPlatformProfessionalTierFee?: number;
+  crossPlatformAgencyTierFee?: number;
+  crossPlatformCreatorSubscribers?: number;
+  crossPlatformProfessionalSubscribers?: number;
+  crossPlatformAgencySubscribers?: number;
+  // Account renting
+  crossPlatformRentalCommission: number;
+  crossPlatformEscrowFee?: number;
+  crossPlatformMonthlyRentalVolume: number;
+  crossPlatformActiveRenters: number;
+  crossPlatformActiveOwners: number;
+  // Insurance
+  crossPlatformInsuranceTakeRate?: number;
+  crossPlatformInsuranceRate?: number;
+  // Verification
+  crossPlatformMonthlyVerifications?: number;
+  crossPlatformVerificationFee?: number;
+  crossPlatformPremiumVerifiedUsers?: number;
+  crossPlatformPremiumVerifiedFee?: number;
+  // Analytics
+  crossPlatformAdvancedAnalyticsUsers?: number;
+  crossPlatformAnalyticsFee?: number;
+  crossPlatformApiUsers?: number;
+  crossPlatformApiFee?: number;
+  // Content licensing
+  crossPlatformMonthlyLicenseVolume?: number;
+  crossPlatformLicenseCommission?: number;
+}
+
+// === GOVERNANCE RESULT (November 2025) ===
+
+export interface GovernanceResult {
+  revenue: number;
+  costs: number;
+  profit: number;
+  totalVevcoinSupply: number;
+  totalVevcoinSupplyUsd: number;
+  vevcoinOfCirculatingPercent: number;
+  avgVevcoinPerStaker: number;
+  avgLockWeeks: number;
+  avgBoostMultiplier: number;
+  // Direct participation
+  activeVoters: number;
+  activeVotingPower: number;
+  votingParticipationRate: number;
+  // Delegation (NEW - Nov 2025)
+  delegators: number;
+  delegatedVotingPower: number;
+  delegationRate: number;
+  // Effective participation (voters + delegators)
+  totalParticipants: number;
+  effectiveParticipationRate: number;
+  // Distribution
+  tierDistribution: Record<string, number>;
+  eligibleProposers: number;
+  expectedMonthlyProposals: number;
+  votingPowerConcentration: number;
+  decentralizationScore: number;
+  governanceHealthScore: number;
+}
+
+// === FUTURE MODULE RESULTS (November 2025) ===
+
+export interface VChainResult {
+  enabled: boolean;
+  launched: boolean;
+  monthsActive: number;
+  growthFactor: number;
+  revenue: number;
+  txFeeRevenue: number;
+  bridgeFeeRevenue: number;
+  gasMarkupRevenue: number;
+  enterpriseApiRevenue: number;
+  monthlyTxVolume: number;
+  monthlyBridgeVolume: number;
+  estimatedTransactions: number;
+  activeEnterpriseClients: number;
+  validatorsActive: number;
+  totalValidatorStake: number;
+  costs: number;
+  profit: number;
+  margin: number;
+  launchMonth: number;
+  monthsUntilLaunch: number;
+}
+
+export interface MarketplaceResult {
+  enabled: boolean;
+  launched: boolean;
+  monthsActive: number;
+  growthFactor: number;
+  revenue: number;
+  commissionRevenue: number;
+  physicalCommission: number;
+  digitalCommission: number;
+  nftCommission: number;
+  servicesCommission: number;
+  monthlyGmv: number;
+  activeSellers: number;
+  costs: number;
+  profit: number;
+  margin: number;
+  launchMonth: number;
+  monthsUntilLaunch: number;
+}
+
+export interface BusinessHubResult {
+  enabled: boolean;
+  launched: boolean;
+  monthsActive: number;
+  growthFactor: number;
+  revenue: number;
+  freelancerRevenue: number;
+  startupRevenue: number;
+  fundingRevenue: number;
+  pmSaasRevenue: number;
+  academyRevenue: number;
+  activeFreelancers: number;
+  monthlyFreelanceVolume: number;
+  monthlyFundingVolume: number;
+  pmTotalUsers: number;
+  totalVcoinRevenue: number;
+  costs: number;
+  profit: number;
+  margin: number;
+  launchMonth: number;
+  monthsUntilLaunch: number;
+}
+
+export interface CrossPlatformResult {
+  enabled: boolean;
+  launched: boolean;
+  monthsActive: number;
+  growthFactor: number;
+  revenue: number;
+  subscriptionRevenue: number;
+  rentalRevenue: number;
+  insuranceRevenue: number;
+  verificationRevenue: number;
+  analyticsRevenue: number;
+  licenseRevenue: number;
+  totalSubscribers: number;
+  monthlyRentalVolume: number;
+  activeRenters: number;
+  activeOwners: number;
+  totalVcoinRevenue: number;
+  costs: number;
+  profit: number;
+  margin: number;
+  launchMonth: number;
+  monthsUntilLaunch: number;
+}
+
+// === TOKEN METRICS RESULT (November 2025) ===
+
+export interface TokenVelocityResult {
+  velocity: number;
+  annualizedVelocity: number;
+  interpretation: string;
+  healthScore: number;
+  daysToTurnover: number;
+  transactionVolume: number;
+  circulatingSupply: number;
+}
+
+export interface RealYieldResult {
+  monthlyRealYield: number;
+  annualRealYield: number;
+  interpretation: string;
+  isSustainable: boolean;
+  yieldPer1000Usd: number;
+  protocolRevenue: number;
+  stakedValueUsd: number;
+}
+
+export interface ValueAccrualResult {
+  totalScore: number;
+  grade: string;
+  interpretation: string;
+  breakdown: Record<string, number>;
+  weights: Record<string, number>;
+}
+
+export interface TokenMetricsResult {
+  velocity: TokenVelocityResult;
+  realYield: RealYieldResult;
+  valueAccrual: ValueAccrualResult;
+  overallHealth: number;
+}
+
+// === MARKET CYCLE TYPES (November 2025) ===
+
+export interface MarketCycleYearConfig {
+  year: number;
+  phase: string;
+  growthMultiplier: number;
+  retentionMultiplier: number;
+  priceMultiplier: number;
+  description: string;
+}
+
+export type MarketCycle2025_2030 = Record<number, MarketCycleYearConfig>;
+
 // === SOLANA NETWORK TYPES (November 2025) ===
 
 // Solana DEX platforms
@@ -292,22 +589,63 @@ export interface SimulationParameters {
   
   // Staking Parameters (NEW - Nov 2025)
   stakingApy?: number;
+  stakingParticipationRate?: number;  // NEW: % of users who stake (affects Value Accrual)
+  avgStakeAmount?: number;             // NEW: Average stake per staker in VCoin
   stakerFeeDiscount?: number;
   minStakeAmount?: number;
   stakeLockDays?: number;
+  stakingProtocolFee?: number;
+  
+  // Governance Parameters (NEW - Nov 2025)
+  governanceProposalFee?: number;
+  governanceBadgePrice?: number;
+  governancePremiumFee?: number;
+  governanceMinVevcoinToVote?: number;
+  governanceMinVevcoinToPropose?: number;
+  governanceVotingPeriodDays?: number;
+  // Governance participation (affects Value Accrual)
+  governanceParticipationRate?: number;  // % of stakers who actively vote
+  governanceDelegationRate?: number;     // % of non-voters who delegate
+  governanceAvgLockWeeks?: number;       // Average veVCoin lock duration
+  governanceProposalsPerMonth?: number;  // Expected proposals per month
   
   // Creator Economy Parameters (NEW - Nov 2025)
-  platformCreatorFee?: number;
-  boostPostFeeVcoin?: number;
+  // Dynamic Boost Post Fee - scales based on users and token price
+  boostPostTargetUsd?: number;
+  boostPostMinUsd?: number;
+  boostPostMaxUsd?: number;
+  boostPostScaleUsers?: number;
+  // Other premium features
   premiumDmFeeVcoin?: number;
   premiumReactionFeeVcoin?: number;
   
-  // Module toggles
+  // Module toggles - Core modules (default enabled)
+  enableIdentity?: boolean;
+  enableContent?: boolean;
+  enableRewards?: boolean;
+  enableStaking?: boolean;
+  enableLiquidity?: boolean;
+  enableGovernance?: boolean;
+  // Optional modules
   enableAdvertising: boolean;
-  enableMessaging: boolean;
-  enableCommunity: boolean;
   enableExchange: boolean;
-  enableNft?: boolean;             // NEW - Issue #12
+  enableNft?: boolean;             // NFT enabled by default
+  // Future modules are toggled via their nested parameter objects
+  enableVchain?: boolean;
+  enableMarketplace?: boolean;
+  enableBusinessHub?: boolean;
+  enableCrossPlatform?: boolean;
+  
+  // Future Module Parameters (NEW - Nov 2025)
+  vchain?: VChainParameters;
+  marketplace?: MarketplaceParameters;
+  businessHub?: BusinessHubParameters;
+  crossPlatform?: CrossPlatformParameters;
+  
+  // Pre-Launch Module Parameters (NEW - Nov 2025)
+  referral?: ReferralParameters;
+  points?: PointsParameters;
+  gasless?: GaslessParameters;
   
   // Identity Module pricing (USD) - Issue #11
   basicPrice: number;
@@ -320,23 +658,11 @@ export interface SimulationParameters {
   avgProfilePrice?: number;        // NEW - Issue #11
   
   // Content Module pricing (VCoin) - Issue #12
-  textPostFeeVcoin: number;
-  imagePostFeeVcoin: number;
-  videoPostFeeVcoin: number;
   nftMintFeeVcoin: number;
   nftMintPercentage?: number;      // NEW - Issue #12
   premiumContentVolumeVcoin: number;
   contentSaleVolumeVcoin: number;
   contentSaleCommission: number;
-  
-  // Community Module pricing (USD)
-  smallCommunityFee: number;
-  mediumCommunityFee: number;
-  largeCommunityFee: number;
-  enterpriseCommunityFee: number;
-  eventHostingFee: number;
-  communityVerificationFee: number;
-  communityAnalyticsFee: number;
   
   // Advertising Module pricing (USD) - Issue #7
   bannerCPM: number;
@@ -344,14 +670,6 @@ export interface SimulationParameters {
   promotedPostFee: number;
   campaignManagementFee: number;
   adAnalyticsFee: number;
-  
-  // Messaging Module pricing (USD)
-  encryptedDMFee: number;
-  groupChatFee: number;
-  fileTransferFee: number;
-  voiceCallFee: number;
-  messageStorageFee: number;
-  messagingPremiumFee: number;
   
   // Exchange/Wallet Module - Issue #4
   exchangeSwapFeePercent: number;
@@ -397,10 +715,11 @@ export interface ModuleResult {
 export interface RecaptureResult {
   totalRecaptured: number;
   recaptureRate: number;
-  burns: number;
-  treasury: number;
-  staking: number;
-  buybacks: number;
+  burns: number;  // VCoin burned from collected fees
+  treasury: number;  // VCoin accumulated in treasury
+  staking: number;  // VCoin locked in staking
+  buybacks: number;  // VCoin acquired via buybacks (bought from market with revenue)
+  buybackUsdSpent: number;  // USD spent on buybacks from protocol revenue
   totalRevenueSourceVcoin: number;
   totalTransactionFeesUsd: number;
   totalRoyaltiesUsd: number;
@@ -613,12 +932,130 @@ export interface CustomerAcquisitionMetrics {
 }
 
 // Full Simulation Result
+// === PRE-LAUNCH MODULE TYPES (Nov 2025) ===
+
+export interface ReferralResult {
+  totalUsers: number;
+  usersWithReferrals: number;
+  totalReferrals: number;
+  qualifiedReferrals: number;
+  referrersByTier: Record<string, number>;
+  referralsByTier: Record<string, number>;
+  bonusDistributedVcoin: number;
+  bonusDistributedUsd: number;
+  avgBonusPerReferrerVcoin: number;
+  viralCoefficient: number;
+  effectiveReferralRate: number;
+  qualificationRate: number;
+  monthlyReferralCostVcoin: number;
+  monthlyReferralCostUsd: number;
+  suspectedSybilReferrals: number;
+  sybilRejectionRate: number;
+  breakdown: Record<string, unknown>;
+}
+
+export interface PointsResult {
+  pointsPoolTokens: number;
+  pointsPoolPercent: number;
+  waitlistUsers: number;
+  participatingUsers: number;
+  participationRate: number;
+  totalPointsDistributed: number;
+  avgPointsPerUser: number;
+  medianPointsEstimate: number;
+  tokensPerPoint: number;
+  avgTokensPerUser: number;
+  usersBySegment: Record<string, number>;
+  pointsBySegment: Record<string, number>;
+  tokensBySegment: Record<string, number>;
+  suspectedSybilUsers: number;
+  sybilRejectionRate: number;
+  pointsRejected: number;
+  pointsByActivity: Record<string, number>;
+  top1PercentTokens: number;
+  top10PercentTokens: number;
+  bottom50PercentTokens: number;
+  breakdown: Record<string, unknown>;
+}
+
+export interface GaslessResult {
+  totalUsers: number;
+  newUsers: number;
+  verifiedUsers: number;
+  premiumUsers: number;
+  enterpriseUsers: number;
+  totalSponsoredTransactions: number;
+  avgTransactionsPerUser: number;
+  baseFeeCostUsd: number;
+  priorityFeeCostUsd: number;
+  accountCreationCostUsd: number;
+  totalSponsorshipCostUsd: number;
+  newUserCostUsd: number;
+  verifiedUserCostUsd: number;
+  premiumUserCostUsd: number;
+  enterpriseUserCostUsd: number;
+  avgCostPerUserUsd: number;
+  costPerTransactionUsd: number;
+  monthlySponsorshipBudgetUsd: number;
+  budgetUtilization: number;
+  sponsorshipCostVcoin: number;
+  breakdown: Record<string, unknown>;
+}
+
+export interface PreLaunchResult {
+  referral?: ReferralResult;
+  points?: PointsResult;
+  gasless?: GaslessResult;
+  totalPrelaunchCostUsd: number;
+  totalPrelaunchCostVcoin: number;
+  pointsTokensAllocated: number;
+  referralBonusDistributed: number;
+  referralUsersAcquired: number;
+  waitlistConversionTokens: number;
+}
+
+// Pre-Launch Parameters
+export interface ReferralParameters {
+  enableReferral: boolean;
+  qualificationRate: number;
+  activeReferrerRate: number;
+  sybilRejectionRate: number;
+  starterBonusVcoin: number;
+  builderBonusVcoin: number;
+  ambassadorBonusVcoin: number;
+  qualificationDays: number;
+  minPostsRequired: number;
+}
+
+export interface PointsParameters {
+  enablePoints: boolean;
+  pointsPoolTokens: number;
+  participationRate: number;
+  sybilRejectionRate: number;
+  waitlistSignupPoints: number;
+  socialFollowPoints: number;
+  dailyCheckinPoints: number;
+  inviteJoinPoints: number;
+  inviteVerifyPoints: number;
+  betaTestingPoints: number;
+}
+
+export interface GaslessParameters {
+  enableGasless: boolean;
+  newUserFreeTransactions: number;
+  verifiedUserMonthlyTransactions: number;
+  premiumUnlimited: boolean;
+  monthlySponsorshipBudgetUsd: number;
+  baseTransactionCostUsd: number;
+  priorityFeeUsd: number;
+  accountCreationCostUsd: number;
+  newUserRate: number;
+}
+
 export interface SimulationResult {
   identity: ModuleResult;
   content: ModuleResult;
-  community: ModuleResult;
   advertising: ModuleResult;
-  messaging: ModuleResult;
   exchange: ModuleResult;
   rewards: RewardsResult;
   recapture: RecaptureResult;
@@ -633,6 +1070,14 @@ export interface SimulationResult {
   // NEW - Nov 2025
   liquidity?: LiquidityResult;
   staking?: StakingResult;
+  governance?: GovernanceResult;
+  vchain?: VChainResult;
+  marketplace?: MarketplaceResult;
+  businessHub?: BusinessHubResult;
+  crossPlatform?: CrossPlatformResult;
+  tokenMetrics?: TokenMetricsResult;
+  // Pre-Launch Modules (Nov 2025)
+  prelaunch?: PreLaunchResult;
 }
 
 // Monte Carlo Results
@@ -698,9 +1143,7 @@ export interface MonthlyMetrics {
   margin: number;
   identityRevenue: number;
   contentRevenue: number;
-  communityRevenue: number;
   advertisingRevenue: number;
-  messagingRevenue: number;
   exchangeRevenue: number;
   platformFeeRevenue: number;
   tokensDistributed: number;
