@@ -4,6 +4,11 @@ import React from 'react';
 import { GrowthScenario, MarketCondition } from '@/types/simulation';
 import { GROWTH_SCENARIOS, MARKET_CONDITIONS, GROWTH_SCENARIO_SUMMARY } from '@/lib/constants';
 
+// Issue #36 Fix: Named constant for the Month 1 conversion rate
+// This represents the fraction of total calculated users that become Month 1 active users
+// based on typical acquisition-to-activation conversion rates in the crypto/social app space
+const MONTH1_USER_CONVERSION_RATE = 0.3;
+
 interface GrowthScenarioSelectorProps {
   scenario: GrowthScenario;
   marketCondition: MarketCondition;
@@ -56,7 +61,7 @@ export const GrowthScenarioSelector: React.FC<GrowthScenarioSelectorProps> = ({
   
   // Calculate projected Month 1 users based on marketing users + scenario multipliers
   const scenarioMultiplier = selectedScenario.month1FomoMultiplier * selectedMarket.fomoMultiplier;
-  const projectedMonth1Users = Math.round(calculatedUsers * scenarioMultiplier * 0.3);
+  const projectedMonth1Users = Math.round(calculatedUsers * scenarioMultiplier * MONTH1_USER_CONVERSION_RATE);
 
   return (
     <div className="space-y-4">

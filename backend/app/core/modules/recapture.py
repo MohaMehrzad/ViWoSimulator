@@ -1,21 +1,26 @@
 """
 Recapture calculations - token burn, buyback, staking, treasury.
 
-MAJOR FIXES (Issues #6, #10, #15):
-- Issue #6: Recapture based on realistic token velocity, not phantom USD conversion
-- Issue #10: Added exchange module to recapture calculations
-- Issue #15: Documented fee flow to prevent double-counting
+=== UPDATED: Break-Even Content Module Integration (November 2025) ===
 
-Nov 2025 Updates:
-- Updated default burn rate to 5% (from 3%)
-- Updated default buyback to 3% (from 2%)
-- Added creator economy VCoin flows (boosts, premium DMs, reactions)
-- Target recapture rate: 25-35%
+MAJOR CHANGES:
+- Content module now operates at BREAK-EVEN (no profit, bot deterrent only)
+- Platform revenue comes from 5% REWARD FEE (see rewards.py)
+- VCoin collected from content is largely refunded to engaged users
+- Only NET VCoin collected contributes to recapture
+- Treasury receives configurable % of platform revenue (default 20%)
 
 TOKEN FLOW MODEL:
 1. Users EARN VCoin through rewards (monthly emission)
-2. Users SPEND a portion of earned VCoin in the platform (velocity)
-3. The platform RECAPTURES a portion of spent VCoin (burn/buyback/stake)
+2. Platform takes 5% fee BEFORE distribution (primary revenue)
+3. Users SPEND a portion of earned VCoin in the platform (velocity)
+4. The platform RECAPTURES a portion of spent VCoin (burn/buyback/stake)
+5. Treasury receives 20% of platform revenue for governance
+
+Content Module VCoin Flow (Break-Even):
+- Collected from anti-bot fees → Refunded to engaged users (80%)
+- Only 20% of anti-bot fees contribute to recapture
+- Premium features (boost, DMs, reactions) fully contribute
 
 Key insight: Recapture is based on TOKEN VELOCITY - how much of the emitted 
 tokens flow back through the economy via platform features.
@@ -73,17 +78,18 @@ def calculate_token_velocity(
     - Medium utility: 10-20% monthly spend rate
     - Low utility/speculative: 5-10% monthly spend rate
     
-    Nov 2025 target: 25-35% token velocity for healthy recapture
+    Nov 2025: Adjusted for break-even content model
+    - Content fees are minimal (anti-bot only)
+    - Velocity comes from premium features (user choice)
     """
     # Base spending rate - what % of earned tokens do users spend monthly
-    # Updated to 20% base for better recapture (was 15%)
     base_spend_rate = 0.20  # 20% of earned tokens spent monthly
     
     # Adjust based on platform features enabled
     utility_multiplier = 1.0
     
     if params.enable_exchange:
-        utility_multiplier += 0.2  # Exchange adds utility
+        utility_multiplier += 0.2  # Exchange adds significant utility
     if params.enable_community:
         utility_multiplier += 0.1  # Community features
     if params.enable_messaging:
@@ -91,47 +97,42 @@ def calculate_token_velocity(
     if params.enable_advertising:
         utility_multiplier += 0.1  # Advertisers spend tokens
     
-    # Check for VCoin post fees (adds utility)
-    if params.text_post_fee_vcoin > 0 or params.image_post_fee_vcoin > 0:
-        utility_multiplier += 0.15
-    
-    # NFT features
+    # Content posting (minimal in break-even model)
+    # Only add utility if users opt into premium features
     if getattr(params, 'enable_nft', False):
-        utility_multiplier += 0.1
+        utility_multiplier += 0.1  # NFT adds utility
     
-    # Premium content
+    # Premium content (user choice)
     if params.premium_content_volume_vcoin > 0:
         utility_multiplier += 0.1
     
-    # NEW: Creator economy features (Nov 2025)
+    # Premium features (boost, DMs, reactions) - user choice
     boost_fee = getattr(params, 'boost_post_fee_vcoin', 5)
     premium_dm_fee = getattr(params, 'premium_dm_fee_vcoin', 2)
     premium_reaction_fee = getattr(params, 'premium_reaction_fee_vcoin', 1)
     
     if boost_fee > 0:
-        utility_multiplier += 0.1  # Boost posts add utility
+        utility_multiplier += 0.1
     if premium_dm_fee > 0:
-        utility_multiplier += 0.05  # Premium DMs add utility
+        utility_multiplier += 0.05
     if premium_reaction_fee > 0:
-        utility_multiplier += 0.05  # Premium reactions add utility
+        utility_multiplier += 0.05
     
     # Calculate effective velocity
-    effective_spend_rate = min(0.60, base_spend_rate * utility_multiplier)  # Cap at 60%
+    effective_spend_rate = min(0.60, base_spend_rate * utility_multiplier)
     
     # Tokens spent = emission * spend rate
     tokens_spent = monthly_emission * effective_spend_rate
     
-    # Staking rate - additional tokens locked
-    # Higher with staking APY enabled
+    # Staking rate - tokens locked
     staking_apy = getattr(params, 'staking_apy', 0.10)
     base_stake_rate = 0.05  # 5% of emission locked in staking
     
     if params.enable_exchange:
         base_stake_rate += 0.05  # Exchange fee discounts for staking
     
-    # Higher APY attracts more staking
     if staking_apy >= 0.10:
-        base_stake_rate += 0.05  # 10%+ APY encourages staking
+        base_stake_rate += 0.05  # Higher APY encourages staking
     
     tokens_staked = monthly_emission * base_stake_rate
     
@@ -158,61 +159,92 @@ def calculate_recapture(
     """
     Calculate total token recapture based on token velocity model.
     
-    The recapture rate depends on:
-    1. How much of the emission flows through the platform (velocity)
-    2. What % of spent tokens are burned/bought back (params.burn_rate + buyback_percent)
-    3. What % is staked (locked from circulation)
+    === UPDATED FOR BREAK-EVEN CONTENT MODEL ===
+    
+    Content module now:
+    - Collects minimal anti-bot fees
+    - Refunds 80% of fees to engaged users
+    - Only NET VCoin collected contributes to recapture
+    
+    Platform revenue comes from 5% Reward Fee (see rewards.py),
+    NOT from content module fees.
     """
     monthly_emission = rewards.monthly_reward_pool
     
     # Calculate token velocity
     velocity = calculate_token_velocity(params, users, monthly_emission)
     
-    # === DIRECT VCOIN TRANSACTIONS (additive to velocity) ===
-    # These are explicit VCoin spends beyond the velocity model
+    # === DIRECT VCOIN TRANSACTIONS ===
+    # These are explicit VCoin spends that contribute to recapture
     
     direct_vcoin_spent = 0.0
     
-    # Content fees (if enabled)
-    total_posts = content.breakdown.get('monthly_posts', 0)
-    if total_posts > 0:
-        text_posts = content.breakdown.get('text_posts', 0)
-        image_posts = content.breakdown.get('image_posts', 0)
-        video_posts = content.breakdown.get('video_posts', 0)
-        nft_mints = content.breakdown.get('nft_mints', 0)
-        
-        direct_vcoin_spent += (
-            text_posts * params.text_post_fee_vcoin +
-            image_posts * params.image_post_fee_vcoin +
-            video_posts * params.video_post_fee_vcoin +
-            nft_mints * params.nft_mint_fee_vcoin
-        )
+    # === CONTENT MODULE (Break-Even Model) ===
+    # Use NET VCoin collected (after engagement refunds)
+    # This is what actually contributes to recapture
+    net_vcoin_from_content = content.breakdown.get('net_vcoin_collected', 0)
     
-    # Premium content volume
+    # If old format, calculate from components
+    if net_vcoin_from_content == 0:
+        # Legacy: use total VCoin collected
+        post_fees_vcoin = content.breakdown.get('post_fees_vcoin', 0)
+        creator_economy_vcoin = content.breakdown.get('creator_economy_vcoin', 0)
+        direct_vcoin_spent += post_fees_vcoin + creator_economy_vcoin
+    else:
+        # New break-even model: use net collected after refunds
+        direct_vcoin_spent += net_vcoin_from_content
+    
+    # Premium content volume (user choice, not affected by break-even)
     direct_vcoin_spent += params.premium_content_volume_vcoin
     
-    # Content sales commission (in VCoin)
-    direct_vcoin_spent += params.content_sale_volume_vcoin * params.content_sale_commission
+    # Content sales (NFT) - platform takes commission only if enabled
+    # In break-even model, creators keep 100%, so no commission
+    platform_creator_fee_rate = content.breakdown.get('platform_creator_fee_rate', 0)
+    if platform_creator_fee_rate > 0:
+        direct_vcoin_spent += params.content_sale_volume_vcoin * params.content_sale_commission
     
-    # === NEW: Creator Economy VCoin Flows (Nov 2025) ===
-    # Add creator economy fees from content module
-    creator_economy_vcoin = content.breakdown.get('creator_economy_vcoin', 0)
-    direct_vcoin_spent += creator_economy_vcoin
+    # === IDENTITY MODULE ===
+    identity_vcoin = identity.breakdown.get('vcoin_spent', 0)
+    if identity_vcoin == 0:
+        # Calculate from tier subscriptions
+        tier_revenue = identity.breakdown.get('tier_revenue', 0)
+        if params.token_price > 0:
+            identity_vcoin = tier_revenue / params.token_price
+    direct_vcoin_spent += identity_vcoin
     
-    # Also consider boost fees, premium DMs, premium reactions
-    boost_fees_vcoin = content.breakdown.get('boost_fees_vcoin', 0)
-    premium_dm_vcoin = content.breakdown.get('premium_dm_vcoin', 0)
-    premium_reaction_vcoin = content.breakdown.get('premium_reaction_vcoin', 0)
+    # === MESSAGING MODULE ===
+    messaging_vcoin = messaging.breakdown.get('vcoin_spent', 0)
+    if messaging_vcoin == 0:
+        # Estimate from revenue
+        messaging_revenue = messaging.revenue
+        if params.token_price > 0:
+            messaging_vcoin = messaging_revenue / params.token_price * 0.3  # 30% in VCoin
+    direct_vcoin_spent += messaging_vcoin
     
-    # Add if not already in creator_economy_vcoin (to avoid double counting)
-    if creator_economy_vcoin == 0:
-        direct_vcoin_spent += boost_fees_vcoin + premium_dm_vcoin + premium_reaction_vcoin
+    # === COMMUNITY MODULE ===
+    community_vcoin = community.breakdown.get('vcoin_spent', 0)
+    if community_vcoin == 0:
+        # Estimate from subscriptions
+        subscription_revenue = community.breakdown.get('subscription_revenue', 0)
+        if params.token_price > 0:
+            community_vcoin = subscription_revenue / params.token_price * 0.5  # 50% in VCoin
+    direct_vcoin_spent += community_vcoin
+    
+    # === EXCHANGE MODULE ===
+    if params.enable_exchange:
+        exchange_vcoin = exchange.breakdown.get('swap_fees_vcoin', 0)
+        if exchange_vcoin == 0:
+            # Estimate from swap fee revenue
+            swap_fee_revenue = exchange.breakdown.get('swap_fee_revenue', 0)
+            if params.token_price > 0:
+                exchange_vcoin = swap_fee_revenue / params.token_price
+        direct_vcoin_spent += exchange_vcoin
     
     # === TOTAL TOKENS FLOWING THROUGH ECONOMY ===
     # Velocity-based spending + direct VCoin transactions
     total_tokens_flowing = velocity['tokens_spent'] + direct_vcoin_spent
     
-    # Cap at emission (can't spend more than earned)
+    # Cap at 80% of emission (can't spend more than earned)
     total_tokens_flowing = min(total_tokens_flowing, monthly_emission * 0.80)
     
     # === CALCULATE RECAPTURE COMPONENTS ===
@@ -223,23 +255,35 @@ def calculate_recapture(
     # Buyback: Applied to tokens spent  
     raw_buyback = total_tokens_flowing * params.buyback_percent
     
-    # Treasury: Portion of remaining tokens
+    # Treasury: Receives configurable percentage of platform revenue
+    # Default is 20% (from config or params)
+    treasury_revenue_share = getattr(params, 'treasury_revenue_share', config.TREASURY_REVENUE_SHARE)
     remaining_after_burn = total_tokens_flowing - raw_burn - raw_buyback
-    treasury_share = config.FEE_DISTRIBUTION.TREASURY / (
+    
+    # Treasury accumulates from transaction velocity
+    # Base treasury share from fee distribution config
+    treasury_fee_share = config.FEE_DISTRIBUTION.TREASURY / (
         config.FEE_DISTRIBUTION.TREASURY + config.FEE_DISTRIBUTION.REWARDS
     )
-    raw_treasury = remaining_after_burn * treasury_share * 0.5  # 50% to treasury
+    # Combine with revenue share for total treasury contribution
+    effective_treasury_rate = (treasury_fee_share + treasury_revenue_share) * 0.5
+    raw_treasury = remaining_after_burn * effective_treasury_rate
     
     # Staking: Tokens locked from circulation
     raw_staking = velocity['tokens_staked']
     
     # Add explicit staking from modules
     premium_users = identity.breakdown.get('premium_users', 0)
-    raw_staking += premium_users * 10  # Premium users stake
+    raw_staking += premium_users * 10  # Premium users stake for benefits
     
     if params.enable_exchange:
         exchange_users = exchange.breakdown.get('active_exchange_users', 0)
         raw_staking += exchange_users * 5  # Exchange users stake for discounts
+    
+    # Verified/staked creators (from new content model)
+    staked_creators = content.breakdown.get('staked_creators', 0)
+    verified_creators = content.breakdown.get('verified_creators', 0)
+    raw_staking += staked_creators * 50  # Staked creators lock tokens
     
     # === APPLY SAFETY CAPS ===
     burn_vcoin = apply_safety_caps(raw_burn, 'burn', monthly_emission)
@@ -260,7 +304,8 @@ def calculate_recapture(
         staking_vcoin *= scale
         total_recaptured = max_recapture
     
-    # Recapture rate
+    # Issue #6: Recapture rate with division-by-zero guard
+    # If monthly_emission is 0 (edge case with 0% reward allocation), return 0 to avoid NaN
     recapture_rate = (total_recaptured / monthly_emission * 100) if monthly_emission > 0 else 0
     
     # USD values for reporting

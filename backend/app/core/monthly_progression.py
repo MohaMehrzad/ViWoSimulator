@@ -9,6 +9,8 @@ Implements time-series simulation with:
 - Market saturation modeling (Issue #14)
 - Growth scenario projections (Nov 2025)
 - FOMO event triggers and token price projections
+- Token allocation vesting schedule (Nov 2025)
+- Circulating supply tracking over 60 months
 
 This transforms the static snapshot simulation into a realistic
 multi-month projection that accounts for churn, growth curves,
@@ -21,7 +23,14 @@ from enum import Enum
 import math
 
 from app.models import SimulationParameters, PlatformMaturity, GrowthScenarioType, MarketConditionType
-from app.models.results import FomoEventResult, GrowthProjectionResult
+from app.models.results import (
+    FomoEventResult, 
+    GrowthProjectionResult, 
+    CirculatingSupplyResult,
+    TokenCategoryUnlock,
+    VestingScheduleResult,
+    TreasuryResult,
+)
 from app.core.retention import (
     CohortTracker,
     VCOIN_RETENTION,
@@ -62,6 +71,237 @@ SEASONALITY_MULTIPLIERS = {
     11: 1.20,  # November: Holiday shopping
     12: 1.25,  # December: Peak holiday season
 }
+
+
+# === TOKEN ALLOCATION VESTING SCHEDULE (November 2025) ===
+
+def calculate_vesting_unlock(month: int) -> Dict[str, int]:
+    """
+    Calculate token unlocks for each category at a given month.
+    
+    Based on official VCoin tokenomics:
+    - Seed: 2% (20M), 0% TGE, 12 month cliff, 24 month vesting
+    - Private: 3% (30M), 10% TGE, 6 month cliff, 18 month vesting  
+    - Public: 5% (50M), 50% TGE, 0 cliff, 3 month vesting
+    - Team: 10% (100M), 0% TGE, 12 month cliff, 36 month vesting
+    - Advisors: 5% (50M), 0% TGE, 6 month cliff, 18 month vesting
+    - Treasury: 20% (200M), Programmatic release
+    - Rewards: 35% (350M), 5,833,333/month for 60 months
+    - Liquidity: 10% (100M), 100% TGE
+    - Foundation: 2% (20M), 25% TGE, 3 month cliff, 24 month vesting
+    - Marketing: 8% (80M), 25% TGE, 3 month cliff, 18 month vesting
+    
+    Args:
+        month: Month number (0 = TGE, 1 = first month after TGE, etc.)
+    
+    Returns:
+        Dict with unlock amounts per category
+    """
+    unlocks = {
+        'seed': 0,
+        'private': 0,
+        'public': 0,
+        'team': 0,
+        'advisors': 0,
+        'treasury': 0,
+        'rewards': 0,
+        'liquidity': 0,
+        'foundation': 0,
+        'marketing': 0,
+    }
+    
+    # TGE (month 0)
+    if month == 0:
+        unlocks['private'] = 3_000_000      # 10% of 30M
+        unlocks['public'] = 25_000_000      # 50% of 50M
+        unlocks['liquidity'] = 100_000_000  # 100% of 100M
+        unlocks['foundation'] = 5_000_000   # 25% of 20M
+        unlocks['marketing'] = 20_000_000   # 25% of 80M
+        unlocks['rewards'] = 5_833_333      # First month emission
+        return unlocks
+    
+    # Seed: 20M total, 0% TGE, cliff 12, vesting 24 months
+    # After cliff (M12), vest 20M / 24 = 833,333/month for 24 months (M13-M36)
+    if 13 <= month <= 36:
+        unlocks['seed'] = 833_333
+    
+    # Private: 30M total, 10% TGE (3M), cliff 6, vesting 18 months
+    # After cliff (M6), vest (30M - 3M) / 18 = 1,500,000/month for 18 months (M7-M24)
+    if 7 <= month <= 24:
+        unlocks['private'] = 1_500_000
+    
+    # Public: 50M total, 50% TGE (25M), no cliff, vesting 3 months
+    # Vest (50M - 25M) / 3 = 8,333,333/month for 3 months (M1-M3)
+    if 1 <= month <= 3:
+        unlocks['public'] = 8_333_333
+    
+    # Team: 100M total, 0% TGE, cliff 12, vesting 36 months
+    # After cliff (M12), vest 100M / 24 = 4,166,667/month for 24 months (M13-M36)
+    # Wait, vesting is 36 total, cliff is 12, so vesting period is 36-12 = 24 months
+    if 13 <= month <= 48:
+        # Vest 100M over 36 months (after 12 month cliff)
+        unlocks['team'] = 2_777_778
+    
+    # Advisors: 50M total, 0% TGE, cliff 6, vesting 18 months
+    # After cliff (M6), vest 50M / 18 = 2,777,778/month for 18 months (M7-M24)
+    if 7 <= month <= 24:
+        unlocks['advisors'] = 2_777_778
+    
+    # Treasury: 200M, Programmatic - no automatic unlocks
+    # Treasury releases are governance-controlled
+    unlocks['treasury'] = 0
+    
+    # Rewards: 350M / 60 months = 5,833,333/month
+    if 1 <= month <= 60:
+        unlocks['rewards'] = 5_833_333
+    
+    # Issue #8 Fix: Corrected vesting calculation comments
+    # Foundation: 20M total, 25% TGE (5M), cliff 3 months, vesting over 24 months
+    # After cliff (M3), vest (20M - 5M) / 24 = 625,000/month for 24 months (M4-M27)
+    if 4 <= month <= 27:
+        unlocks['foundation'] = 625_000
+    
+    # Marketing: 80M total, 25% TGE (20M), cliff 3 months, vesting over 18 months
+    # After cliff (M3), vest (80M - 20M) / 18 = 3,333,333/month for 18 months (M4-M21)
+    if 4 <= month <= 21:
+        unlocks['marketing'] = 3_333_333
+    
+    return unlocks
+
+
+def calculate_circulating_supply_at_month(month: int) -> CirculatingSupplyResult:
+    """
+    Calculate cumulative circulating supply at a given month.
+    
+    Args:
+        month: Month number (0 = TGE)
+    
+    Returns:
+        CirculatingSupplyResult with detailed breakdown
+    """
+    # Calculate cumulative unlocks from TGE to this month
+    cumulative = {
+        'seed': 0,
+        'private': 0,
+        'public': 0,
+        'team': 0,
+        'advisors': 0,
+        'treasury': 0,
+        'rewards': 0,
+        'liquidity': 0,
+        'foundation': 0,
+        'marketing': 0,
+    }
+    
+    # Sum all unlocks from month 0 to current month
+    for m in range(month + 1):
+        unlocks = calculate_vesting_unlock(m)
+        for key in cumulative:
+            cumulative[key] += unlocks.get(key, 0)
+    
+    # Get this month's unlocks
+    current_unlocks = calculate_vesting_unlock(month)
+    total_new_unlocks = sum(current_unlocks.values())
+    
+    # Calculate total circulating
+    total_circulating = sum(cumulative.values())
+    total_supply = 1_000_000_000
+    circulating_percent = (total_circulating / total_supply) * 100
+    
+    # Build category breakdown
+    category_breakdown = {}
+    allocations = {
+        'seed': 20_000_000,
+        'private': 30_000_000,
+        'public': 50_000_000,
+        'team': 100_000_000,
+        'advisors': 50_000_000,
+        'treasury': 200_000_000,
+        'rewards': 350_000_000,
+        'liquidity': 100_000_000,
+        'foundation': 20_000_000,
+        'marketing': 80_000_000,
+    }
+    
+    for key, total in allocations.items():
+        category_breakdown[key] = TokenCategoryUnlock(
+            category=key,
+            tokens_unlocked=current_unlocks.get(key, 0),
+            cumulative_unlocked=cumulative.get(key, 0),
+            total_allocation=total,
+            percent_unlocked=(cumulative.get(key, 0) / total * 100) if total > 0 else 0,
+        )
+    
+    return CirculatingSupplyResult(
+        month=month,
+        seed_unlock=current_unlocks.get('seed', 0),
+        private_unlock=current_unlocks.get('private', 0),
+        public_unlock=current_unlocks.get('public', 0),
+        team_unlock=current_unlocks.get('team', 0),
+        advisors_unlock=current_unlocks.get('advisors', 0),
+        treasury_unlock=current_unlocks.get('treasury', 0),
+        rewards_unlock=current_unlocks.get('rewards', 0),
+        liquidity_unlock=current_unlocks.get('liquidity', 0),
+        foundation_unlock=current_unlocks.get('foundation', 0),
+        marketing_unlock=current_unlocks.get('marketing', 0),
+        total_new_unlocks=total_new_unlocks,
+        cumulative_circulating=total_circulating,
+        circulating_percent=round(circulating_percent, 2),
+        category_breakdown=category_breakdown,
+    )
+
+
+def generate_full_vesting_schedule(duration_months: int = 60) -> VestingScheduleResult:
+    """
+    Generate the complete vesting schedule for all 60 months.
+    
+    Returns:
+        VestingScheduleResult with monthly supply data
+    """
+    monthly_supply = []
+    
+    # TGE (month 0)
+    tge_supply = calculate_circulating_supply_at_month(0)
+    monthly_supply.append(tge_supply)
+    
+    # Track milestones
+    month_25 = 0
+    month_50 = 0
+    month_75 = 0
+    
+    for month in range(1, duration_months + 1):
+        supply = calculate_circulating_supply_at_month(month)
+        monthly_supply.append(supply)
+        
+        # Track milestone months
+        if month_25 == 0 and supply.circulating_percent >= 25:
+            month_25 = month
+        if month_50 == 0 and supply.circulating_percent >= 50:
+            month_50 = month
+        if month_75 == 0 and supply.circulating_percent >= 75:
+            month_75 = month
+    
+    final_supply = monthly_supply[-1] if monthly_supply else calculate_circulating_supply_at_month(0)
+    
+    return VestingScheduleResult(
+        duration_months=duration_months,
+        monthly_supply=monthly_supply,
+        tge_circulating=158_833_333,
+        final_circulating=final_supply.cumulative_circulating,
+        max_circulating=1_000_000_000,
+        month_25_percent_circulating=month_25,
+        month_50_percent_circulating=month_50,
+        month_75_percent_circulating=month_75,
+        month_full_circulating=60,
+        seed_completion_month=36,
+        private_completion_month=18,
+        public_completion_month=3,
+        team_completion_month=48,
+        advisors_completion_month=18,
+        foundation_completion_month=27,
+        marketing_completion_month=21,
+        rewards_completion_month=60,
+    )
 
 
 @dataclass
@@ -121,6 +361,15 @@ class MonthlyMetrics:
     per_user_monthly_vcoin: float = 0.0  # VCoin per user per month
     per_user_monthly_usd: float = 0.0  # USD equivalent per user per month
     allocation_capped: bool = False  # Whether per-user cap was applied
+    
+    # Token allocation / vesting fields (NEW - Nov 2025)
+    circulating_supply: int = 0  # Total circulating supply at this month
+    circulating_percent: float = 0.0  # Percentage of total supply
+    new_unlocks: int = 0  # New tokens unlocked this month
+    
+    # Treasury tracking (NEW - Nov 2025)
+    treasury_revenue_usd: float = 0.0  # Revenue going to treasury this month
+    treasury_accumulated_usd: float = 0.0  # Cumulative treasury balance
 
 
 @dataclass
@@ -160,8 +409,19 @@ class MonthlyProgressionResult:
     growth_projection: Optional[GrowthProjectionResult] = None
     scenario_used: Optional[str] = None
     market_condition_used: Optional[str] = None
-    fomo_events_triggered: List[FomoEvent] = field(default_factory=list)
+    # Issue #2 Fix: Changed from List[FomoEvent] to List[FomoEventResult] for proper API serialization
+    fomo_events_triggered: List[FomoEventResult] = field(default_factory=list)
     token_price_final: float = 0.03
+    
+    # Token allocation / vesting (NEW - Nov 2025)
+    vesting_schedule: Optional[VestingScheduleResult] = None
+    final_circulating_supply: int = 0
+    final_circulating_percent: float = 0.0
+    
+    # Treasury tracking (NEW - Nov 2025)
+    treasury_result: Optional[TreasuryResult] = None
+    total_treasury_accumulated_usd: float = 0.0
+    total_treasury_accumulated_vcoin: float = 0.0
 
 
 def calculate_seasonality_multiplier(month_number: int, apply_seasonality: bool) -> float:
@@ -448,6 +708,50 @@ def run_monthly_progression_simulation(
         if total_tokens_distributed > 0 else 0
     )
     
+    # Generate vesting schedule if tracking is enabled
+    track_vesting = getattr(params, 'track_vesting_schedule', True)
+    vesting_schedule = None
+    final_circulating = 0
+    final_circulating_pct = 0.0
+    
+    if track_vesting:
+        vesting_schedule = generate_full_vesting_schedule(min(duration_months, 60))
+        if vesting_schedule.monthly_supply:
+            final_idx = min(duration_months, len(vesting_schedule.monthly_supply) - 1)
+            final_supply = vesting_schedule.monthly_supply[final_idx]
+            final_circulating = final_supply.cumulative_circulating
+            final_circulating_pct = final_supply.circulating_percent
+            
+            # Update monthly_data with circulating supply info
+            for i, metrics in enumerate(monthly_data):
+                if i < len(vesting_schedule.monthly_supply):
+                    supply = vesting_schedule.monthly_supply[i]
+                    metrics.circulating_supply = supply.cumulative_circulating
+                    metrics.circulating_percent = supply.circulating_percent
+                    metrics.new_unlocks = supply.total_new_unlocks
+    
+    # Calculate treasury accumulation
+    treasury_revenue_share = getattr(params, 'treasury_revenue_share', 0.20)
+    total_treasury_usd = 0.0
+    cumulative_treasury = 0.0
+    
+    for metrics in monthly_data:
+        treasury_contribution = metrics.revenue * treasury_revenue_share
+        cumulative_treasury += treasury_contribution
+        metrics.treasury_revenue_usd = round(treasury_contribution, 2)
+        metrics.treasury_accumulated_usd = round(cumulative_treasury, 2)
+    
+    total_treasury_usd = cumulative_treasury
+    total_treasury_vcoin = total_treasury_usd / params.token_price if params.token_price > 0 else 0
+    
+    treasury_result = TreasuryResult(
+        revenue_contribution_usd=round(total_treasury_usd, 2),
+        revenue_contribution_vcoin=round(total_treasury_vcoin, 2),
+        total_accumulated_usd=round(total_treasury_usd, 2),
+        total_accumulated_vcoin=round(total_treasury_vcoin, 2),
+        revenue_share_rate=treasury_revenue_share,
+    )
+    
     return MonthlyProgressionResult(
         duration_months=duration_months,
         monthly_data=monthly_data,
@@ -467,6 +771,14 @@ def run_monthly_progression_simulation(
         months_to_profitability=months_to_profitability,
         cumulative_profit_curve=[round(p, 2) for p in cumulative_profit_curve],
         retention_curve=retention_summary,
+        # Vesting schedule (NEW - Nov 2025)
+        vesting_schedule=vesting_schedule,
+        final_circulating_supply=final_circulating,
+        final_circulating_percent=final_circulating_pct,
+        # Treasury (NEW - Nov 2025)
+        treasury_result=treasury_result,
+        total_treasury_accumulated_usd=round(total_treasury_usd, 2),
+        total_treasury_accumulated_vcoin=round(total_treasury_vcoin, 2),
     )
 
 
@@ -770,6 +1082,52 @@ def run_growth_scenario_simulation(
         12: round(scenario_config.month12_retention * 100, 1),
     }
     
+    # Generate vesting schedule if tracking is enabled
+    track_vesting = getattr(params, 'track_vesting_schedule', True)
+    vesting_schedule = None
+    final_circulating = 0
+    final_circulating_pct = 0.0
+    
+    if track_vesting:
+        vesting_schedule = generate_full_vesting_schedule(min(duration_months, 60))
+        if vesting_schedule.monthly_supply:
+            final_idx = min(duration_months, len(vesting_schedule.monthly_supply) - 1)
+            final_supply = vesting_schedule.monthly_supply[final_idx]
+            final_circulating = final_supply.cumulative_circulating
+            final_circulating_pct = final_supply.circulating_percent
+            
+            # Update monthly_data with circulating supply info
+            for i, metrics in enumerate(monthly_data):
+                if i < len(vesting_schedule.monthly_supply):
+                    supply = vesting_schedule.monthly_supply[i]
+                    metrics.circulating_supply = supply.cumulative_circulating
+                    metrics.circulating_percent = supply.circulating_percent
+                    metrics.new_unlocks = supply.total_new_unlocks
+    
+    # Calculate treasury accumulation
+    treasury_revenue_share = getattr(params, 'treasury_revenue_share', 0.20)
+    total_treasury_usd = 0.0
+    cumulative_treasury = 0.0
+    
+    for metrics in monthly_data:
+        treasury_contribution = metrics.revenue * treasury_revenue_share
+        cumulative_treasury += treasury_contribution
+        metrics.treasury_revenue_usd = round(treasury_contribution, 2)
+        metrics.treasury_accumulated_usd = round(cumulative_treasury, 2)
+    
+    total_treasury_usd = cumulative_treasury
+    # Use final token price for treasury VCoin calculation
+    final_token_price = token_price_curve[-1] if token_price_curve else base_token_price
+    total_treasury_vcoin = total_treasury_usd / final_token_price if final_token_price > 0 else 0
+    
+    treasury_result = TreasuryResult(
+        revenue_contribution_usd=round(total_treasury_usd, 2),
+        revenue_contribution_vcoin=round(total_treasury_vcoin, 2),
+        total_accumulated_usd=round(total_treasury_usd, 2),
+        total_accumulated_vcoin=round(total_treasury_vcoin, 2),
+        revenue_share_rate=treasury_revenue_share,
+    )
+    
     return MonthlyProgressionResult(
         duration_months=duration_months,
         monthly_data=monthly_data,
@@ -793,7 +1151,25 @@ def run_growth_scenario_simulation(
         growth_projection=growth_projection,
         scenario_used=scenario.value,
         market_condition_used=market_condition.value,
-        fomo_events_triggered=fomo_events_triggered,
+        # Issue #2 Fix: Convert FomoEvent to FomoEventResult for proper serialization
+        fomo_events_triggered=[
+            FomoEventResult(
+                month=e.month,
+                event_type=e.event_type.value,
+                impact_multiplier=e.impact_multiplier,
+                description=e.description,
+                duration_days=e.duration_days,
+            )
+            for e in fomo_events_triggered
+        ],
         token_price_final=round(token_price_curve[-1] if token_price_curve else base_token_price, 4),
+        # Vesting schedule (NEW - Nov 2025)
+        vesting_schedule=vesting_schedule,
+        final_circulating_supply=final_circulating,
+        final_circulating_percent=final_circulating_pct,
+        # Treasury (NEW - Nov 2025)
+        treasury_result=treasury_result,
+        total_treasury_accumulated_usd=round(total_treasury_usd, 2),
+        total_treasury_accumulated_vcoin=round(total_treasury_vcoin, 2),
     )
 

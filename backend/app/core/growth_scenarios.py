@@ -593,9 +593,13 @@ def calculate_monthly_growth(
     # Apply market condition to retention
     adjusted_retention = retention_rate * market_config.retention_multiplier
     
-    # Churned users (inverse of retention on cohort from previous month)
+    # Issue #7: Churned users calculation with 0.3 dampening factor
+    # The 0.3 multiplier converts cumulative retention rates to monthly churn.
+    # Retention rates (e.g., month6_retention = 0.06) represent cumulative retention from Day 0,
+    # not month-over-month retention. The 0.3 factor approximates monthly churn from these
+    # cumulative rates, preventing over-estimation of churn in the monthly growth model.
     churn_rate = 1 - adjusted_retention
-    churned_users = int(current_users * churn_rate * 0.3)  # Monthly churn portion
+    churned_users = int(current_users * churn_rate * 0.3)  # Monthly churn portion (30% of implied rate)
     
     return new_users, churned_users, adjusted_growth_rate
 

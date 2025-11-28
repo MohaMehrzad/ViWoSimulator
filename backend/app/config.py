@@ -5,6 +5,13 @@ These values ensure consistency between frontend and backend calculations.
 Updated with 2024-2025 industry benchmarks and sources.
 Addresses Issues #9 (cost scaling), #17 (documented activity rates).
 
+=== TOKEN ALLOCATION (November 2025) ===
+Official VCoin tokenomics with 10 allocation categories:
+- Total Supply: 1,000,000,000 VCoin
+- TGE Circulating: ~158,833,333 VCoin
+- 60-month vesting schedule for most categories
+- 5-year reward emission (350M tokens)
+
 === SOLANA NETWORK INTEGRATION (November 2025) ===
 All blockchain operations are built on Solana for:
 - Ultra-low transaction costs (~$0.00025 per transaction)
@@ -21,8 +28,243 @@ Solana Network Stats (Nov 2025):
 - Finality: 2-3 slots (~1 second)
 """
 
-from dataclasses import dataclass
-from typing import Dict
+from dataclasses import dataclass, field
+from typing import Dict, Optional
+
+
+# === TOKEN ALLOCATION CONFIGURATION (November 2025) ===
+
+@dataclass(frozen=True)
+class TokenAllocationCategory:
+    """
+    Configuration for a single token allocation category.
+    
+    Attributes:
+        name: Category name (e.g., 'Seed Round', 'Team')
+        percent: Percentage of total supply (0.0-1.0)
+        tokens: Total tokens allocated
+        tge_percent: Percentage unlocked at TGE (0.0-1.0)
+        cliff_months: Months before vesting starts (after TGE)
+        vesting_months: Total vesting period in months (including cliff)
+        price_usd: Token price for this round (if applicable)
+        is_programmatic: Whether release is programmatic (Treasury/Rewards)
+        emission_months: For rewards, the emission duration
+        description: Category description
+    """
+    name: str
+    percent: float
+    tokens: int
+    tge_percent: float = 0.0
+    cliff_months: int = 0
+    vesting_months: int = 0
+    price_usd: float = 0.03
+    is_programmatic: bool = False
+    emission_months: int = 0
+    description: str = ""
+
+
+@dataclass(frozen=True)
+class TokenAllocationConfig:
+    """
+    Official VCoin Token Allocation (November 2025)
+    
+    Total Supply: 1,000,000,000 VCoin (1 Billion)
+    
+    Allocation Breakdown:
+    - Seed Round:        2% (20M)  - Early investors, highest risk
+    - Private Round:     3% (30M)  - Strategic investors and VCs
+    - Public Sale:       5% (50M)  - Community token sale (IDO/ICO)
+    - Team:             10% (100M) - Core team members and employees
+    - Advisors:          5% (50M)  - Strategic advisors and consultants
+    - Treasury/DAO:     20% (200M) - Protocol treasury and governance
+    - Ecosystem/Rewards: 35% (350M) - User incentives, staking rewards, grants
+    - Liquidity:        10% (100M) - DEX/CEX liquidity pools
+    - Foundation:        2% (20M)  - Foundation operations and reserve
+    - Marketing/Growth:  8% (80M)  - Marketing campaigns and partnerships
+    
+    TOTAL: 100% (1,000,000,000)
+    """
+    
+    SEED: TokenAllocationCategory = field(default_factory=lambda: TokenAllocationCategory(
+        name="Seed Round",
+        percent=0.02,
+        tokens=20_000_000,
+        tge_percent=0.0,
+        cliff_months=12,
+        vesting_months=24,
+        price_usd=0.01,
+        description="Early-stage investors (highest risk, lowest price)"
+    ))
+    
+    PRIVATE: TokenAllocationCategory = field(default_factory=lambda: TokenAllocationCategory(
+        name="Private Round",
+        percent=0.03,
+        tokens=30_000_000,
+        tge_percent=0.10,
+        cliff_months=6,
+        vesting_months=18,
+        price_usd=0.015,
+        description="Strategic investors and VCs"
+    ))
+    
+    PUBLIC: TokenAllocationCategory = field(default_factory=lambda: TokenAllocationCategory(
+        name="Public Sale",
+        percent=0.05,
+        tokens=50_000_000,
+        tge_percent=0.50,
+        cliff_months=0,
+        vesting_months=3,
+        price_usd=0.02,
+        description="Community token sale (IDO/ICO)"
+    ))
+    
+    TEAM: TokenAllocationCategory = field(default_factory=lambda: TokenAllocationCategory(
+        name="Team",
+        percent=0.10,
+        tokens=100_000_000,
+        tge_percent=0.0,
+        cliff_months=12,
+        vesting_months=36,
+        price_usd=0.03,
+        description="Core team members and employees"
+    ))
+    
+    ADVISORS: TokenAllocationCategory = field(default_factory=lambda: TokenAllocationCategory(
+        name="Advisors",
+        percent=0.05,
+        tokens=50_000_000,
+        tge_percent=0.0,
+        cliff_months=6,
+        vesting_months=18,
+        price_usd=0.03,
+        description="Strategic advisors and consultants"
+    ))
+    
+    TREASURY: TokenAllocationCategory = field(default_factory=lambda: TokenAllocationCategory(
+        name="Treasury/DAO",
+        percent=0.20,
+        tokens=200_000_000,
+        tge_percent=0.0,
+        is_programmatic=True,
+        description="Protocol treasury and governance"
+    ))
+    
+    REWARDS: TokenAllocationCategory = field(default_factory=lambda: TokenAllocationCategory(
+        name="Ecosystem & Rewards",
+        percent=0.35,
+        tokens=350_000_000,
+        tge_percent=0.0,
+        is_programmatic=True,
+        emission_months=60,
+        description="User incentives, staking rewards, grants"
+    ))
+    
+    LIQUIDITY: TokenAllocationCategory = field(default_factory=lambda: TokenAllocationCategory(
+        name="Liquidity",
+        percent=0.10,
+        tokens=100_000_000,
+        tge_percent=1.0,
+        description="DEX/CEX liquidity pools"
+    ))
+    
+    FOUNDATION: TokenAllocationCategory = field(default_factory=lambda: TokenAllocationCategory(
+        name="Foundation",
+        percent=0.02,
+        tokens=20_000_000,
+        tge_percent=0.25,
+        cliff_months=3,
+        vesting_months=24,
+        price_usd=0.03,
+        description="Foundation operations and reserve"
+    ))
+    
+    MARKETING: TokenAllocationCategory = field(default_factory=lambda: TokenAllocationCategory(
+        name="Marketing & Growth",
+        percent=0.08,
+        tokens=80_000_000,
+        tge_percent=0.25,
+        cliff_months=3,
+        vesting_months=18,
+        price_usd=0.03,
+        description="Marketing campaigns and partnerships"
+    ))
+    
+    def get_all_categories(self) -> Dict[str, TokenAllocationCategory]:
+        """Get all allocation categories as a dictionary"""
+        return {
+            'SEED': self.SEED,
+            'PRIVATE': self.PRIVATE,
+            'PUBLIC': self.PUBLIC,
+            'TEAM': self.TEAM,
+            'ADVISORS': self.ADVISORS,
+            'TREASURY': self.TREASURY,
+            'REWARDS': self.REWARDS,
+            'LIQUIDITY': self.LIQUIDITY,
+            'FOUNDATION': self.FOUNDATION,
+            'MARKETING': self.MARKETING,
+        }
+    
+    def get_tge_circulating(self) -> int:
+        """Calculate total tokens circulating at TGE"""
+        total = 0
+        for cat in self.get_all_categories().values():
+            total += int(cat.tokens * cat.tge_percent)
+        # Add first month rewards emission
+        total += 5_833_333  # Monthly emission
+        return total
+    
+    def get_monthly_unlock(self, category_key: str, month: int) -> int:
+        """
+        Calculate tokens unlocking for a category in a specific month.
+        
+        Args:
+            category_key: Category key (e.g., 'SEED', 'TEAM')
+            month: Month number (0 = TGE, 1 = first month after TGE)
+        
+        Returns:
+            Number of tokens unlocking in that month
+        """
+        categories = self.get_all_categories()
+        if category_key not in categories:
+            return 0
+        
+        cat = categories[category_key]
+        
+        # TGE unlock
+        if month == 0:
+            return int(cat.tokens * cat.tge_percent)
+        
+        # Programmatic releases (Treasury, Rewards)
+        if cat.is_programmatic:
+            if category_key == 'REWARDS' and cat.emission_months > 0:
+                if month <= cat.emission_months:
+                    return cat.tokens // cat.emission_months
+            return 0
+        
+        # Vesting unlock
+        # NOTE: vesting_months = actual duration of vesting (NOT including cliff)
+        # Total unlock period = cliff_months + vesting_months
+        if cat.vesting_months == 0:
+            return 0
+        
+        # Before cliff ends (no unlocks during cliff)
+        if month <= cat.cliff_months:
+            return 0
+        
+        # Calculate vesting end: cliff + vesting duration
+        vesting_end_month = cat.cliff_months + cat.vesting_months
+        
+        # After full vesting
+        if month > vesting_end_month:
+            return 0
+        
+        # During vesting period
+        tokens_after_tge = cat.tokens - int(cat.tokens * cat.tge_percent)
+        # vesting_months IS the actual vesting duration
+        if cat.vesting_months > 0:
+            return tokens_after_tge // cat.vesting_months
+        
+        return 0
 
 
 # === SOLANA NETWORK CONFIGURATION (November 2025) ===
@@ -128,11 +370,22 @@ class SolanaStakingConfig:
 
 @dataclass(frozen=True)
 class SupplyConfig:
+    """
+    Token supply configuration matching official tokenomics.
+    
+    Updated November 2025:
+    - Total Supply: 1,000,000,000 (unchanged)
+    - Rewards Allocation: 350,000,000 (35%, was 70%)
+    - Rewards Duration: 60 months (5 years, was 10 years)
+    - TGE Circulating: ~158,833,333
+    - Treasury Allocation: 200,000,000 (20%, NEW)
+    """
     TOTAL: int = 1_000_000_000
-    TGE_CIRCULATING: int = 158_800_000
+    TGE_CIRCULATING: int = 158_833_333
     LIQUIDITY: int = 100_000_000
-    REWARDS_ALLOCATION: int = 700_000_000
-    REWARDS_DURATION_MONTHS: int = 120
+    REWARDS_ALLOCATION: int = 350_000_000  # 35% - Updated from 700M
+    REWARDS_DURATION_MONTHS: int = 60  # 5 years - Updated from 120
+    TREASURY_ALLOCATION: int = 200_000_000  # 20% - NEW
 
 
 @dataclass(frozen=True)
@@ -251,6 +504,9 @@ class DynamicRewardConfig:
 class Config:
     """Main configuration class with all constants"""
     
+    # === TOKEN ALLOCATION (November 2025) ===
+    TOKEN_ALLOCATION = TokenAllocationConfig()
+    
     SUPPLY = SupplyConfig()
     FEE_DISTRIBUTION = FeeDistributionConfig()
     STAKING = StakingConfig()
@@ -266,11 +522,14 @@ class Config:
     SOLANA_DEX = SolanaDexConfig()
     SOLANA_STAKING = SolanaStakingConfig()
     
-    # Monthly emission from rewards pool
+    # Monthly emission from rewards pool (350M / 60 months = 5,833,333)
     MONTHLY_EMISSION: int = 5_833_333
     
     # Fee collection rate for VCoin transactions
     FEE_COLLECTION_RATE: float = 0.10
+    
+    # Treasury revenue share (percentage of platform revenue going to treasury)
+    TREASURY_REVENUE_SHARE: float = 0.20  # 20% of revenue to treasury
     
     # Module revenue share percentages
     MODULE_REVENUE_SHARE: Dict[str, float] = {
@@ -482,6 +741,27 @@ class Config:
     def round(cls, value: float, decimals: int = 2) -> float:
         """Round value to specified decimal places"""
         return round(value, decimals)
+    
+    @classmethod
+    def get_circulating_supply_at_month(cls, month: int) -> int:
+        """
+        Calculate total circulating supply at a given month.
+        
+        Args:
+            month: Month number (0 = TGE, 1 = first month after TGE, etc.)
+        
+        Returns:
+            Total circulating supply in VCoin
+        """
+        total = 0
+        allocation = cls.TOKEN_ALLOCATION
+        
+        for key in ['SEED', 'PRIVATE', 'PUBLIC', 'TEAM', 'ADVISORS', 
+                    'TREASURY', 'REWARDS', 'LIQUIDITY', 'FOUNDATION', 'MARKETING']:
+            for m in range(month + 1):
+                total += allocation.get_monthly_unlock(key, m)
+        
+        return total
 
 
 # Global config instance

@@ -13,7 +13,7 @@ export function LiquiditySection({ result, parameters }: LiquiditySectionProps) 
   const liquidity = result.liquidity;
   
   // Fallback calculations if liquidity module not available
-  const initialLiquidity = liquidity?.initialLiquidity || parameters.initialLiquidityUsd || 100000;
+  const initialLiquidity = liquidity?.initialLiquidity || parameters.initialLiquidityUsd || 500000;
   const protocolOwnedPercent = liquidity?.protocolOwnedPercent || (parameters.protocolOwnedLiquidity || 0.70) * 100;
   const healthScore = liquidity?.healthScore || 0;
   const healthStatus = liquidity?.healthStatus || 'Unknown';

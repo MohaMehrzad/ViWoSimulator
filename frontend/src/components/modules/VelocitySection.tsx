@@ -2,6 +2,7 @@
 
 import { SimulationResult, SimulationParameters } from '@/types/simulation';
 import { formatNumber, formatCurrency } from '@/lib/utils';
+import { CONFIG } from '@/lib/constants';
 
 interface VelocitySectionProps {
   result: SimulationResult;
@@ -11,8 +12,8 @@ interface VelocitySectionProps {
 export function VelocitySection({ result, parameters }: VelocitySectionProps) {
   const { recapture, rewards, customerAcquisition } = result;
 
-  // Calculate velocity metrics
-  const totalCirculating = 100000000; // 100M assumed circulating supply
+  // Issue #9 Fix: Use actual TGE circulating supply from config instead of hardcoded 100M
+  const totalCirculating = CONFIG.SUPPLY.TGE_CIRCULATING; // 158.8M TGE circulating supply
   const monthlyTransactions = recapture.totalRevenueSourceVcoin || 0;
   const velocity = totalCirculating > 0 ? (monthlyTransactions * 12) / totalCirculating : 0;
   

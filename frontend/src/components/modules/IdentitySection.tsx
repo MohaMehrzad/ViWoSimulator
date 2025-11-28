@@ -104,21 +104,22 @@ export function IdentitySection({ result, parameters }: IdentitySectionProps) {
       <div className="bg-white rounded-xl border border-gray-200 p-6">
         <h3 className="font-bold text-lg mb-4">📊 Revenue Breakdown</h3>
         
+        {/* Issue #34 Fix: Added optional chaining to prevent runtime errors if breakdown is undefined */}
         {/* Revenue Sources */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
           <div className="bg-emerald-50 rounded-lg p-4 border border-emerald-200">
             <div className="text-sm text-emerald-600 mb-1">Tier Subscriptions</div>
-            <div className="text-2xl font-bold text-emerald-700">{formatCurrency(identity.breakdown.tierRevenue || 0)}</div>
+            <div className="text-2xl font-bold text-emerald-700">{formatCurrency(identity.breakdown?.tierRevenue || 0)}</div>
             <div className="text-xs text-emerald-500">monthly recurring revenue</div>
           </div>
           <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
             <div className="text-sm text-blue-600 mb-1">Transfer Fee Revenue</div>
-            <div className="text-2xl font-bold text-blue-700">{formatCurrency(identity.breakdown.transferRevenue || 0)}</div>
-            <div className="text-xs text-blue-500">{formatNumber(identity.breakdown.monthlyTransfers || 0)} transfers @ {formatCurrency(parameters.transferFee)}/each</div>
+            <div className="text-2xl font-bold text-blue-700">{formatCurrency(identity.breakdown?.transferRevenue || 0)}</div>
+            <div className="text-xs text-blue-500">{formatNumber(identity.breakdown?.monthlyTransfers || 0)} transfers @ {formatCurrency(parameters.transferFee)}/each</div>
           </div>
           <div className="bg-purple-50 rounded-lg p-4 border border-purple-200">
             <div className="text-sm text-purple-600 mb-1">Sale Commission Revenue</div>
-            <div className="text-2xl font-bold text-purple-700">{formatCurrency(identity.breakdown.saleRevenue || 0)}</div>
+            <div className="text-2xl font-bold text-purple-700">{formatCurrency(identity.breakdown?.saleRevenue || 0)}</div>
             <div className="text-xs text-purple-500">{formatNumber(parameters.monthlySales)} sales @ {(parameters.saleCommission * 100).toFixed(0)}% commission</div>
           </div>
         </div>

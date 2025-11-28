@@ -51,6 +51,7 @@ from dataclasses import dataclass
 from typing import Dict, Optional, List
 from enum import Enum
 from app.models import SimulationParameters
+from app.config import config
 
 
 class SolanaDex(Enum):
@@ -474,7 +475,7 @@ def calculate_liquidity(
     else:
         allocation_percent = params.reward_allocation_percent
     
-    monthly_emission_usd = 5_833_333 * token_price * allocation_percent
+    monthly_emission_usd = config.MONTHLY_EMISSION * token_price * allocation_percent
     sell_pressure = monthly_emission_usd * 0.40  # 40% sold
     buy_pressure = (
         protocol_owned_usd * 0.001 +  # LP rewards

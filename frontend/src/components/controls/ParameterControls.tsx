@@ -192,12 +192,14 @@ export function ParameterControls({
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-6">
+        {/* Issue #16 Fix: Changed min from 1 to 0.1 to allow fractional posts per user */}
         <SliderInput
           label="Posts per User/Month"
           value={parameters.postsPerUser}
           onChange={(v) => onUpdateParameter('postsPerUser', v)}
-          min={1}
+          min={0.1}
           max={20}
+          step={0.1}
           showPercent={false}
         />
         <SliderInput
@@ -305,7 +307,7 @@ export function ParameterControls({
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
         <NumberInput
           label="Initial Liquidity ($)"
-          value={parameters.initialLiquidityUsd || 100000}
+          value={parameters.initialLiquidityUsd || 500000}
           onChange={(v) => onUpdateParameter('initialLiquidityUsd', v)}
           min={10000}
           max={10000000}
@@ -539,6 +541,7 @@ function SliderInput({
   onChange,
   min,
   max,
+  step = 1,
   showPercent = true,
 }: {
   label: string;
@@ -546,6 +549,7 @@ function SliderInput({
   onChange: (value: number) => void;
   min: number;
   max: number;
+  step?: number;
   showPercent?: boolean;
 }) {
   return (
@@ -554,9 +558,11 @@ function SliderInput({
       <input
         type="range"
         value={value}
-        onChange={(e) => onChange(parseFloat(e.target.value))}
+        // Issue #29 Fix: Add fallback to min if parseFloat returns NaN
+        onChange={(e) => onChange(parseFloat(e.target.value) || min)}
         min={min}
         max={max}
+        step={step}
         className="w-full h-2 rounded-full bg-gray-600 appearance-none cursor-pointer
                    [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-5 
                    [&::-webkit-slider-thumb]:h-5 [&::-webkit-slider-thumb]:rounded-full 

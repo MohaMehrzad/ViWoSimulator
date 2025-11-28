@@ -18,8 +18,13 @@ export function SummarySection({ result, parameters }: SummarySectionProps) {
   const liquidityMeets70 = liquidity?.meets70Target || liquidityHealthScore >= 70;
   const stakingHealthy = staking?.isHealthy || false;
   const stakingParticipation = staking?.participationRate || 0;
-  const ltvCacRatio = customerAcquisition.blendedCAC > 0 
-    ? (totals.revenue / customerAcquisition.totalUsers) / customerAcquisition.blendedCAC 
+  
+  // Issue #1 Fix: Guard against division by zero for both totalUsers and blendedCAC
+  const arpu = customerAcquisition.totalUsers > 0 
+    ? totals.revenue / customerAcquisition.totalUsers 
+    : 0;
+  const ltvCacRatio = (customerAcquisition.blendedCAC > 0 && customerAcquisition.totalUsers > 0)
+    ? arpu / customerAcquisition.blendedCAC 
     : 0;
 
   const modules = [
@@ -255,13 +260,13 @@ export function SummarySection({ result, parameters }: SummarySectionProps) {
           </div>
           <div className="bg-gray-50 rounded-lg p-4 text-center">
             <div className="text-2xl font-bold text-gray-900">
-              {formatCurrency(totals.revenue / customerAcquisition.totalUsers)}
+              {formatCurrency(arpu)}
             </div>
             <div className="text-xs text-gray-600 uppercase font-semibold">ARPU</div>
           </div>
           <div className="bg-gray-50 rounded-lg p-4 text-center">
             <div className="text-2xl font-bold text-gray-900">
-              {((totals.revenue / customerAcquisition.totalUsers) / customerAcquisition.blendedCAC).toFixed(1)}x
+              {ltvCacRatio.toFixed(1)}x
             </div>
             <div className="text-xs text-gray-600 uppercase font-semibold">LTV/CAC Ratio</div>
           </div>
@@ -380,7 +385,7 @@ export function SummarySection({ result, parameters }: SummarySectionProps) {
               </div>
             </div>
           )}
-          {customerAcquisition.blendedCAC > totals.revenue / customerAcquisition.totalUsers * 3 && (
+          {customerAcquisition.blendedCAC > arpu * 3 && (
             <div className="flex items-start gap-3 p-4 bg-red-50 rounded-lg border border-red-200">
               <span className="text-xl">🚨</span>
               <div>

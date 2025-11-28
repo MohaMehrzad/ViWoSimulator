@@ -3,10 +3,110 @@ Pydantic models for simulation results.
 
 Updated to include MonthlyProgressionResult for Issue #16.
 Nov 2025: Added LiquidityResult, StakingResult, and Growth Scenario results.
+Nov 2025: Added CirculatingSupplyResult and TreasuryResult for token allocation tracking.
 """
 
 from pydantic import BaseModel
 from typing import Dict, List, Optional, Any
+
+
+# === TOKEN ALLOCATION RESULTS (Nov 2025) ===
+
+class TokenCategoryUnlock(BaseModel):
+    """Unlock information for a single token category"""
+    category: str
+    tokens_unlocked: int
+    cumulative_unlocked: int
+    total_allocation: int
+    percent_unlocked: float
+
+
+class CirculatingSupplyResult(BaseModel):
+    """
+    Circulating supply tracking result for vesting schedule.
+    Tracks token unlocks from all 10 allocation categories over 60 months.
+    """
+    month: int
+    
+    # Per-category unlocks for this month
+    seed_unlock: int = 0
+    private_unlock: int = 0
+    public_unlock: int = 0
+    team_unlock: int = 0
+    advisors_unlock: int = 0
+    treasury_unlock: int = 0
+    rewards_unlock: int = 0
+    liquidity_unlock: int = 0
+    foundation_unlock: int = 0
+    marketing_unlock: int = 0
+    
+    # Totals
+    total_new_unlocks: int = 0
+    cumulative_circulating: int = 0
+    circulating_percent: float = 0.0  # Percentage of total supply
+    
+    # Detailed breakdown
+    category_breakdown: Dict[str, TokenCategoryUnlock] = {}
+
+
+class TreasuryResult(BaseModel):
+    """
+    Treasury/DAO accumulation tracking.
+    Treasury receives portion of platform revenue.
+    """
+    # Revenue contribution
+    revenue_contribution_usd: float = 0.0  # USD from platform revenue
+    revenue_contribution_vcoin: float = 0.0  # VCoin equivalent
+    
+    # Buyback contribution
+    buyback_contribution_vcoin: float = 0.0  # Tokens from buybacks
+    
+    # Fee distribution
+    fee_distribution_vcoin: float = 0.0  # From transaction fees
+    
+    # Totals
+    total_accumulated_vcoin: float = 0.0
+    total_accumulated_usd: float = 0.0
+    
+    # Treasury allocation status
+    treasury_allocation: int = 200_000_000  # Total allocation
+    treasury_released: int = 0  # Released via governance
+    treasury_available: int = 200_000_000  # Available for release
+    
+    # Revenue share rate
+    revenue_share_rate: float = 0.20  # 20% of revenue to treasury
+
+
+class VestingScheduleResult(BaseModel):
+    """
+    Complete vesting schedule simulation result.
+    60-month vesting with all 10 allocation categories.
+    """
+    duration_months: int = 60
+    
+    # Monthly circulating supply data
+    monthly_supply: List[CirculatingSupplyResult] = []
+    
+    # Summary statistics
+    tge_circulating: int = 158_833_333
+    final_circulating: int = 0
+    max_circulating: int = 1_000_000_000
+    
+    # Key milestones
+    month_25_percent_circulating: int = 0  # Month when 25% circulating
+    month_50_percent_circulating: int = 0  # Month when 50% circulating
+    month_75_percent_circulating: int = 0  # Month when 75% circulating
+    month_full_circulating: int = 60  # Month when 100% circulating
+    
+    # Category completion months
+    seed_completion_month: int = 36
+    private_completion_month: int = 18
+    public_completion_month: int = 3
+    team_completion_month: int = 48
+    advisors_completion_month: int = 18
+    foundation_completion_month: int = 27
+    marketing_completion_month: int = 21
+    rewards_completion_month: int = 60
 
 
 # === GROWTH SCENARIO TYPES (Nov 2025) ===
@@ -368,6 +468,15 @@ class MonthlyMetricsResult(BaseModel):
     per_user_monthly_vcoin: float = 0.0  # VCoin per user per month
     per_user_monthly_usd: float = 0.0  # USD equivalent per user per month
     allocation_capped: bool = False  # Whether per-user cap was applied
+    
+    # Token allocation fields (NEW - Nov 2025)
+    circulating_supply: int = 0  # Total circulating supply at this month
+    circulating_percent: float = 0.0  # Percentage of total supply
+    new_unlocks: int = 0  # New tokens unlocked this month
+    
+    # Treasury fields (NEW - Nov 2025)
+    treasury_revenue_usd: float = 0.0  # Revenue going to treasury
+    treasury_accumulated_usd: float = 0.0  # Cumulative treasury balance
 
 
 class MonthlyProgressionResult(BaseModel):
@@ -408,6 +517,16 @@ class MonthlyProgressionResult(BaseModel):
     market_condition_used: Optional[str] = None  # 'bear', 'neutral', 'bull', or None
     fomo_events_triggered: List[FomoEventResult] = []
     token_price_final: float = 0.03
+    
+    # Token allocation / vesting (NEW - Nov 2025)
+    vesting_schedule: Optional[VestingScheduleResult] = None
+    final_circulating_supply: int = 0
+    final_circulating_percent: float = 0.0
+    
+    # Treasury tracking (NEW - Nov 2025)
+    treasury_result: Optional[TreasuryResult] = None
+    total_treasury_accumulated_usd: float = 0.0
+    total_treasury_accumulated_vcoin: float = 0.0
 
 
 class WebSocketProgress(BaseModel):

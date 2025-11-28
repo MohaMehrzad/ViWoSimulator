@@ -304,8 +304,9 @@ def calculate_staking(
     
     # === PLATFORM REVENUE FROM STAKING ===
     
-    # 1. Protocol Fee on Staking Rewards (10% of rewards go to platform - industry standard)
-    protocol_reward_fee_rate = getattr(params, 'staking_protocol_fee', 0.10)
+    # Issue #3 Fix: Protocol Fee on Staking Rewards (5% to match rewards.py PLATFORM_FEE_RATE)
+    # Changed from 10% to 5% for consistency across all platform fees
+    protocol_reward_fee_rate = getattr(params, 'staking_protocol_fee', 0.05)
     protocol_fee_from_rewards = total_monthly_rewards * protocol_reward_fee_rate
     protocol_fee_from_rewards_usd = protocol_fee_from_rewards * token_price
     

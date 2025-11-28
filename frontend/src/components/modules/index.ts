@@ -1,5 +1,6 @@
 export { ModuleNavigation } from './ModuleNavigation';
 export { OverviewSection } from './OverviewSection';
+export { TokenomicsSection } from './TokenomicsSection';
 export { IdentitySection } from './IdentitySection';
 export { ContentSection } from './ContentSection';
 export { CommunitySection } from './CommunitySection';

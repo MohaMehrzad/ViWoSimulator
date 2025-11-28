@@ -89,6 +89,10 @@ class RetentionCurve:
         if m1 == m2:
             return r1
         
+        # Issue #31 Fix: Guard against division by zero when m1 == m2
+        if m2 == m1:
+            return r1  # Same month, return first retention rate
+        
         # Use exponential decay interpolation
         if r1 <= 0 or r2 <= 0:
             # Linear fallback for zero values

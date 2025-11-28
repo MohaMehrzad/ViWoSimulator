@@ -2,6 +2,98 @@
 export type PlatformMaturity = 'launch' | 'growing' | 'established';
 export type RetentionModelType = 'social_app' | 'crypto_app' | 'gaming' | 'utility' | 'custom';
 
+// === TOKEN ALLOCATION TYPES (November 2025) ===
+
+// Token allocation category names
+export type TokenAllocationCategory = 
+  | 'seed' 
+  | 'private' 
+  | 'public' 
+  | 'team' 
+  | 'advisors' 
+  | 'treasury' 
+  | 'rewards' 
+  | 'liquidity' 
+  | 'foundation' 
+  | 'marketing';
+
+// Token allocation configuration for a single category
+export interface TokenAllocationCategoryConfig {
+  name: string;
+  percent: number;
+  tokens: number;
+  tge_percent: number;
+  cliff_months?: number;
+  vesting_months?: number;
+  price_usd?: number;
+  is_programmatic?: boolean;
+  emission_months?: number;
+  description: string;
+}
+
+// Category unlock information
+export interface TokenCategoryUnlock {
+  category: string;
+  tokensUnlocked: number;
+  cumulativeUnlocked: number;
+  totalAllocation: number;
+  percentUnlocked: number;
+}
+
+// Circulating supply at a specific month
+export interface CirculatingSupplyResult {
+  month: number;
+  seedUnlock: number;
+  privateUnlock: number;
+  publicUnlock: number;
+  teamUnlock: number;
+  advisorsUnlock: number;
+  treasuryUnlock: number;
+  rewardsUnlock: number;
+  liquidityUnlock: number;
+  foundationUnlock: number;
+  marketingUnlock: number;
+  totalNewUnlocks: number;
+  cumulativeCirculating: number;
+  circulatingPercent: number;
+  categoryBreakdown: Record<string, TokenCategoryUnlock>;
+}
+
+// Full vesting schedule result
+export interface VestingScheduleResult {
+  durationMonths: number;
+  monthlySupply: CirculatingSupplyResult[];
+  tgeCirculating: number;
+  finalCirculating: number;
+  maxCirculating: number;
+  month25PercentCirculating: number;
+  month50PercentCirculating: number;
+  month75PercentCirculating: number;
+  monthFullCirculating: number;
+  seedCompletionMonth: number;
+  privateCompletionMonth: number;
+  publicCompletionMonth: number;
+  teamCompletionMonth: number;
+  advisorsCompletionMonth: number;
+  foundationCompletionMonth: number;
+  marketingCompletionMonth: number;
+  rewardsCompletionMonth: number;
+}
+
+// Treasury accumulation tracking
+export interface TreasuryResult {
+  revenueContributionUsd: number;
+  revenueContributionVcoin: number;
+  buybackContributionVcoin: number;
+  feeDistributionVcoin: number;
+  totalAccumulatedVcoin: number;
+  totalAccumulatedUsd: number;
+  treasuryAllocation: number;
+  treasuryReleased: number;
+  treasuryAvailable: number;
+  revenueShareRate: number;
+}
+
 // === GROWTH SCENARIO TYPES (November 2025) ===
 
 // Growth scenario selection
@@ -155,6 +247,10 @@ export interface SimulationParameters {
   marketCondition?: MarketCondition;
   enableFomoEvents?: boolean;
   useGrowthScenarios?: boolean;
+  
+  // Token Allocation / Vesting (NEW - Nov 2025)
+  trackVestingSchedule?: boolean;
+  treasuryRevenueShare?: number;
   
   // Core parameters
   tokenPrice: number;
@@ -628,6 +724,13 @@ export interface MonthlyMetrics {
   perUserMonthlyVcoin?: number;
   perUserMonthlyUsd?: number;
   allocationCapped?: boolean;
+  // Token allocation / vesting fields (NEW - Nov 2025)
+  circulatingSupply?: number;
+  circulatingPercent?: number;
+  newUnlocks?: number;
+  // Treasury fields (NEW - Nov 2025)
+  treasuryRevenueUsd?: number;
+  treasuryAccumulatedUsd?: number;
 }
 
 export interface MonthlyProgressionResult {
@@ -655,6 +758,14 @@ export interface MonthlyProgressionResult {
   marketConditionUsed?: MarketCondition | null;
   fomoEventsTriggered?: FomoEvent[];
   tokenPriceFinal?: number;
+  // Token allocation / vesting (NEW - Nov 2025)
+  vestingSchedule?: VestingScheduleResult;
+  finalCirculatingSupply?: number;
+  finalCirculatingPercent?: number;
+  // Treasury tracking (NEW - Nov 2025)
+  treasuryResult?: TreasuryResult;
+  totalTreasuryAccumulatedUsd?: number;
+  totalTreasuryAccumulatedVcoin?: number;
 }
 
 // WebSocket Message Types

@@ -59,5 +59,6 @@ async def root():
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    # Issue #10 Fix: Changed port from 8000 to 8001 to match frontend expectation
+    uvicorn.run(app, host="0.0.0.0", port=8001)
 

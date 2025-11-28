@@ -1,19 +1,55 @@
 """
-Rewards Module calculations.
+Rewards Module - Platform's PRIMARY Revenue Source (5% Fee)
 
-Updated November 2025: Added dynamic reward allocation based on user growth.
-Uses logarithmic scaling to ensure rewards grow proportionally with user base,
-preventing token inflation while ensuring early users receive meaningful rewards.
+=== CRITICAL: 5% PLATFORM FEE MODEL (November 2025) ===
+
+This is the MAIN revenue stream for the platform. The fee structure is:
+
+1. DAILY CALCULATION (before any distribution):
+   - Calculate gross daily emission from reward pool
+   - Platform takes 5% FIRST (before any user receives anything)
+   - Remaining 95% distributed to users via algorithm
+
+2. FEE FLOW:
+   Reward Pool → Daily Emission → [5% Platform] → [95% Users]
+   
+3. Example at $0.03 token, 8% allocation:
+   - Daily Gross: 15,556 VCoin ($466.67)
+   - Platform Fee: 778 VCoin ($23.33/day = $700/month)
+   - User Distribution: 14,778 VCoin ($443.34/day)
+
+4. This fee scales automatically:
+   - More users = higher allocation = more fee revenue
+   - 1,000 users → ~$437/month platform fee
+   - 100,000 users → ~$5,425/month platform fee
+   - 1,000,000 users → ~$7,875/month platform fee
+
+Uses logarithmic scaling for dynamic allocation to ensure rewards 
+grow proportionally with user base while preventing token inflation.
 """
 
 import math
-from typing import Tuple, NamedTuple
+from typing import NamedTuple
 from app.config import config
 from app.models import SimulationParameters, RewardsResult
 
-# Fixed platform fee rate (5% of rewards)
-PLATFORM_FEE_RATE = 0.05
 
+# ============================================================================
+# PLATFORM FEE CONFIGURATION
+# ============================================================================
+
+# Fixed platform fee rate - 5% of ALL reward emissions
+# This is taken FIRST, BEFORE any distribution to users
+# This is the PRIMARY revenue source for the platform
+PLATFORM_FEE_RATE = 0.05  # 5%
+
+# Days per month for calculations
+DAYS_PER_MONTH = 30
+
+
+# ============================================================================
+# DYNAMIC ALLOCATION
+# ============================================================================
 
 class DynamicAllocationResult(NamedTuple):
     """Result of dynamic allocation calculation"""
@@ -47,19 +83,7 @@ def calculate_dynamic_allocation(
         growth_factor = min(1.0, ln(current_users / initial_users) / ln(target_users / initial_users))
         allocation = min_allocation + (max_allocation - min_allocation) * growth_factor
     
-    Args:
-        current_users: Current active user count
-        token_price: Current VCoin price in USD
-        initial_users: Starting point for allocation scaling (growth_factor = 0)
-        target_users: Point at which max allocation is reached (growth_factor = 1)
-        min_allocation: Minimum allocation percentage (default 5%)
-        max_allocation: Maximum allocation percentage (default 90%)
-        max_per_user_monthly_usd: Maximum per-user reward in USD (inflation guard)
-        min_per_user_monthly_usd: Minimum per-user reward in USD
-        monthly_emission: Base monthly emission pool (defaults to config value)
-    
-    Returns:
-        DynamicAllocationResult with allocation details
+    NOTE: The 5% platform fee is already factored into per-user calculations.
     """
     if monthly_emission is None:
         monthly_emission = config.MONTHLY_EMISSION
@@ -70,13 +94,11 @@ def calculate_dynamic_allocation(
     target_users = max(initial_users + 1, target_users)
     
     # Calculate growth factor using logarithmic scaling
-    # This provides a natural curve that slows growth as user base expands
     if current_users <= initial_users:
         growth_factor = 0.0
     elif current_users >= target_users:
         growth_factor = 1.0
     else:
-        # Logarithmic scaling: ln(current/initial) / ln(target/initial)
         log_ratio = math.log(current_users / initial_users)
         log_max = math.log(target_users / initial_users)
         growth_factor = min(1.0, max(0.0, log_ratio / log_max))
@@ -85,6 +107,7 @@ def calculate_dynamic_allocation(
     base_allocation = min_allocation + (max_allocation - min_allocation) * growth_factor
     
     # Calculate per-user reward at this allocation
+    # NOTE: Platform fee is taken FIRST, then remainder distributed
     gross_emission = monthly_emission * base_allocation
     net_emission = gross_emission * (1 - PLATFORM_FEE_RATE)  # After 5% platform fee
     per_user_monthly_vcoin = net_emission / current_users if current_users > 0 else 0
@@ -96,14 +119,10 @@ def calculate_dynamic_allocation(
     
     # Cap: If per-user reward exceeds max, reduce allocation
     if per_user_monthly_usd > max_per_user_monthly_usd and current_users > 0:
-        # Calculate allocation that would give exactly max_per_user_monthly_usd
-        # per_user_usd = (monthly_emission * allocation * (1 - fee)) / users * price
-        # Solving for allocation:
         required_net_emission = (max_per_user_monthly_usd / token_price) * current_users
         required_gross_emission = required_net_emission / (1 - PLATFORM_FEE_RATE)
         capped_allocation = required_gross_emission / monthly_emission
         
-        # Apply the cap but don't go below minimum
         final_allocation = max(min_allocation, min(capped_allocation, base_allocation))
         allocation_capped = True
         
@@ -113,17 +132,15 @@ def calculate_dynamic_allocation(
         per_user_monthly_vcoin = net_emission / current_users
         per_user_monthly_usd = per_user_monthly_vcoin * token_price
     
-    # Floor: Ensure minimum per-user reward (may require increasing allocation)
+    # Floor: Ensure minimum per-user reward
     if per_user_monthly_usd < min_per_user_monthly_usd and current_users > 0:
         required_net_emission = (min_per_user_monthly_usd / token_price) * current_users
         required_gross_emission = required_net_emission / (1 - PLATFORM_FEE_RATE)
         floor_allocation = required_gross_emission / monthly_emission
         
-        # Apply floor but don't exceed maximum
         if floor_allocation <= max_allocation:
             final_allocation = max(final_allocation, floor_allocation)
             
-            # Recalculate per-user values
             gross_emission = monthly_emission * final_allocation
             net_emission = gross_emission * (1 - PLATFORM_FEE_RATE)
             per_user_monthly_vcoin = net_emission / current_users
@@ -138,21 +155,98 @@ def calculate_dynamic_allocation(
     )
 
 
+# ============================================================================
+# DAILY FEE CALCULATION (Called before each distribution)
+# ============================================================================
+
+def calculate_daily_platform_fee(
+    daily_gross_emission: float,
+    token_price: float,
+) -> dict:
+    """
+    Calculate the platform's 5% fee for a SINGLE DAY.
+    
+    This function represents what happens DAILY before reward distribution:
+    1. Smart contract calculates daily emission
+    2. 5% is IMMEDIATELY transferred to platform treasury
+    3. Remaining 95% enters the distribution algorithm
+    
+    Args:
+        daily_gross_emission: Total VCoin to be emitted today
+        token_price: Current VCoin price in USD
+    
+    Returns:
+        dict with fee breakdown for the day
+    
+    Example (at 8% allocation, $0.03 token):
+        Input: daily_gross_emission = 15,556 VCoin
+        Output:
+            platform_fee_vcoin: 778 VCoin
+            platform_fee_usd: $23.33
+            user_distribution_vcoin: 14,778 VCoin
+            user_distribution_usd: $443.34
+    """
+    # Platform takes 5% FIRST
+    platform_fee_vcoin = daily_gross_emission * PLATFORM_FEE_RATE
+    platform_fee_usd = platform_fee_vcoin * token_price
+    
+    # Users receive the remaining 95%
+    user_distribution_vcoin = daily_gross_emission - platform_fee_vcoin
+    user_distribution_usd = user_distribution_vcoin * token_price
+    
+    return {
+        'daily_gross_emission': round(daily_gross_emission, 2),
+        'platform_fee_rate': PLATFORM_FEE_RATE,
+        'platform_fee_vcoin': round(platform_fee_vcoin, 2),
+        'platform_fee_usd': round(platform_fee_usd, 4),
+        'user_distribution_vcoin': round(user_distribution_vcoin, 2),
+        'user_distribution_usd': round(user_distribution_usd, 4),
+    }
+
+
+# ============================================================================
+# MAIN REWARDS CALCULATION
+# ============================================================================
+
 def calculate_rewards(params: SimulationParameters, users: int) -> RewardsResult:
     """
-    Calculate Rewards module emission and operational costs.
-    Applies a 5% platform fee before distributing rewards to users.
+    Calculate Rewards module emission and platform fee.
     
-    If dynamic allocation is enabled, the allocation percentage is calculated
-    based on user growth using logarithmic scaling.
+    === CRITICAL: 5% PLATFORM FEE ===
+    
+    The platform fee is calculated and taken BEFORE any distribution:
+    
+    1. Calculate gross emission (daily or monthly)
+    2. Platform takes 5% IMMEDIATELY → Platform Treasury
+    3. Remaining 95% → Distribution Algorithm → Users
+    
+    This ensures the platform ALWAYS gets its 5% before any user rewards.
+    
+    Daily Flow (what happens each day):
+    ┌─────────────────────────────────────────────────────────────┐
+    │ Daily Gross Emission (from monthly pool)                     │
+    │ e.g., 15,556 VCoin at 8% allocation                         │
+    └─────────────────────┬───────────────────────────────────────┘
+                          │
+                          ▼
+    ┌─────────────────────────────────────────────────────────────┐
+    │ STEP 1: Platform Fee Extraction (5%)                        │
+    │ 15,556 × 5% = 778 VCoin → Platform Treasury                 │
+    └─────────────────────┬───────────────────────────────────────┘
+                          │
+                          ▼
+    ┌─────────────────────────────────────────────────────────────┐
+    │ STEP 2: User Distribution (95%)                             │
+    │ 14,778 VCoin → Distribution Algorithm → Creators/Consumers  │
+    └─────────────────────────────────────────────────────────────┘
     """
-    # Maximum monthly emission (fixed cap)
+    # Maximum monthly emission (fixed cap from tokenomics)
     max_monthly_emission = config.MONTHLY_EMISSION
     
     # Check if dynamic allocation is enabled
     use_dynamic = getattr(params, 'enable_dynamic_allocation', False)
     
-    # Initialize dynamic allocation tracking variables
+    # Initialize tracking variables
     is_dynamic_allocation = False
     dynamic_allocation_percent = 0.0
     growth_factor = 0.0
@@ -175,7 +269,6 @@ def calculate_rewards(params: SimulationParameters, users: int) -> RewardsResult
             monthly_emission=max_monthly_emission,
         )
         
-        # Use dynamic allocation
         allocation_percent_decimal = dynamic_result.allocation_percent
         is_dynamic_allocation = True
         dynamic_allocation_percent = dynamic_result.allocation_percent
@@ -187,36 +280,39 @@ def calculate_rewards(params: SimulationParameters, users: int) -> RewardsResult
         # Use static allocation from parameters
         allocation_percent_decimal = params.reward_allocation_percent
     
-    # Gross monthly emission based on allocation percentage (before platform fee)
+    # === GROSS EMISSION (before platform fee) ===
     gross_monthly_emission = int(max_monthly_emission * allocation_percent_decimal)
+    gross_daily_emission = gross_monthly_emission / DAYS_PER_MONTH
     
-    # Platform fee: 5% of gross emission
+    # === PLATFORM FEE: 5% taken FIRST, DAILY ===
+    # This is calculated and extracted before ANY distribution
+    daily_fee = calculate_daily_platform_fee(gross_daily_emission, params.token_price)
+    
+    # Monthly platform fee (sum of all daily fees)
     platform_fee_vcoin = gross_monthly_emission * PLATFORM_FEE_RATE
     platform_fee_usd = platform_fee_vcoin * params.token_price
     
-    # Net monthly emission: 95% goes to creators/consumers
+    # === NET EMISSION: 95% to users ===
     net_monthly_emission = gross_monthly_emission - platform_fee_vcoin
+    net_daily_emission = net_monthly_emission / DAYS_PER_MONTH
     
-    # Daily emission (net - what users receive)
-    daily_emission = net_monthly_emission / 30
-    
-    # Emission value in USD (net)
+    # USD values
     emission_usd = net_monthly_emission * params.token_price
-    
-    # Gross emission in USD
     gross_emission_usd = gross_monthly_emission * params.token_price
     
-    # Operational costs (MVP: minimal for automated distribution)
-    op_costs = 50  # Fixed low cost for smart contract automation
+    # Operational costs (minimal for automated distribution on Solana)
+    # ~$0.00025 per transaction, ~1000 distributions = $0.25/day = ~$8/month
+    # Add buffer for monitoring, maintenance
+    op_costs = 50  # $50/month for reward distribution operations
     
-    # Daily reward pool (net)
-    daily_reward_pool = daily_emission
+    # Daily reward pool (net - what users receive)
+    daily_reward_pool = net_daily_emission
     daily_reward_pool_usd = daily_reward_pool * params.token_price
     
     # Monthly reward pool (net)
     monthly_reward_pool = net_monthly_emission
     
-    # Allocation percentage for display (convert to integer percentage)
+    # Allocation percentage for display
     allocation_percent_display = int(allocation_percent_decimal * 100)
     
     # Calculate per-user values if not already done via dynamic allocation
@@ -224,21 +320,35 @@ def calculate_rewards(params: SimulationParameters, users: int) -> RewardsResult
         per_user_monthly_vcoin = net_monthly_emission / users
         per_user_monthly_usd = per_user_monthly_vcoin * params.token_price
     
+    # Per-user daily values
+    per_user_daily_vcoin = per_user_monthly_vcoin / DAYS_PER_MONTH if users > 0 else 0
+    per_user_daily_usd = per_user_daily_vcoin * params.token_price
+    
     return RewardsResult(
+        # Net emission (what users receive after 5% fee)
         monthly_emission=round(net_monthly_emission, 2),
         max_monthly_emission=max_monthly_emission,
         emission_usd=round(emission_usd, 2),
         op_costs=op_costs,
-        daily_emission=round(daily_emission, 2),
+        
+        # Daily values (net)
+        daily_emission=round(net_daily_emission, 2),
         daily_reward_pool=round(daily_reward_pool, 2),
         daily_reward_pool_usd=round(daily_reward_pool_usd, 2),
+        
+        # Monthly pool (net)
         monthly_reward_pool=round(monthly_reward_pool, 2),
         allocation_percent=allocation_percent_display,
-        # Gross emission fields
+        
+        # Gross emission (before 5% fee)
         gross_monthly_emission=round(gross_monthly_emission, 2),
         gross_emission_usd=round(gross_emission_usd, 2),
+        
+        # === PLATFORM FEE (5%) - PRIMARY REVENUE ===
+        # This is taken DAILY, BEFORE distribution
         platform_fee_vcoin=round(platform_fee_vcoin, 2),
         platform_fee_usd=round(platform_fee_usd, 2),
+        
         # Dynamic allocation fields
         is_dynamic_allocation=is_dynamic_allocation,
         dynamic_allocation_percent=round(dynamic_allocation_percent, 4),

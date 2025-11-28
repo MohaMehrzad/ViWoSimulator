@@ -13,6 +13,7 @@ interface ModuleNavigationProps {
 
 const SECTIONS = [
   { id: 'overview', label: 'Overview', icon: '📊', alwaysShow: true },
+  { id: 'tokenomics', label: 'Tokenomics', icon: '🪙', alwaysShow: true },
   { id: 'identity', label: 'Identity', icon: '🆔', alwaysShow: true },
   { id: 'content', label: 'Content', icon: '📄', alwaysShow: true },
   { id: 'community', label: 'Community', icon: '👥', moduleKey: 'community' as const },

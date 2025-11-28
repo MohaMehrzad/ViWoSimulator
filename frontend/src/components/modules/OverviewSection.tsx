@@ -136,27 +136,46 @@ function calculateMonthlyProjections(
     const staticGrossEmission = 5833333 * baseAllocation;
     const staticPlatformFeeUsd = staticGrossEmission * 0.05 * tokenPrice;
     
-    // Additional profit from dynamic allocation
+    // Additional profit from dynamic allocation (only applies from Month 2+)
     const allocationProfitBoost = platformFeeUsd - staticPlatformFeeUsd;
-    cumulativeAllocationProfit += allocationProfitBoost;
+    if (month > 1) {
+      cumulativeAllocationProfit += allocationProfitBoost;
+    }
     
-    // Scale revenue based on user count AND token price
+    // FIX: Month 1 should use the exact base result values for consistency with Module Performance Overview
+    // This ensures the "12-Month Projection Month 1" matches "Module Performance TOTAL"
+    let monthRevenue: number;
+    let monthCosts: number;
+    let monthProfit: number;
+    let scaledTokenRevenueForBreakdown: number;
+    let scaledUsdRevenueForBreakdown: number;
+    
     const userScaleFactor = currentUsers / baseUsers;
     
-    // Token-based revenue scales with BOTH users AND token price
-    const scaledTokenRevenue = tokenBasedRevenue * userScaleFactor * priceMultiplier;
-    // USD-fixed revenue scales with users only
-    const scaledUsdRevenue = usdFixedRevenue * userScaleFactor;
-    
-    // Add platform fee to revenue (this now scales with allocation!)
-    const basePlatformFee = baseResult.platformFees?.rewardFeeUsd || 0;
-    const scaledPlatformFee = enableDynamicAllocation ? platformFeeUsd : basePlatformFee * userScaleFactor;
-    
-    const monthRevenue = scaledTokenRevenue + scaledUsdRevenue + (scaledPlatformFee - basePlatformFee * userScaleFactor);
-    
-    // Costs scale sub-linearly with users (economies of scale)
-    const monthCosts = baseCosts * Math.sqrt(userScaleFactor);
-    const monthProfit = monthRevenue - monthCosts;
+    if (month === 1) {
+      // Month 1: Use base simulation results directly for consistency
+      monthRevenue = baseRevenue;
+      monthCosts = baseCosts;
+      monthProfit = baseResult.totals.profit;
+      scaledTokenRevenueForBreakdown = tokenBasedRevenue;
+      scaledUsdRevenueForBreakdown = usdFixedRevenue;
+    } else {
+      // Month 2+: Scale revenue based on user count AND token price
+      // Token-based revenue scales with BOTH users AND token price
+      scaledTokenRevenueForBreakdown = tokenBasedRevenue * userScaleFactor * priceMultiplier;
+      // USD-fixed revenue scales with users only
+      scaledUsdRevenueForBreakdown = usdFixedRevenue * userScaleFactor;
+      
+      // Add platform fee to revenue (this now scales with allocation!)
+      const basePlatformFee = baseResult.platformFees?.rewardFeeUsd || 0;
+      const scaledPlatformFee = enableDynamicAllocation ? platformFeeUsd : basePlatformFee * userScaleFactor;
+      
+      monthRevenue = scaledTokenRevenueForBreakdown + scaledUsdRevenueForBreakdown + (scaledPlatformFee - basePlatformFee * userScaleFactor);
+      
+      // Costs scale sub-linearly with users (economies of scale)
+      monthCosts = baseCosts * Math.sqrt(userScaleFactor);
+      monthProfit = monthRevenue - monthCosts;
+    }
     const monthMargin = monthRevenue > 0 ? (monthProfit / monthRevenue) * 100 : 0;
     
     cumulativeRevenue += monthRevenue;
@@ -184,11 +203,11 @@ function calculateMonthlyProjections(
       perUserUsd: dynamicAlloc.perUserUsd,
       allocationCapped: dynamicAlloc.capped,
       platformFeeUsd,
-      allocationProfitBoost,
-      cumulativeAllocationProfit,
+      allocationProfitBoost: month === 1 ? 0 : allocationProfitBoost, // Month 1 uses base result, no boost
+      cumulativeAllocationProfit: month === 1 ? 0 : cumulativeAllocationProfit,
       // Breakdown for debugging
-      tokenBasedRevenue: scaledTokenRevenue,
-      usdFixedRevenue: scaledUsdRevenue,
+      tokenBasedRevenue: scaledTokenRevenueForBreakdown,
+      usdFixedRevenue: scaledUsdRevenueForBreakdown,
     });
   }
   
@@ -317,7 +336,8 @@ export function OverviewSection({ result, parameters }: OverviewSectionProps) {
               min={1}
               max={12}
               value={selectedMonth}
-              onChange={(e) => setSelectedMonth(Number(e.target.value))}
+              // Issue #32 Fix: Add fallback to 1 if Number() returns NaN
+              onChange={(e) => setSelectedMonth(Number(e.target.value) || 1)}
               className="w-full h-3 rounded-full appearance-none cursor-pointer"
               style={{
                 background: `linear-gradient(to right, 

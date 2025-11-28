@@ -57,6 +57,10 @@ export const DEFAULT_PARAMETERS: SimulationParameters = {
   enableFomoEvents: true,
   useGrowthScenarios: true,
   
+  // Token Allocation / Vesting (NEW - Nov 2025)
+  trackVestingSchedule: true,         // Track full 60-month vesting
+  treasuryRevenueShare: 0.20,         // 20% of revenue to treasury
+  
   // Core parameters
   tokenPrice: 0.03,
   marketingBudget: 150000,
@@ -90,7 +94,7 @@ export const DEFAULT_PARAMETERS: SimulationParameters = {
   minPerUserMonthlyUsd: 0.10,       // $0.10 min per-user reward
   
   // Liquidity Parameters (NEW - Nov 2025)
-  initialLiquidityUsd: 100000,      // $100K minimum recommended
+  initialLiquidityUsd: 500000,      // $500K recommended for 70%+ health
   protocolOwnedLiquidity: 0.70,     // 70% POL target
   liquidityLockMonths: 24,          // 2 year lock
   targetLiquidityRatio: 0.15,       // 15%+ for health
@@ -362,17 +366,136 @@ export const PRESETS: Preset[] = [
   },
 ];
 
+// === TOKEN ALLOCATION (November 2025) ===
+// Official VCoin tokenomics with 10 allocation categories
+export const TOKEN_ALLOCATION = {
+  SEED: {
+    name: 'Seed Round',
+    percent: 0.02,
+    tokens: 20_000_000,
+    tge_percent: 0.0,
+    cliff_months: 12,
+    vesting_months: 24,
+    price_usd: 0.01,
+    description: 'Early-stage investors (highest risk, lowest price)',
+  },
+  PRIVATE: {
+    name: 'Private Round',
+    percent: 0.03,
+    tokens: 30_000_000,
+    tge_percent: 0.10,
+    cliff_months: 6,
+    vesting_months: 18,
+    price_usd: 0.015,
+    description: 'Strategic investors and VCs',
+  },
+  PUBLIC: {
+    name: 'Public Sale',
+    percent: 0.05,
+    tokens: 50_000_000,
+    tge_percent: 0.50,
+    cliff_months: 0,
+    vesting_months: 3,
+    price_usd: 0.02,
+    description: 'Community token sale (IDO/ICO)',
+  },
+  TEAM: {
+    name: 'Team',
+    percent: 0.10,
+    tokens: 100_000_000,
+    tge_percent: 0.0,
+    cliff_months: 12,
+    vesting_months: 36,
+    price_usd: 0.03,
+    description: 'Core team members and employees',
+  },
+  ADVISORS: {
+    name: 'Advisors',
+    percent: 0.05,
+    tokens: 50_000_000,
+    tge_percent: 0.0,
+    cliff_months: 6,
+    vesting_months: 18,
+    price_usd: 0.03,
+    description: 'Strategic advisors and consultants',
+  },
+  TREASURY: {
+    name: 'Treasury/DAO',
+    percent: 0.20,
+    tokens: 200_000_000,
+    tge_percent: 0.0,
+    is_programmatic: true,
+    description: 'Protocol treasury and governance',
+  },
+  REWARDS: {
+    name: 'Ecosystem & Rewards',
+    percent: 0.35,
+    tokens: 350_000_000,
+    tge_percent: 0.0,
+    is_programmatic: true,
+    emission_months: 60,
+    description: 'User incentives, staking rewards, grants',
+  },
+  LIQUIDITY: {
+    name: 'Liquidity',
+    percent: 0.10,
+    tokens: 100_000_000,
+    tge_percent: 1.0,
+    description: 'DEX/CEX liquidity pools',
+  },
+  FOUNDATION: {
+    name: 'Foundation',
+    percent: 0.02,
+    tokens: 20_000_000,
+    tge_percent: 0.25,
+    cliff_months: 3,
+    vesting_months: 24,
+    price_usd: 0.03,
+    description: 'Foundation operations and reserve',
+  },
+  MARKETING: {
+    name: 'Marketing & Growth',
+    percent: 0.08,
+    tokens: 80_000_000,
+    tge_percent: 0.25,
+    cliff_months: 3,
+    vesting_months: 18,
+    price_usd: 0.03,
+    description: 'Marketing campaigns and partnerships',
+  },
+};
+
+// TGE Circulating Supply Breakdown
+export const TGE_BREAKDOWN = {
+  SEED: 0,                 // 0% TGE
+  PRIVATE: 3_000_000,      // 10% of 30M
+  PUBLIC: 25_000_000,      // 50% of 50M
+  TEAM: 0,                 // 0% TGE
+  ADVISORS: 0,             // 0% TGE
+  TREASURY: 0,             // Programmatic
+  REWARDS: 5_833_333,      // First month emission
+  LIQUIDITY: 100_000_000,  // 100% at TGE
+  FOUNDATION: 5_000_000,   // 25% of 20M
+  MARKETING: 20_000_000,   // 25% of 80M
+  TOTAL: 158_833_333,
+};
+
 // Configuration constants
 export const CONFIG = {
   SUPPLY: {
     TOTAL: 1_000_000_000,
-    TGE_CIRCULATING: 158_800_000,
+    TGE_CIRCULATING: 158_833_333,  // Updated to match official tokenomics
     LIQUIDITY: 100_000_000,
-    REWARDS_ALLOCATION: 700_000_000,
-    REWARDS_DURATION_MONTHS: 120,
+    REWARDS_ALLOCATION: 350_000_000,  // Updated: 35% (was 70%)
+    REWARDS_DURATION_MONTHS: 60,  // Updated: 60 months (was 120)
+    TREASURY_ALLOCATION: 200_000_000,  // NEW: 20%
   },
   
+  // Monthly emission from rewards pool (350M / 60 months)
   MONTHLY_EMISSION: 5_833_333,
+  
+  // Treasury revenue share (percentage of platform revenue going to treasury)
+  TREASURY_REVENUE_SHARE: 0.20,  // 20% of revenue to treasury
   
   FEE_DISTRIBUTION: {
     BURN: 0.20,

@@ -248,6 +248,16 @@ class SimulationParameters(BaseModel):
         description="Use growth scenario projections instead of CAC-based calculations"
     )
     
+    # === TOKEN ALLOCATION / VESTING (NEW - Nov 2025) ===
+    track_vesting_schedule: bool = Field(
+        default=True,
+        description="Track full 60-month vesting schedule in monthly progression"
+    )
+    treasury_revenue_share: float = Field(
+        default=0.20, ge=0.0, le=0.50,
+        description="Percentage of platform revenue going to Treasury/DAO (20% default)"
+    )
+    
     # === CORE PARAMETERS ===
     token_price: float = Field(
         default=0.03, ge=0.001, le=1.0, 
@@ -359,8 +369,8 @@ class SimulationParameters(BaseModel):
     
     # === LIQUIDITY PARAMETERS (NEW - Nov 2025) ===
     initial_liquidity_usd: float = Field(
-        default=100000, ge=10000, le=10000000,
-        description="Initial liquidity pool in USD (minimum $100K recommended)"
+        default=500000, ge=10000, le=10000000,
+        description="Initial liquidity pool in USD ($500K recommended for 70%+ health)"
     )
     protocol_owned_liquidity: float = Field(
         default=0.70, ge=0.0, le=1.0,

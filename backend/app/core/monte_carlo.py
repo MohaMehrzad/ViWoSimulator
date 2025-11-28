@@ -130,10 +130,11 @@ def run_monte_carlo_simulation(
     profits_arr = np.array(profits)
     recapture_arr = np.array(recapture_rates)
     
-    # Find percentile indices
-    p5_idx = int(np.percentile(np.arange(iterations), 5))
-    p50_idx = int(np.percentile(np.arange(iterations), 50))
-    p95_idx = int(np.percentile(np.arange(iterations), 95))
+    # Issue #4 Fix: Use simple percentage-based index calculation instead of np.percentile on indices
+    # This correctly selects the 5th, 50th, and 95th percentile results from the sorted array
+    p5_idx = max(0, int(0.05 * iterations) - 1)
+    p50_idx = int(0.50 * iterations)
+    p95_idx = min(iterations - 1, int(0.95 * iterations))
     
     # Sort results by revenue to get percentile results
     sorted_indices = np.argsort(revenues_arr)
