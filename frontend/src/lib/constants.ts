@@ -368,7 +368,9 @@ export const PRESETS: Preset[] = [
 
 // === TOKEN ALLOCATION (November 2025) ===
 // Official VCoin tokenomics with 10 allocation categories
-export const TOKEN_ALLOCATION = {
+import type { TokenAllocationCategoryConfig } from '@/types/simulation';
+
+export const TOKEN_ALLOCATION: Record<string, TokenAllocationCategoryConfig> = {
   SEED: {
     name: 'Seed Round',
     percent: 0.02,
