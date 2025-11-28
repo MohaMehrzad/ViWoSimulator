@@ -51,8 +51,105 @@ from app.core.growth_scenarios import (
     calculate_monthly_growth,
     calculate_token_price,
     get_fomo_event_for_month,
+    get_cycle_multipliers,
+    MARKET_CYCLE_2025_2030,
+)
+from app.core.modules import (
+    calculate_governance,
+    calculate_vchain,
+    calculate_marketplace,
+    calculate_business_hub,
+    calculate_cross_platform,
 )
 from app.config import config
+
+
+def calculate_future_modules_revenue(
+    params: SimulationParameters,
+    current_month: int,
+    users: int,
+    token_price: float
+) -> Dict[str, Dict]:
+    """
+    Calculate revenue from future modules if enabled.
+    
+    Args:
+        params: Simulation parameters
+        current_month: Current month in simulation
+        users: Total active users
+        token_price: Current token price
+    
+    Returns:
+        Dict with revenue from each enabled future module
+    """
+    results = {
+        'vchain': {'enabled': False, 'revenue': 0, 'profit': 0},
+        'marketplace': {'enabled': False, 'revenue': 0, 'profit': 0},
+        'business_hub': {'enabled': False, 'revenue': 0, 'profit': 0},
+        'cross_platform': {'enabled': False, 'revenue': 0, 'profit': 0},
+        'total_revenue': 0,
+        'total_profit': 0,
+    }
+    
+    # VChain
+    if params.vchain and params.vchain.enable_vchain:
+        vchain_result = calculate_vchain(params, current_month, users, token_price)
+        results['vchain'] = vchain_result
+        results['total_revenue'] += vchain_result.get('revenue', 0)
+        results['total_profit'] += vchain_result.get('profit', 0)
+    
+    # Marketplace
+    if params.marketplace and params.marketplace.enable_marketplace:
+        marketplace_result = calculate_marketplace(params, current_month, users, token_price)
+        results['marketplace'] = marketplace_result
+        results['total_revenue'] += marketplace_result.get('revenue', 0)
+        results['total_profit'] += marketplace_result.get('profit', 0)
+    
+    # Business Hub
+    if params.business_hub and params.business_hub.enable_business_hub:
+        bh_result = calculate_business_hub(params, current_month, users, token_price)
+        results['business_hub'] = bh_result
+        results['total_revenue'] += bh_result.get('revenue', 0)
+        results['total_profit'] += bh_result.get('profit', 0)
+    
+    # Cross-Platform
+    if params.cross_platform and params.cross_platform.enable_cross_platform:
+        cp_result = calculate_cross_platform(params, current_month, users, token_price)
+        results['cross_platform'] = cp_result
+        results['total_revenue'] += cp_result.get('revenue', 0)
+        results['total_profit'] += cp_result.get('profit', 0)
+    
+    return results
+
+
+def apply_market_cycle_multipliers(
+    base_growth_rate: float,
+    base_retention: float,
+    base_price_multiplier: float,
+    year: int,
+    month_in_year: int
+) -> Dict[str, float]:
+    """
+    Apply market cycle multipliers based on year.
+    
+    Args:
+        base_growth_rate: Base growth rate
+        base_retention: Base retention rate
+        base_price_multiplier: Base price multiplier
+        year: Calendar year (2025-2030)
+        month_in_year: Month within the year (1-12)
+    
+    Returns:
+        Dict with adjusted rates
+    """
+    multipliers = get_cycle_multipliers(year, month_in_year - 1)
+    
+    return {
+        'growth_rate': base_growth_rate * multipliers['growth_multiplier'],
+        'retention_rate': base_retention * multipliers['retention_multiplier'],
+        'price_multiplier': base_price_multiplier * multipliers['price_multiplier'],
+        'phase': multipliers.get('phase', 'Unknown'),
+    }
 
 
 # Seasonality multipliers by month (1-12)
@@ -325,9 +422,7 @@ class MonthlyMetrics:
     # Module breakdown
     identity_revenue: float
     content_revenue: float
-    community_revenue: float
     advertising_revenue: float
-    messaging_revenue: float
     exchange_revenue: float
     platform_fee_revenue: float
     
@@ -636,9 +731,7 @@ def run_monthly_progression_simulation(
             margin=round(month_margin, 1),
             identity_revenue=round(sim_result.identity.revenue, 2),
             content_revenue=round(sim_result.content.revenue, 2),
-            community_revenue=round(sim_result.community.revenue, 2),
             advertising_revenue=round(sim_result.advertising.revenue, 2),
-            messaging_revenue=round(sim_result.messaging.revenue, 2),
             exchange_revenue=round(sim_result.exchange.revenue, 2),
             platform_fee_revenue=round(sim_result.platform_fees.reward_fee_usd, 2),
             tokens_distributed=round(tokens_distributed, 2),
@@ -970,9 +1063,7 @@ def run_growth_scenario_simulation(
             margin=round(month_margin, 1),
             identity_revenue=round(sim_result.identity.revenue, 2),
             content_revenue=round(sim_result.content.revenue, 2),
-            community_revenue=round(sim_result.community.revenue, 2),
             advertising_revenue=round(sim_result.advertising.revenue, 2),
-            messaging_revenue=round(sim_result.messaging.revenue, 2),
             exchange_revenue=round(sim_result.exchange.revenue, 2),
             platform_fee_revenue=round(sim_result.platform_fees.reward_fee_usd, 2),
             tokens_distributed=round(tokens_distributed, 2),

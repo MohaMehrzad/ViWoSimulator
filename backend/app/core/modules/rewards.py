@@ -240,6 +240,31 @@ def calculate_rewards(params: SimulationParameters, users: int) -> RewardsResult
     │ 14,778 VCoin → Distribution Algorithm → Creators/Consumers  │
     └─────────────────────────────────────────────────────────────┘
     """
+    # Check if module is enabled
+    if not getattr(params, 'enable_rewards', True):
+        return RewardsResult(
+            monthly_emission=0,
+            max_monthly_emission=0,
+            emission_usd=0,
+            op_costs=0,
+            daily_emission=0,
+            daily_reward_pool=0,
+            daily_reward_pool_usd=0,
+            monthly_reward_pool=0,
+            allocation_percent=0,
+            gross_monthly_emission=0,
+            gross_emission_usd=0,
+            platform_fee_vcoin=0,
+            platform_fee_usd=0,
+            is_dynamic_allocation=False,
+            dynamic_allocation_percent=0,
+            growth_factor=0,
+            per_user_monthly_vcoin=0,
+            per_user_monthly_usd=0,
+            allocation_capped=False,
+            effective_users=0,
+        )
+    
     # Maximum monthly emission (fixed cap from tokenomics)
     max_monthly_emission = config.MONTHLY_EMISSION
     

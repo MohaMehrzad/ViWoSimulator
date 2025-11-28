@@ -153,6 +153,777 @@ class ComplianceCosts(BaseModel):
         )
 
 
+class RegionalComplianceCosts(BaseModel):
+    """
+    Regional compliance costs by jurisdiction.
+    
+    Based on 2024-2025 regulatory landscape:
+    - US: SEC frameworks, state-by-state requirements
+    - EU: MiCA regulation (effective 2024-2025)
+    - UK: FCA registration and marketing rules
+    - APAC: Singapore MAS, Hong Kong SFC, Japan JFSA
+    """
+    # United States
+    us_annual: float = Field(
+        default=100000, ge=0,
+        description="US compliance annual cost (SEC, state licensing)"
+    )
+    us_geo_blocking_states: list = Field(
+        default=["NY", "HI"],
+        description="States geo-blocked until licensed"
+    )
+    
+    # European Union (MiCA)
+    eu_mica_annual: float = Field(
+        default=100000, ge=0,
+        description="EU MiCA compliance annual cost"
+    )
+    eu_casp_license_cost: float = Field(
+        default=50000, ge=0,
+        description="CASP license application cost (one-time)"
+    )
+    
+    # United Kingdom
+    uk_fca_annual: float = Field(
+        default=50000, ge=0,
+        description="UK FCA registration annual cost"
+    )
+    
+    # Asia Pacific
+    apac_annual: float = Field(
+        default=100000, ge=0,
+        description="APAC regional annual cost (Singapore, HK, Japan)"
+    )
+    
+    # Ongoing costs
+    kyc_provider_monthly: float = Field(
+        default=2000, ge=0,
+        description="KYC provider monthly cost (Jumio, Onfido tier)"
+    )
+    chainalysis_monthly: float = Field(
+        default=3000, ge=0,
+        description="Transaction monitoring (Chainalysis/Elliptic)"
+    )
+    legal_retainer_monthly: float = Field(
+        default=5000, ge=0,
+        description="Ongoing legal counsel retainer"
+    )
+    
+    @property
+    def year1_total(self) -> float:
+        """Year 1 total compliance cost (partial year for new regions)"""
+        return (
+            self.us_annual * 0.5 +  # Partial year
+            self.eu_mica_annual * 0.5 +
+            self.uk_fca_annual * 0.5 +
+            self.apac_annual * 0.25 +  # Later expansion
+            (self.kyc_provider_monthly + self.chainalysis_monthly + 
+             self.legal_retainer_monthly) * 12
+        )
+    
+    @property
+    def year2_total(self) -> float:
+        """Year 2+ full compliance cost"""
+        return (
+            self.us_annual +
+            self.eu_mica_annual +
+            self.uk_fca_annual +
+            self.apac_annual +
+            (self.kyc_provider_monthly + self.chainalysis_monthly + 
+             self.legal_retainer_monthly) * 12
+        )
+    
+    @property
+    def monthly_ongoing(self) -> float:
+        """Monthly ongoing costs (providers + retainer)"""
+        return (
+            self.kyc_provider_monthly +
+            self.chainalysis_monthly +
+            self.legal_retainer_monthly
+        )
+
+
+# =============================================================================
+# FUTURE MODULES (2026-2028) - All disabled by default
+# =============================================================================
+
+class VChainParameters(BaseModel):
+    """
+    VChain cross-chain network parameters.
+    
+    Launch Timeline: 2027-2028
+    A proprietary cross-chain network enabling seamless interaction
+    between all major blockchain networks through a unified interface.
+    """
+    # Module toggle (DISABLED BY DEFAULT)
+    enable_vchain: bool = Field(
+        default=False,
+        description="Enable VChain cross-chain network module"
+    )
+    
+    # Launch timing
+    vchain_launch_month: int = Field(
+        default=24,  # Month 24 = 2 years after TGE
+        ge=12, le=60,
+        description="Month when VChain launches (1-60)"
+    )
+    
+    # Transaction fees
+    vchain_tx_fee_percent: float = Field(
+        default=0.002,  # 0.2%
+        ge=0.0005, le=0.01,
+        description="Cross-chain transaction fee (0.05%-1%)"
+    )
+    vchain_min_tx_fee_usd: float = Field(
+        default=0.10,
+        ge=0,
+        description="Minimum transaction fee in USD"
+    )
+    vchain_max_tx_fee_usd: float = Field(
+        default=50.0,
+        ge=0,
+        description="Maximum transaction fee in USD"
+    )
+    
+    # Bridge fees
+    vchain_bridge_fee_percent: float = Field(
+        default=0.001,  # 0.1%
+        ge=0.0001, le=0.005,
+        description="Bridge fee percentage"
+    )
+    
+    # Gas abstraction
+    vchain_gas_markup_percent: float = Field(
+        default=0.08,  # 8% markup
+        ge=0.0, le=0.20,
+        description="Markup on gas abstraction"
+    )
+    
+    # Volume projections (VALIDATED: Reduced to realistic Year 1 levels)
+    vchain_monthly_tx_volume_usd: float = Field(
+        default=25_000_000,  # $25M monthly - realistic Year 1
+        ge=0,
+        description="Projected monthly cross-chain volume"
+    )
+    vchain_monthly_bridge_volume_usd: float = Field(
+        default=50_000_000,  # $50M monthly - realistic Year 1
+        ge=0,
+        description="Projected monthly bridge volume"
+    )
+    
+    # Validator economics
+    vchain_validator_apy: float = Field(
+        default=0.10,  # 10%
+        ge=0.0, le=0.30,
+        description="Validator staking APY"
+    )
+    vchain_min_validator_stake: float = Field(
+        default=100000,
+        ge=0,
+        description="Minimum VCoin stake to run validator"
+    )
+    vchain_validator_count: int = Field(
+        default=100,
+        ge=10, le=1000,
+        description="Target number of validators"
+    )
+    
+    # Enterprise API
+    vchain_enterprise_clients: int = Field(
+        default=10,
+        ge=0, le=1000,
+        description="Number of enterprise API clients"
+    )
+    vchain_avg_enterprise_revenue: float = Field(
+        default=5000,  # $5K/month average
+        ge=0,
+        description="Average enterprise client monthly revenue"
+    )
+
+
+class MarketplaceParameters(BaseModel):
+    """
+    Marketplace physical/digital goods parameters.
+    
+    Launch Timeline: 2026-2027
+    A full-featured marketplace for physical products, digital goods,
+    NFTs, and services with cryptocurrency payments.
+    """
+    # Module toggle (DISABLED BY DEFAULT)
+    enable_marketplace: bool = Field(
+        default=False,
+        description="Enable Marketplace module"
+    )
+    
+    # Launch timing
+    marketplace_launch_month: int = Field(
+        default=18,  # Month 18 = 1.5 years after TGE
+        ge=6, le=60,
+        description="Month when Marketplace launches (1-60)"
+    )
+    
+    # Commission rates (VALIDATED against industry benchmarks Nov 2025)
+    # Amazon: 8-15%, eBay: 10-15%, App Store: 30%, Steam: 30%
+    marketplace_physical_commission: float = Field(
+        default=0.08,  # 8% (industry: 8-15%)
+        ge=0.05, le=0.15,
+        description="Commission on physical goods sales"
+    )
+    marketplace_digital_commission: float = Field(
+        default=0.15,  # 15% (industry: 15-30%)
+        ge=0.08, le=0.25,
+        description="Commission on digital goods sales"
+    )
+    marketplace_nft_commission: float = Field(
+        default=0.025,  # 2.5%
+        ge=0.01, le=0.10,
+        description="Commission on NFT sales"
+    )
+    marketplace_service_commission: float = Field(
+        default=0.08,  # 8%
+        ge=0.03, le=0.15,
+        description="Commission on service transactions"
+    )
+    marketplace_max_commission_usd: float = Field(
+        default=500,
+        ge=0,
+        description="Maximum commission per transaction"
+    )
+    
+    # Payment processing
+    marketplace_crypto_payment_fee: float = Field(
+        default=0.01,  # 1%
+        ge=0, le=0.05,
+        description="Crypto payment processing fee"
+    )
+    marketplace_escrow_fee: float = Field(
+        default=0.01,  # 1%
+        ge=0, le=0.05,
+        description="Escrow service fee"
+    )
+    
+    # Volume projections
+    marketplace_monthly_gmv_usd: float = Field(
+        default=5_000_000,  # $5M GMV monthly
+        ge=0,
+        description="Projected monthly Gross Merchandise Value"
+    )
+    marketplace_gmv_physical_percent: float = Field(
+        default=0.40,
+        ge=0, le=1.0,
+        description="Physical goods GMV percentage"
+    )
+    marketplace_gmv_digital_percent: float = Field(
+        default=0.35,
+        ge=0, le=1.0,
+        description="Digital goods GMV percentage"
+    )
+    marketplace_gmv_nft_percent: float = Field(
+        default=0.10,
+        ge=0, le=1.0,
+        description="NFT GMV percentage"
+    )
+    marketplace_gmv_services_percent: float = Field(
+        default=0.15,
+        ge=0, le=1.0,
+        description="Services GMV percentage"
+    )
+    
+    # Seller metrics
+    marketplace_active_sellers: int = Field(
+        default=1000,
+        ge=0,
+        description="Number of active sellers"
+    )
+    marketplace_verified_seller_rate: float = Field(
+        default=0.15,  # 15%
+        ge=0, le=1.0,
+        description="Percentage of verified sellers"
+    )
+    marketplace_store_subscription_rate: float = Field(
+        default=0.10,  # 10%
+        ge=0, le=1.0,
+        description="Percentage of sellers with store subscriptions"
+    )
+    
+    # Listing fees (in VCoin)
+    marketplace_featured_listing_fee: float = Field(
+        default=10,
+        ge=0,
+        description="Featured listing fee in VCoin"
+    )
+    marketplace_store_subscription_fee: float = Field(
+        default=100,
+        ge=0,
+        description="Monthly store subscription fee in VCoin"
+    )
+    
+    # Advertising
+    marketplace_ad_cpc: float = Field(
+        default=0.25,  # $0.25 CPC
+        ge=0,
+        description="Cost per click for sponsored listings"
+    )
+    marketplace_monthly_ad_clicks: int = Field(
+        default=50000,
+        ge=0,
+        description="Monthly sponsored listing clicks"
+    )
+
+
+class BusinessHubParameters(BaseModel):
+    """
+    Business Hub freelancer/startup ecosystem parameters.
+    
+    Launch Timeline: Mid-2027
+    A comprehensive business ecosystem for freelancers, startups,
+    and established businesses with job matching, funding, and project management.
+    """
+    # Module toggle (DISABLED BY DEFAULT)
+    enable_business_hub: bool = Field(
+        default=False,
+        description="Enable Business Hub module"
+    )
+    
+    # Launch timing
+    business_hub_launch_month: int = Field(
+        default=21,  # Month 21 = Mid-2027
+        ge=12, le=60,
+        description="Month when Business Hub launches (1-60)"
+    )
+    
+    # Freelancer platform
+    freelancer_job_posting_fee: float = Field(
+        default=20,  # VCoin
+        ge=0,
+        description="Job posting fee in VCoin"
+    )
+    # VALIDATED: Upwork 10-20%, Fiverr 20%, Toptal 30-50%
+    freelancer_commission_rate: float = Field(
+        default=0.12,  # 12% (industry: 10-20%)
+        ge=0.08, le=0.20,
+        description="Freelancer earnings commission"
+    )
+    freelancer_escrow_fee: float = Field(
+        default=0.02,  # 2%
+        ge=0, le=0.05,
+        description="Escrow service fee"
+    )
+    freelancer_monthly_transactions_usd: float = Field(
+        default=500_000,  # $500K/month
+        ge=0,
+        description="Monthly freelance transaction volume"
+    )
+    freelancer_active_count: int = Field(
+        default=5000,
+        ge=0,
+        description="Active freelancers on platform"
+    )
+    
+    # Startup launchpad
+    startup_monthly_registrations: int = Field(
+        default=50,
+        ge=0,
+        description="New startup registrations per month"
+    )
+    startup_registration_fee: float = Field(
+        default=500,  # VCoin
+        ge=0,
+        description="Startup registration fee in VCoin"
+    )
+    accelerator_participants: int = Field(
+        default=10,
+        ge=0,
+        description="Monthly accelerator participants"
+    )
+    accelerator_fee: float = Field(
+        default=10000,  # VCoin
+        ge=0,
+        description="Accelerator program fee in VCoin"
+    )
+    
+    # Funding portal
+    funding_portal_monthly_volume: float = Field(
+        default=2_000_000,  # $2M raised monthly
+        ge=0,
+        description="Monthly funding facilitated"
+    )
+    funding_platform_fee: float = Field(
+        default=0.04,  # 4% average
+        ge=0.02, le=0.10,
+        description="Average funding platform fee"
+    )
+    investor_network_members: int = Field(
+        default=200,
+        ge=0,
+        description="Investor network members"
+    )
+    investor_network_fee: float = Field(
+        default=5000,  # VCoin/year
+        ge=0,
+        description="Annual investor network fee in VCoin"
+    )
+    
+    # Project management SaaS
+    pm_free_users: int = Field(
+        default=10000,
+        ge=0,
+        description="Free tier project management users"
+    )
+    pm_professional_users: int = Field(
+        default=1000,
+        ge=0,
+        description="Professional tier users"
+    )
+    pm_professional_fee: float = Field(
+        default=100,  # VCoin/month
+        ge=0,
+        description="Professional tier monthly fee in VCoin"
+    )
+    pm_business_users: int = Field(
+        default=200,
+        ge=0,
+        description="Business tier users"
+    )
+    pm_business_fee: float = Field(
+        default=500,  # VCoin/month
+        ge=0,
+        description="Business tier monthly fee in VCoin"
+    )
+    pm_enterprise_users: int = Field(
+        default=20,
+        ge=0,
+        description="Enterprise tier users"
+    )
+    pm_enterprise_fee: float = Field(
+        default=2000,  # VCoin/month
+        ge=0,
+        description="Enterprise tier monthly fee in VCoin"
+    )
+    
+    # Learning academy
+    academy_monthly_course_sales: int = Field(
+        default=500,
+        ge=0,
+        description="Monthly course sales"
+    )
+    academy_avg_course_price: float = Field(
+        default=150,  # VCoin
+        ge=0,
+        description="Average course price in VCoin"
+    )
+    academy_platform_share: float = Field(
+        default=0.30,  # 30% platform, 70% instructor
+        ge=0.10, le=0.50,
+        description="Platform share of course sales"
+    )
+    academy_subscription_users: int = Field(
+        default=300,
+        ge=0,
+        description="Monthly subscription users"
+    )
+    academy_subscription_fee: float = Field(
+        default=200,  # VCoin/month
+        ge=0,
+        description="Monthly academy subscription fee in VCoin"
+    )
+
+
+class CrossPlatformParameters(BaseModel):
+    """
+    Cross-platform content sharing and account renting parameters.
+    
+    Launch Timeline: Start of 2027
+    A revolutionary feature allowing users to share, syndicate, or rent
+    access to social media accounts across platforms.
+    """
+    # Module toggle (DISABLED BY DEFAULT)
+    enable_cross_platform: bool = Field(
+        default=False,
+        description="Enable Cross-Platform content sharing module"
+    )
+    
+    # Launch timing
+    cross_platform_launch_month: int = Field(
+        default=15,  # Month 15 = Start of 2027
+        ge=6, le=60,
+        description="Month when Cross-Platform launches (1-60)"
+    )
+    
+    # Content sharing subscriptions
+    cross_platform_creator_tier_fee: float = Field(
+        default=100,  # VCoin/month
+        ge=0,
+        description="Creator tier monthly fee in VCoin"
+    )
+    cross_platform_professional_tier_fee: float = Field(
+        default=300,  # VCoin/month
+        ge=0,
+        description="Professional tier monthly fee in VCoin"
+    )
+    cross_platform_agency_tier_fee: float = Field(
+        default=1000,  # VCoin/month
+        ge=0,
+        description="Agency tier monthly fee in VCoin"
+    )
+    cross_platform_creator_subscribers: int = Field(
+        default=2000,
+        ge=0,
+        description="Creator tier subscribers"
+    )
+    cross_platform_professional_subscribers: int = Field(
+        default=500,
+        ge=0,
+        description="Professional tier subscribers"
+    )
+    cross_platform_agency_subscribers: int = Field(
+        default=50,
+        ge=0,
+        description="Agency tier subscribers"
+    )
+    
+    # Account renting
+    cross_platform_monthly_rental_volume: float = Field(
+        default=500_000,  # $500K monthly rental volume
+        ge=0,
+        description="Monthly account rental transaction volume"
+    )
+    # VALIDATED: Similar to influencer/creator platforms 15-20%
+    cross_platform_rental_commission: float = Field(
+        default=0.15,  # 15% (industry: 15-20%)
+        ge=0.10, le=0.25,
+        description="Average rental commission rate"
+    )
+    cross_platform_escrow_fee: float = Field(
+        default=0.02,  # 2%
+        ge=0, le=0.05,
+        description="Escrow fee on rentals"
+    )
+    cross_platform_active_renters: int = Field(
+        default=5000,
+        ge=0,
+        description="Active account renters"
+    )
+    cross_platform_active_owners: int = Field(
+        default=1000,
+        ge=0,
+        description="Active account owners renting out"
+    )
+    
+    # Insurance
+    cross_platform_insurance_take_rate: float = Field(
+        default=0.50,  # 50% of transactions buy insurance
+        ge=0, le=1.0,
+        description="Percentage of rentals with insurance"
+    )
+    cross_platform_insurance_rate: float = Field(
+        default=0.03,  # 3% average premium
+        ge=0, le=0.10,
+        description="Average insurance premium rate"
+    )
+    
+    # Verification
+    cross_platform_monthly_verifications: int = Field(
+        default=200,
+        ge=0,
+        description="Monthly account verifications"
+    )
+    cross_platform_verification_fee: float = Field(
+        default=50,  # VCoin
+        ge=0,
+        description="Account verification fee in VCoin"
+    )
+    cross_platform_premium_verified_users: int = Field(
+        default=100,
+        ge=0,
+        description="Premium verified badge holders"
+    )
+    cross_platform_premium_verified_fee: float = Field(
+        default=500,  # VCoin/year
+        ge=0,
+        description="Premium verified annual fee in VCoin"
+    )
+    
+    # Analytics
+    cross_platform_advanced_analytics_users: int = Field(
+        default=300,
+        ge=0,
+        description="Advanced analytics subscribers"
+    )
+    cross_platform_analytics_fee: float = Field(
+        default=50,  # VCoin/month
+        ge=0,
+        description="Advanced analytics monthly fee in VCoin"
+    )
+    cross_platform_api_users: int = Field(
+        default=50,
+        ge=0,
+        description="API access subscribers"
+    )
+    cross_platform_api_fee: float = Field(
+        default=500,  # VCoin/month
+        ge=0,
+        description="API access monthly fee in VCoin"
+    )
+    
+    # Content licensing
+    cross_platform_monthly_license_volume: float = Field(
+        default=100_000,  # $100K monthly license volume
+        ge=0,
+        description="Monthly content licensing volume"
+    )
+    cross_platform_license_commission: float = Field(
+        default=0.20,  # 20%
+        ge=0.10, le=0.30,
+        description="Content licensing commission"
+    )
+
+
+class ReferralParameters(BaseModel):
+    """
+    Referral program configuration (2025 Standards).
+    
+    Tiered rewards system for user acquisition:
+    - Starter: 1-10 referrals, 50 VCoin/ref, max 500/mo
+    - Builder: 11-50 referrals, 75 VCoin/ref, max 3000/mo
+    - Ambassador: 51-200 referrals, 100 VCoin/ref, max 10000/mo
+    - Partner: 200+ referrals, negotiated rates
+    """
+    enable_referral: bool = Field(
+        default=True,
+        description="Enable referral program in simulation"
+    )
+    qualification_rate: float = Field(
+        default=0.70, ge=0.50, le=0.95,
+        description="Percentage of referrals that meet qualification criteria"
+    )
+    active_referrer_rate: float = Field(
+        default=0.15, ge=0.05, le=0.40,
+        description="Percentage of users who actively refer others"
+    )
+    sybil_rejection_rate: float = Field(
+        default=0.05, ge=0.01, le=0.20,
+        description="Percentage of referrals flagged as sybil attacks"
+    )
+    starter_bonus_vcoin: float = Field(
+        default=50.0, ge=10, le=200,
+        description="Bonus per referral for Starter tier"
+    )
+    builder_bonus_vcoin: float = Field(
+        default=75.0, ge=25, le=300,
+        description="Bonus per referral for Builder tier"
+    )
+    ambassador_bonus_vcoin: float = Field(
+        default=100.0, ge=50, le=500,
+        description="Bonus per referral for Ambassador tier"
+    )
+    qualification_days: int = Field(
+        default=7, ge=3, le=30,
+        description="Days referee must be active to qualify"
+    )
+    min_posts_required: int = Field(
+        default=5, ge=1, le=20,
+        description="Minimum posts referee must make to qualify"
+    )
+
+
+class PointsParameters(BaseModel):
+    """
+    Pre-launch points system configuration (2025 Standards).
+    
+    Points earned before TGE convert to tokens:
+    - Pool: 10,000,000 VCoin (1% of supply)
+    - Formula: user_tokens = (user_points / total_points) × pool
+    """
+    enable_points: bool = Field(
+        default=True,
+        description="Enable pre-launch points system"
+    )
+    points_pool_tokens: int = Field(
+        default=10_000_000, ge=1_000_000, le=50_000_000,
+        description="Token pool for points conversion (1% of supply default)"
+    )
+    participation_rate: float = Field(
+        default=0.80, ge=0.50, le=1.0,
+        description="Percentage of waitlist that earns points"
+    )
+    sybil_rejection_rate: float = Field(
+        default=0.05, ge=0.01, le=0.20,
+        description="Percentage of suspicious accounts rejected"
+    )
+    waitlist_signup_points: int = Field(
+        default=100, ge=50, le=500,
+        description="Points for waitlist signup"
+    )
+    social_follow_points: int = Field(
+        default=25, ge=10, le=100,
+        description="Points per social platform follow"
+    )
+    daily_checkin_points: int = Field(
+        default=5, ge=1, le=20,
+        description="Points for daily check-in"
+    )
+    invite_join_points: int = Field(
+        default=50, ge=20, le=200,
+        description="Points when invited friend joins waitlist"
+    )
+    invite_verify_points: int = Field(
+        default=100, ge=50, le=500,
+        description="Points when invited friend verifies email"
+    )
+    beta_testing_points: int = Field(
+        default=500, ge=100, le=2000,
+        description="Points for beta testing participation"
+    )
+
+
+class GaslessParameters(BaseModel):
+    """
+    Gasless onboarding configuration (2025 Standards).
+    
+    Sponsored transactions for seamless UX:
+    - New users: First 10 transactions free
+    - Verified: 50/month
+    - Premium: Unlimited
+    """
+    enable_gasless: bool = Field(
+        default=True,
+        description="Enable gasless transaction sponsorship"
+    )
+    new_user_free_transactions: int = Field(
+        default=10, ge=5, le=50,
+        description="Free transactions for new users (one-time)"
+    )
+    verified_user_monthly_transactions: int = Field(
+        default=50, ge=20, le=200,
+        description="Monthly sponsored transactions for verified users"
+    )
+    premium_unlimited: bool = Field(
+        default=True,
+        description="Unlimited sponsored transactions for premium users"
+    )
+    monthly_sponsorship_budget_usd: float = Field(
+        default=5000.0, ge=500, le=100000,
+        description="Monthly budget for transaction sponsorship"
+    )
+    base_transaction_cost_usd: float = Field(
+        default=0.00025, ge=0.0001, le=0.01,
+        description="Base Solana transaction cost in USD"
+    )
+    priority_fee_usd: float = Field(
+        default=0.0001, ge=0.0, le=0.001,
+        description="Optional priority fee in USD"
+    )
+    account_creation_cost_usd: float = Field(
+        default=0.10, ge=0.05, le=0.50,
+        description="One-time account rent cost for new users"
+    )
+    new_user_rate: float = Field(
+        default=0.30, ge=0.10, le=0.60,
+        description="Percentage of users who are new each month"
+    )
+
+
 class RetentionParameters(BaseModel):
     """
     User retention configuration - Issue #1 fix.
@@ -221,9 +992,45 @@ class SimulationParameters(BaseModel):
         default_factory=ComplianceCosts,
         description="Regulatory and compliance costs"
     )
+    regional_compliance: Optional[RegionalComplianceCosts] = Field(
+        default=None,
+        description="Regional compliance costs by jurisdiction"
+    )
     include_compliance_costs: bool = Field(
         default=False,
         description="Include compliance costs in simulation (enable for realistic projections)"
+    )
+    
+    # === FUTURE MODULES (2026-2028) - All disabled by default ===
+    vchain: Optional[VChainParameters] = Field(
+        default=None,
+        description="VChain cross-chain network parameters"
+    )
+    marketplace: Optional[MarketplaceParameters] = Field(
+        default=None,
+        description="Marketplace physical/digital goods parameters"
+    )
+    business_hub: Optional[BusinessHubParameters] = Field(
+        default=None,
+        description="Business Hub freelancer/startup parameters"
+    )
+    cross_platform: Optional[CrossPlatformParameters] = Field(
+        default=None,
+        description="Cross-platform content sharing parameters"
+    )
+    
+    # === PRE-LAUNCH MODULES (NEW - Nov 2025) ===
+    referral: Optional[ReferralParameters] = Field(
+        default_factory=ReferralParameters,
+        description="Referral program parameters"
+    )
+    points: Optional[PointsParameters] = Field(
+        default_factory=PointsParameters,
+        description="Pre-launch points system parameters"
+    )
+    gasless: Optional[GaslessParameters] = Field(
+        default_factory=GaslessParameters,
+        description="Gasless onboarding parameters"
     )
     
     # === GROWTH SCENARIO SETTINGS (NEW - Nov 2025) ===
@@ -311,12 +1118,12 @@ class SimulationParameters(BaseModel):
     # === ECONOMIC PARAMETERS ===
     # Issue #5 - Sustainable token economics (Updated Nov 2025)
     burn_rate: float = Field(
-        default=0.05, ge=0, le=0.10,  # Updated: 3% -> 5% for better recapture
-        description="Burn rate (0-10%, sustainable deflation)"
+        default=0.05, ge=0, le=0.25,  # Updated: max 25% for aggressive deflation
+        description="Burn rate (0-25%, % of collected fees burned)"
     )
     buyback_percent: float = Field(
-        default=0.03, ge=0, le=0.10,  # Updated: 2% -> 3% for better recapture
-        description="Buyback percentage (0-10%)"
+        default=0.03, ge=0, le=0.25,  # Updated: max 25% for aggressive buybacks
+        description="% of USD revenue used to buyback VCoin from market (0-25%)"
     )
     # Issue #3 - Realistic conversion rates
     verification_rate: float = Field(
@@ -325,7 +1132,7 @@ class SimulationParameters(BaseModel):
     )
     # Issue #8 - Realistic posting rates
     posts_per_user: float = Field(
-        default=0.6, ge=0.1, le=5.0,  # Was 3, now 0.6 (10% create × 6 posts)
+        default=0.6, ge=0.1, le=30.0,  # Allow up to 30 posts/month (1 post/day average)
         description="Average posts per user per month (all users)"
     )
     creator_percentage: float = Field(
@@ -390,6 +1197,14 @@ class SimulationParameters(BaseModel):
         default=0.10, ge=0.0, le=0.30,
         description="Annual staking APY (10% default)"
     )
+    staking_participation_rate: float = Field(
+        default=0.15, ge=0.0, le=0.50,
+        description="% of users who stake tokens (15% default, affects Value Accrual)"
+    )
+    avg_stake_amount: float = Field(
+        default=2000, ge=100, le=100000,
+        description="Average stake amount per staker in VCoin"
+    )
     staker_fee_discount: float = Field(
         default=0.30, ge=0.0, le=0.50,
         description="Fee discount for stakers (30% default)"
@@ -402,16 +1217,74 @@ class SimulationParameters(BaseModel):
         default=30, ge=0, le=365,
         description="Minimum stake lock period in days"
     )
+    staking_protocol_fee: float = Field(
+        default=0.05, ge=0.0, le=0.20,
+        description="Protocol fee on staking rewards (5% default)"
+    )
+    
+    # === GOVERNANCE PARAMETERS (NEW - Nov 2025) ===
+    governance_proposal_fee: float = Field(
+        default=100, ge=0,
+        description="Fee to create a governance proposal (VCoin)"
+    )
+    governance_badge_price: float = Field(
+        default=50, ge=0,
+        description="Governance badge NFT price (VCoin)"
+    )
+    governance_premium_fee: float = Field(
+        default=100, ge=0,
+        description="Premium governance features monthly fee (VCoin)"
+    )
+    governance_min_vevcoin_to_vote: float = Field(
+        default=1.0, ge=0,
+        description="Minimum veVCoin to vote"
+    )
+    governance_min_vevcoin_to_propose: float = Field(
+        default=1000.0, ge=0,
+        description="Minimum veVCoin to create proposals"
+    )
+    governance_voting_period_days: int = Field(
+        default=7, ge=1, le=30,
+        description="Voting period duration in days"
+    )
+    
+    # Governance participation settings (affects Value Accrual)
+    governance_participation_rate: float = Field(
+        default=0.10, ge=0.0, le=0.50,
+        description="% of stakers who actively vote (10% default, affects Value Accrual)"
+    )
+    governance_delegation_rate: float = Field(
+        default=0.20, ge=0.0, le=0.80,
+        description="% of non-voters who delegate their votes (20% default)"
+    )
+    governance_avg_lock_weeks: int = Field(
+        default=26, ge=4, le=208,
+        description="Average veVCoin lock duration in weeks (26 = 6 months)"
+    )
+    governance_proposals_per_month: int = Field(
+        default=5, ge=0, le=30,
+        description="Expected number of governance proposals per month"
+    )
     
     # === CREATOR ECONOMY PARAMETERS (NEW - Nov 2025) ===
-    platform_creator_fee: float = Field(
-        default=0.05, ge=0.0, le=0.20,
-        description="Platform fee on creator earnings (5% default)"
+    # Dynamic Boost Post Fee - scales based on users and token price
+    boost_post_target_usd: float = Field(
+        default=0.15, ge=0.01, le=5.0,
+        description="Target USD value for boost post fee"
     )
-    boost_post_fee_vcoin: float = Field(
-        default=5, ge=0,
-        description="VCoin fee to boost a post"
+    boost_post_min_usd: float = Field(
+        default=0.05, ge=0.01, le=1.0,
+        description="Minimum boost post fee in USD"
     )
+    boost_post_max_usd: float = Field(
+        default=0.50, ge=0.05, le=10.0,
+        description="Maximum boost post fee in USD"
+    )
+    boost_post_scale_users: int = Field(
+        default=100000, ge=1000, le=10000000,
+        description="User count at which boost fee reaches minimum"
+    )
+    # Other premium features
     premium_dm_fee_vcoin: float = Field(
         default=2, ge=0,
         description="VCoin fee to DM non-followers"
@@ -422,11 +1295,17 @@ class SimulationParameters(BaseModel):
     )
     
     # === MODULE TOGGLES ===
+    # Core modules (enabled by default)
+    enable_identity: bool = Field(default=True, description="Enable Identity verification module")
+    enable_content: bool = Field(default=True, description="Enable Content creation module")
+    enable_rewards: bool = Field(default=True, description="Enable Rewards distribution module")
+    enable_staking: bool = Field(default=True, description="Enable Staking module")
+    enable_liquidity: bool = Field(default=True, description="Enable Liquidity tracking module")
+    enable_governance: bool = Field(default=True, description="Enable Governance module")
+    # Optional modules
     enable_advertising: bool = Field(default=False, description="Enable advertising module")
-    enable_messaging: bool = Field(default=False, description="Enable messaging module")
-    enable_community: bool = Field(default=False, description="Enable community module")
     enable_exchange: bool = Field(default=True, description="Enable exchange/wallet module")
-    enable_nft: bool = Field(default=False, description="Enable NFT features")  # Issue #12
+    enable_nft: bool = Field(default=True, description="Enable NFT features (enabled by default)")
     
     # === IDENTITY MODULE PRICING (USD) ===
     basic_price: float = Field(default=0, ge=0, description="Basic tier monthly price")
@@ -446,10 +1325,6 @@ class SimulationParameters(BaseModel):
     )
     
     # === CONTENT MODULE PRICING (VCoin) ===
-    # Note: Small fees on media help recapture tokens and generate revenue
-    text_post_fee_vcoin: float = Field(default=0, ge=0, description="Text post fee in VCoin (keep free)")
-    image_post_fee_vcoin: float = Field(default=0.5, ge=0, description="Image post fee in VCoin")
-    video_post_fee_vcoin: float = Field(default=1, ge=0, description="Video post fee in VCoin")
     # Issue #12 - NFT reality (Updated Nov 2025)
     nft_mint_fee_vcoin: float = Field(
         default=50, ge=0,  # Updated: 25 -> 50 for better recapture
@@ -463,15 +1338,6 @@ class SimulationParameters(BaseModel):
     content_sale_volume_vcoin: float = Field(default=500, ge=0, description="Monthly content sale volume")
     content_sale_commission: float = Field(default=0.10, ge=0, le=0.5, description="Content sale commission")
     
-    # === COMMUNITY MODULE PRICING (USD) ===
-    small_community_fee: float = Field(default=0, ge=0, description="Small community monthly fee")
-    medium_community_fee: float = Field(default=3, ge=0, description="Medium community monthly fee")
-    large_community_fee: float = Field(default=10, ge=0, description="Large community monthly fee")
-    enterprise_community_fee: float = Field(default=35, ge=0, description="Enterprise community monthly fee")
-    event_hosting_fee: float = Field(default=2, ge=0, description="Event hosting fee")
-    community_verification_fee: float = Field(default=8, ge=0, description="Community verification fee")
-    community_analytics_fee: float = Field(default=5, ge=0, description="Community analytics fee")
-    
     # === ADVERTISING MODULE PRICING (USD) - Updated Nov 2025 ===
     banner_cpm: float = Field(
         default=0.50, ge=0.05, le=20,  # Updated: $0.50 (viable launch)
@@ -484,14 +1350,6 @@ class SimulationParameters(BaseModel):
     promoted_post_fee: float = Field(default=1.00, ge=0, description="Promoted post fee")
     campaign_management_fee: float = Field(default=20, ge=0, description="Campaign management fee")
     ad_analytics_fee: float = Field(default=15, ge=0, description="Ad analytics subscription fee")
-    
-    # === MESSAGING MODULE PRICING (USD) ===
-    encrypted_dm_fee: float = Field(default=0, ge=0, description="Encrypted DM fee per message")
-    group_chat_fee: float = Field(default=0.25, ge=0, description="Group chat creation fee")
-    file_transfer_fee: float = Field(default=0.02, ge=0, description="File transfer fee")
-    voice_call_fee: float = Field(default=0.01, ge=0, description="Voice/video call fee per minute")
-    message_storage_fee: float = Field(default=0.50, ge=0, description="Message storage monthly fee")
-    messaging_premium_fee: float = Field(default=2, ge=0, description="Messaging premium features fee")
     
     # === EXCHANGE/WALLET MODULE - Issue #4 (Updated Nov 2025) ===
     exchange_swap_fee_percent: float = Field(
@@ -542,22 +1400,22 @@ class SimulationParameters(BaseModel):
     @field_validator('burn_rate', 'buyback_percent')
     @classmethod
     def validate_deflation_rates(cls, v: float) -> float:
-        """Ensure individual deflation rates are sustainable"""
-        if v > 0.10:
-            raise ValueError("Individual burn/buyback rate cannot exceed 10%")
+        """Ensure individual deflation rates are within limits"""
+        if v > 0.25:
+            raise ValueError("Individual burn/buyback rate cannot exceed 25%")
         return v
     
     @model_validator(mode='after')
     def validate_combined_deflation(self) -> 'SimulationParameters':
         """
         Issue #5 fix: Ensure combined burn + buyback is sustainable.
-        Total deflation > 15% is unsustainable for any real token economy.
+        Total deflation > 50% is extremely aggressive but allowed for simulation.
         """
         total_deflation = self.burn_rate + self.buyback_percent
-        if total_deflation > 0.15:
+        if total_deflation > 0.50:
             raise ValueError(
                 f"Combined burn ({self.burn_rate*100}%) + buyback ({self.buyback_percent*100}%) "
-                f"= {total_deflation*100}% exceeds sustainable maximum of 15%"
+                f"= {total_deflation*100}% exceeds maximum of 50%"
             )
         return self
     
@@ -591,6 +1449,28 @@ class SimulationParameters(BaseModel):
             adjustments.get('banner_cpm', self.banner_cpm),
             adjustments.get('video_cpm', self.video_cpm)
         )
+    
+    def get_future_modules_enabled(self) -> list:
+        """Return list of enabled future modules"""
+        enabled = []
+        if self.vchain and self.vchain.enable_vchain:
+            enabled.append('vchain')
+        if self.marketplace and self.marketplace.enable_marketplace:
+            enabled.append('marketplace')
+        if self.business_hub and self.business_hub.enable_business_hub:
+            enabled.append('business_hub')
+        if self.cross_platform and self.cross_platform.enable_cross_platform:
+            enabled.append('cross_platform')
+        return enabled
+    
+    def get_total_compliance_monthly(self) -> float:
+        """Get total monthly compliance cost including regional"""
+        total = 0.0
+        if self.include_compliance_costs:
+            total += self.compliance.monthly_total
+            if self.regional_compliance:
+                total += self.regional_compliance.monthly_ongoing
+        return total
 
     class Config:
         populate_by_name = True

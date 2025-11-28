@@ -35,6 +35,48 @@ from app.config import config
 from app.models import SimulationParameters, ModuleResult
 
 
+def calculate_dynamic_boost_fee(
+    users: int,
+    token_price: float,
+    target_usd: float = 0.15,
+    min_usd: float = 0.05,
+    max_usd: float = 0.50,
+    scale_users: int = 100000,
+) -> dict:
+    """
+    Calculate dynamic boost post fee that:
+    1. Converts target USD to VCoin based on token price
+    2. Scales down from target to min as users grow toward scale_users
+    
+    Args:
+        users: Current user count
+        token_price: Current VCoin price in USD
+        target_usd: Starting target USD value for boost fee
+        min_usd: Minimum USD fee (at scale_users)
+        max_usd: Maximum USD fee cap
+        scale_users: User count at which fee reaches minimum
+    
+    Returns:
+        dict with fee_vcoin, fee_usd, and scaling info
+    """
+    # Scale factor: 1.0 at 0 users, approaches 0 at scale_users
+    scale_factor = max(0, 1 - (users / scale_users))
+    
+    # Fee starts at target, scales down to min as users grow
+    fee_usd = min_usd + (target_usd - min_usd) * scale_factor
+    fee_usd = max(min_usd, min(max_usd, fee_usd))
+    
+    # Convert to VCoin based on current token price
+    fee_vcoin = fee_usd / token_price if token_price > 0 else 0
+    
+    return {
+        'fee_vcoin': round(fee_vcoin, 2),
+        'fee_usd': round(fee_usd, 4),
+        'scale_factor': round(scale_factor, 4),
+        'is_at_minimum': users >= scale_users,
+    }
+
+
 def calculate_content(params: SimulationParameters, users: int) -> ModuleResult:
     """
     Calculate Content module with BREAK-EVEN anti-bot model.
@@ -48,6 +90,26 @@ def calculate_content(params: SimulationParameters, users: int) -> ModuleResult:
     
     The platform makes money from 5% Reward Fee, NOT from content fees.
     """
+    # Check if module is enabled
+    if not getattr(params, 'enable_content', True):
+        return ModuleResult(
+            revenue=0,
+            costs=0,
+            profit=0,
+            margin=0,
+            breakdown={
+                'enabled': False,
+                'creators': 0,
+                'monthly_posts': 0,
+                'text_posts': 0,
+                'image_posts': 0,
+                'video_posts': 0,
+                'nft_mints': 0,
+                'total_vcoin_collected': 0,
+                'net_vcoin_collected': 0,
+            }
+        )
+    
     # === USER SEGMENTATION ===
     
     # Creator percentage (10-18% of users create content)
@@ -143,12 +205,23 @@ def calculate_content(params: SimulationParameters, users: int) -> ModuleResult:
     
     # === OPTIONAL PREMIUM FEATURES (User Choice, Not Required) ===
     
-    # Boost posts - OPTIONAL, users choose to pay for visibility
-    boost_post_fee = getattr(params, 'boost_post_fee_vcoin', 5)
+    # Boost posts - DYNAMIC FEE based on users and token price
+    # Fee scales down as platform grows (more affordable for larger platforms)
+    boost_fee_data = calculate_dynamic_boost_fee(
+        users=users,
+        token_price=params.token_price,
+        target_usd=getattr(params, 'boost_post_target_usd', 0.15),
+        min_usd=getattr(params, 'boost_post_min_usd', 0.05),
+        max_usd=getattr(params, 'boost_post_max_usd', 0.50),
+        scale_users=getattr(params, 'boost_post_scale_users', 100000),
+    )
+    boost_post_fee_vcoin = boost_fee_data['fee_vcoin']
+    boost_post_fee_usd = boost_fee_data['fee_usd']
+    
     boost_rate = config.ACTIVITY_RATES.get('BOOSTED_POSTS', 0.05)
     boosted_posts = int(total_posts * boost_rate)
-    boost_fees_vcoin = boosted_posts * boost_post_fee
-    boost_fees_usd = boost_fees_vcoin * params.token_price
+    boost_fees_vcoin = boosted_posts * boost_post_fee_vcoin
+    boost_fees_usd = boosted_posts * boost_post_fee_usd
     
     # Premium DMs - OPTIONAL, pay to message non-followers
     premium_dm_fee = getattr(params, 'premium_dm_fee_vcoin', 2)
@@ -166,7 +239,7 @@ def calculate_content(params: SimulationParameters, users: int) -> ModuleResult:
     premium_reaction_vcoin = total_premium_reactions * premium_reaction_fee
     premium_reaction_usd = premium_reaction_vcoin * params.token_price
     
-    # === CREATOR EARNINGS (Platform takes 0% - Creators keep 100%) ===
+    # === CREATOR EARNINGS (Creators keep 100%) ===
     # Platform does NOT take a cut of creator earnings
     # Revenue comes from 5% Reward Fee instead
     
@@ -175,26 +248,20 @@ def calculate_content(params: SimulationParameters, users: int) -> ModuleResult:
     
     content_sale_volume_usd = params.content_sale_volume_vcoin * params.token_price
     
-    # Tips flow 100% to creators (no platform fee)
+    # Tips flow 100% to creators
     tipping_users = int(users * 0.10)
     avg_tip_usd = 2.0
     total_tips_usd = tipping_users * avg_tip_usd
     
-    # Creator total earnings (they keep 100% minus platform fee if enabled)
+    # Creator total earnings (they keep 100%)
     creator_earnings_usd = premium_content_volume_usd + total_tips_usd + content_sale_volume_usd
-    
-    # Issue #5 Fix: Use platform_creator_fee parameter instead of hardcoded 0
-    # Default is 0 (creators keep 100%), but can be configured to charge platform fee
-    platform_creator_fee_rate = getattr(params, 'platform_creator_fee', 0.0)
-    platform_fee_from_creators = creator_earnings_usd * platform_creator_fee_rate
     
     # === TOTAL REVENUE (Designed to Equal Costs) ===
     
     # Revenue sources (minimal, just covers costs):
     # 1. Anti-bot fees (after refunds) - minimal
     # 2. NFT processing fees - break-even with Solana costs
-    # 3. Optional premium features - user choice
-    # 4. Platform creator fee (if enabled) - Issue #5 fix
+    # 3. Optional premium features - user choice (boost, DMs, reactions)
     
     # Core posting revenue (break-even anti-bot)
     core_posting_revenue = effective_anti_bot_revenue + nft_fees_usd
@@ -202,8 +269,8 @@ def calculate_content(params: SimulationParameters, users: int) -> ModuleResult:
     # Optional premium revenue (users opt-in)
     optional_premium_revenue = boost_fees_usd + premium_dm_usd + premium_reaction_usd
     
-    # Total revenue (includes platform creator fee if enabled)
-    total_revenue = core_posting_revenue + optional_premium_revenue + platform_fee_from_creators
+    # Total revenue
+    total_revenue = core_posting_revenue + optional_premium_revenue
     
     # === COSTS ===
     
@@ -281,6 +348,11 @@ def calculate_content(params: SimulationParameters, users: int) -> ModuleResult:
             'boosted_posts': boosted_posts,
             'boost_fees_vcoin': round(boost_fees_vcoin, 2),
             'boost_fees_usd': round(boost_fees_usd, 2),
+            # Dynamic boost fee info
+            'boost_post_fee_vcoin': boost_post_fee_vcoin,
+            'boost_post_fee_usd': boost_post_fee_usd,
+            'boost_scale_factor': boost_fee_data['scale_factor'],
+            'boost_is_at_minimum': boost_fee_data['is_at_minimum'],
             'premium_dms': total_premium_dms,
             'premium_dm_vcoin': round(premium_dm_vcoin, 2),
             'premium_dm_usd': round(premium_dm_usd, 2),
@@ -288,14 +360,11 @@ def calculate_content(params: SimulationParameters, users: int) -> ModuleResult:
             'premium_reaction_vcoin': round(premium_reaction_vcoin, 2),
             'premium_reaction_usd': round(premium_reaction_usd, 2),
             
-            # Creator earnings (minus platform fee if enabled)
+            # Creator earnings (100% to creators)
             'creator_earnings_usd': round(creator_earnings_usd, 2),
             'total_tips_usd': round(total_tips_usd, 2),
             'premium_content_volume_usd': round(premium_content_volume_usd, 2),
             'content_sale_volume_usd': round(content_sale_volume_usd, 2),
-            # Issue #5 Fix: Show actual platform_creator_fee values
-            'platform_creator_fee': round(platform_fee_from_creators, 2),
-            'platform_creator_fee_rate': round(platform_creator_fee_rate, 4),
             
             # VCoin tracking for recapture
             'total_vcoin_collected': round(total_vcoin_collected, 2),

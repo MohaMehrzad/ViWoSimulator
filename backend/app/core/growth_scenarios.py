@@ -488,6 +488,157 @@ MARKET_CONDITIONS: Dict[MarketCondition, MarketConditionConfig] = {
 
 
 # ============================================================================
+# 5-YEAR MARKET CYCLE ANALYSIS (2025-2030)
+# ============================================================================
+
+@dataclass
+class MarketCycleYearConfig:
+    """Year-specific market cycle configuration"""
+    year: int
+    phase: str                    # Market cycle phase
+    growth_multiplier: float      # Affects user acquisition
+    retention_multiplier: float   # Affects retention rates
+    price_multiplier: float       # Affects token price trajectory
+    description: str
+
+
+# Bitcoin Halving April 2024 - Market cycle analysis for 2025-2030
+# Based on historical halving cycles and 2024-2025 market conditions
+MARKET_CYCLE_2025_2030: Dict[int, MarketCycleYearConfig] = {
+    2025: MarketCycleYearConfig(
+        year=2025,
+        phase="Early Bull / Post-Halving Rally",
+        growth_multiplier=1.3,
+        retention_multiplier=1.1,
+        price_multiplier=1.5,
+        description="Bitcoin halving (April 2024) effect in full swing. "
+                    "Increased crypto interest, new users entering market. "
+                    "Altcoin season typically begins 12-18 months post-halving."
+    ),
+    2026: MarketCycleYearConfig(
+        year=2026,
+        phase="Peak Bull / Altcoin Season",
+        growth_multiplier=1.6,
+        retention_multiplier=1.15,
+        price_multiplier=2.5,
+        description="Peak of bull cycle expected. Maximum FOMO, highest valuations. "
+                    "Social tokens and SocialFi projects see maximum interest. "
+                    "Token launch timing optimal (March 2026 TGE)."
+    ),
+    2027: MarketCycleYearConfig(
+        year=2027,
+        phase="Late Bull / Distribution",
+        growth_multiplier=1.2,
+        retention_multiplier=1.0,
+        price_multiplier=1.8,
+        description="Distribution phase begins. Smart money taking profits. "
+                    "New user acquisition slows but platform maturity increases. "
+                    "Focus on retention and utility over speculation."
+    ),
+    2028: MarketCycleYearConfig(
+        year=2028,
+        phase="Bear / Accumulation",
+        growth_multiplier=0.7,
+        retention_multiplier=0.85,
+        price_multiplier=0.5,
+        description="Next halving approaches (expected April 2028). Bear market conditions. "
+                    "CAC increases, retention becomes critical. "
+                    "Building phase - focus on product and community."
+    ),
+    2029: MarketCycleYearConfig(
+        year=2029,
+        phase="Recovery / New Cycle Begins",
+        growth_multiplier=1.1,
+        retention_multiplier=1.0,
+        price_multiplier=1.0,
+        description="Post-halving recovery begins. Market sentiment improving. "
+                    "Platform is mature with established user base. "
+                    "Positioned for next growth cycle."
+    ),
+    2030: MarketCycleYearConfig(
+        year=2030,
+        phase="Early Bull / Mature Platform",
+        growth_multiplier=1.4,
+        retention_multiplier=1.1,
+        price_multiplier=1.5,
+        description="New bull cycle in progress. Platform has 4+ years of operation. "
+                    "Established brand, lower CAC, high retention. "
+                    "Expansion into new markets and features."
+    ),
+}
+
+
+def get_cycle_multipliers(year: int, base_month: int = 0) -> Dict[str, float]:
+    """
+    Get market cycle multipliers for a specific year.
+    
+    Args:
+        year: Calendar year (2025-2030)
+        base_month: Month within the year (0-11) for fine-grained adjustments
+    
+    Returns:
+        Dictionary with growth, retention, and price multipliers
+    """
+    if year not in MARKET_CYCLE_2025_2030:
+        # Default to neutral for years outside range
+        return {
+            "growth_multiplier": 1.0,
+            "retention_multiplier": 1.0,
+            "price_multiplier": 1.0,
+            "phase": "Unknown",
+        }
+    
+    config = MARKET_CYCLE_2025_2030[year]
+    
+    # Optional: Add monthly variance within the year
+    # e.g., Q4 tends to be stronger (holiday season)
+    monthly_adjustment = 1.0
+    if base_month >= 9:  # Oct-Dec
+        monthly_adjustment = 1.1  # 10% boost
+    elif base_month >= 6:  # Jul-Sep
+        monthly_adjustment = 0.95  # Summer lull
+    
+    return {
+        "growth_multiplier": config.growth_multiplier * monthly_adjustment,
+        "retention_multiplier": config.retention_multiplier,
+        "price_multiplier": config.price_multiplier,
+        "phase": config.phase,
+        "description": config.description,
+    }
+
+
+def get_5_year_projection_multipliers(start_year: int = 2025, start_month: int = 3) -> List[Dict]:
+    """
+    Get month-by-month multipliers for a 60-month (5-year) projection.
+    
+    Args:
+        start_year: Starting year (default 2025)
+        start_month: Starting month 1-12 (default March = 3)
+    
+    Returns:
+        List of 60 monthly multiplier dictionaries
+    """
+    projections = []
+    current_year = start_year
+    current_month = start_month
+    
+    for month_index in range(60):
+        multipliers = get_cycle_multipliers(current_year, current_month - 1)
+        multipliers["month"] = month_index + 1
+        multipliers["calendar_year"] = current_year
+        multipliers["calendar_month"] = current_month
+        projections.append(multipliers)
+        
+        # Advance month
+        current_month += 1
+        if current_month > 12:
+            current_month = 1
+            current_year += 1
+    
+    return projections
+
+
+# ============================================================================
 # GROWTH CALCULATION FUNCTIONS
 # ============================================================================
 

@@ -1,29 +1,25 @@
 """
 Recapture calculations - token burn, buyback, staking, treasury.
 
-=== UPDATED: Break-Even Content Module Integration (November 2025) ===
+=== UPDATED: Revenue-Based Buybacks (November 2025) ===
 
-MAJOR CHANGES:
-- Content module now operates at BREAK-EVEN (no profit, bot deterrent only)
-- Platform revenue comes from 5% REWARD FEE (see rewards.py)
-- VCoin collected from content is largely refunded to engaged users
-- Only NET VCoin collected contributes to recapture
-- Treasury receives configurable % of platform revenue (default 20%)
+CRITICAL FIX: Buybacks now use USD REVENUE to purchase tokens from market.
 
 TOKEN FLOW MODEL:
 1. Users EARN VCoin through rewards (monthly emission)
 2. Platform takes 5% fee BEFORE distribution (primary revenue)
 3. Users SPEND a portion of earned VCoin in the platform (velocity)
-4. The platform RECAPTURES a portion of spent VCoin (burn/buyback/stake)
-5. Treasury receives 20% of platform revenue for governance
+4. Platform RECAPTURES spent VCoin through:
+   - BURN: % of collected VCoin is destroyed (deflationary)
+   - TREASURY: % of collected VCoin goes to DAO treasury
+   - STAKING: Tokens locked by users for rewards
+5. BUYBACKS: % of USD REVENUE is used to BUY VCoin from market
+   - This creates actual buy pressure
+   - Bought tokens can be burned or added to treasury
 
-Content Module VCoin Flow (Break-Even):
-- Collected from anti-bot fees → Refunded to engaged users (80%)
-- Only 20% of anti-bot fees contribute to recapture
-- Premium features (boost, DMs, reactions) fully contribute
-
-Key insight: Recapture is based on TOKEN VELOCITY - how much of the emitted 
-tokens flow back through the economy via platform features.
+Key distinction:
+- Burns reduce supply from transaction fees (VCoin flow)
+- Buybacks create buy pressure using protocol profits (USD flow)
 """
 
 from app.config import config
@@ -90,10 +86,6 @@ def calculate_token_velocity(
     
     if params.enable_exchange:
         utility_multiplier += 0.2  # Exchange adds significant utility
-    if params.enable_community:
-        utility_multiplier += 0.1  # Community features
-    if params.enable_messaging:
-        utility_multiplier += 0.1  # Messaging premium features
     if params.enable_advertising:
         utility_multiplier += 0.1  # Advertisers spend tokens
     
@@ -124,15 +116,25 @@ def calculate_token_velocity(
     # Tokens spent = emission * spend rate
     tokens_spent = monthly_emission * effective_spend_rate
     
-    # Staking rate - tokens locked
+    # Staking rate - tokens locked (now uses user-configured participation rate)
     staking_apy = getattr(params, 'staking_apy', 0.10)
-    base_stake_rate = 0.05  # 5% of emission locked in staking
+    staking_participation = getattr(params, 'staking_participation_rate', 0.15)
     
+    # Base stake rate from participation (15% participation = 15% of tokens locked)
+    base_stake_rate = staking_participation
+    
+    # APY modifier: Higher APY encourages more staking
+    if staking_apy >= 0.15:
+        base_stake_rate *= 1.2  # 20% more staking at 15%+ APY
+    elif staking_apy >= 0.10:
+        base_stake_rate *= 1.1  # 10% more staking at 10%+ APY
+    
+    # Exchange staker discounts encourage staking
     if params.enable_exchange:
-        base_stake_rate += 0.05  # Exchange fee discounts for staking
+        base_stake_rate *= 1.1  # 10% more staking when exchange is active
     
-    if staking_apy >= 0.10:
-        base_stake_rate += 0.05  # Higher APY encourages staking
+    # Cap at reasonable maximum
+    base_stake_rate = min(0.40, base_stake_rate)  # Max 40% of emission staked
     
     tokens_staked = monthly_emission * base_stake_rate
     
@@ -149,25 +151,23 @@ def calculate_recapture(
     params: SimulationParameters,
     identity: ModuleResult,
     content: ModuleResult,
-    community: ModuleResult,
     advertising: ModuleResult,
-    messaging: ModuleResult,
     exchange: ModuleResult,
     rewards: RewardsResult,
-    users: int
+    users: int,
+    total_revenue_usd: float = 0
 ) -> RecaptureResult:
     """
     Calculate total token recapture based on token velocity model.
     
-    === UPDATED FOR BREAK-EVEN CONTENT MODEL ===
+    === UPDATED: Revenue-Based Buybacks (Nov 2025) ===
     
-    Content module now:
-    - Collects minimal anti-bot fees
-    - Refunds 80% of fees to engaged users
-    - Only NET VCoin collected contributes to recapture
+    Key changes:
+    - BURN: Applied to collected VCoin fees (token flow)
+    - BUYBACK: Uses % of USD revenue to buy tokens from market
     
-    Platform revenue comes from 5% Reward Fee (see rewards.py),
-    NOT from content module fees.
+    Args:
+        total_revenue_usd: Total platform revenue in USD for buyback calculation
     """
     monthly_emission = rewards.monthly_reward_pool
     
@@ -212,24 +212,6 @@ def calculate_recapture(
             identity_vcoin = tier_revenue / params.token_price
     direct_vcoin_spent += identity_vcoin
     
-    # === MESSAGING MODULE ===
-    messaging_vcoin = messaging.breakdown.get('vcoin_spent', 0)
-    if messaging_vcoin == 0:
-        # Estimate from revenue
-        messaging_revenue = messaging.revenue
-        if params.token_price > 0:
-            messaging_vcoin = messaging_revenue / params.token_price * 0.3  # 30% in VCoin
-    direct_vcoin_spent += messaging_vcoin
-    
-    # === COMMUNITY MODULE ===
-    community_vcoin = community.breakdown.get('vcoin_spent', 0)
-    if community_vcoin == 0:
-        # Estimate from subscriptions
-        subscription_revenue = community.breakdown.get('subscription_revenue', 0)
-        if params.token_price > 0:
-            community_vcoin = subscription_revenue / params.token_price * 0.5  # 50% in VCoin
-    direct_vcoin_spent += community_vcoin
-    
     # === EXCHANGE MODULE ===
     if params.enable_exchange:
         exchange_vcoin = exchange.breakdown.get('swap_fees_vcoin', 0)
@@ -249,16 +231,20 @@ def calculate_recapture(
     
     # === CALCULATE RECAPTURE COMPONENTS ===
     
-    # Burn: Applied to tokens spent
+    # BURN: Applied to collected VCoin fees (token flow)
+    # This destroys tokens from platform transaction fees
     raw_burn = total_tokens_flowing * params.burn_rate
     
-    # Buyback: Applied to tokens spent  
-    raw_buyback = total_tokens_flowing * params.buyback_percent
+    # BUYBACK: Uses USD REVENUE to buy tokens from market
+    # This creates actual buy pressure and is a proper tokenomics mechanism
+    # buyback_percent is % of revenue used for buybacks
+    buyback_usd_spent = total_revenue_usd * params.buyback_percent
+    raw_buyback = buyback_usd_spent / params.token_price if params.token_price > 0 else 0
     
-    # Treasury: Receives configurable percentage of platform revenue
+    # Treasury: Receives portion of collected tokens AND revenue
     # Default is 20% (from config or params)
     treasury_revenue_share = getattr(params, 'treasury_revenue_share', config.TREASURY_REVENUE_SHARE)
-    remaining_after_burn = total_tokens_flowing - raw_burn - raw_buyback
+    remaining_after_burn = total_tokens_flowing - raw_burn  # Buyback no longer from token flow
     
     # Treasury accumulates from transaction velocity
     # Base treasury share from fee distribution config
@@ -318,6 +304,7 @@ def calculate_recapture(
         treasury=round(treasury_vcoin, 2),
         staking=round(staking_vcoin, 2),
         buybacks=round(buyback_vcoin, 2),
+        buyback_usd_spent=round(buyback_usd_spent, 2),  # NEW: USD spent on buybacks
         total_revenue_source_vcoin=round(total_tokens_flowing + staking_vcoin, 2),
         total_transaction_fees_usd=round(total_fees_usd, 2),
         total_royalties_usd=round(direct_vcoin_spent * params.token_price * 0.1, 2),

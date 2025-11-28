@@ -151,33 +151,48 @@ def calculate_staking_rewards(
 
 def estimate_staking_participation(
     users: int,
-    platform_maturity: str,
+    participation_rate: float,
+    avg_stake_amount: float,
     token_price: float,
-    monthly_emission: float
+    monthly_emission: float,
+    staking_apy: float = 0.10,
+    stake_lock_days: int = 30
 ) -> Dict[str, float]:
     """
-    Estimate staking participation based on platform maturity.
+    Estimate staking participation based on user-configured parameters.
     
-    Launch: 5% of users stake
-    Growing: 10% of users stake
-    Established: 20% of users stake
+    Now uses configurable participation_rate and avg_stake_amount instead of
+    hardcoded maturity-based values. APY and lock days also affect participation.
+    
+    Args:
+        users: Total active users
+        participation_rate: Base % of users who stake (from params)
+        avg_stake_amount: Average stake per staker in VCoin (from params)
+        token_price: Current token price
+        monthly_emission: Monthly token emission
+        staking_apy: Annual staking APY (higher = more participation)
+        stake_lock_days: Lock period in days (lower = more participation)
     """
-    participation_rates = {
-        'launch': 0.05,
-        'growing': 0.10,
-        'established': 0.20,
-    }
+    # APY modifier: Higher APY attracts more stakers
+    # 10% APY = 1.0x, 20% APY = 1.2x, 30% APY = 1.4x
+    apy_modifier = 1.0 + (staking_apy - 0.10) * 2
+    apy_modifier = max(0.6, min(1.5, apy_modifier))  # Cap between 0.6x - 1.5x
     
-    participation_rate = participation_rates.get(platform_maturity, 0.10)
-    stakers = int(users * participation_rate)
+    # Lock period modifier: Shorter lock = more participation
+    # 30 days = 1.0x, 7 days = 1.3x, 90 days = 0.8x
+    lock_modifier = 1.0 - (stake_lock_days - 30) * 0.01
+    lock_modifier = max(0.5, min(1.5, lock_modifier))  # Cap between 0.5x - 1.5x
     
-    # Average stake amount based on maturity
-    avg_stake_by_maturity = {
-        'launch': 500,      # New users stake less
-        'growing': 2000,    # Growing confidence
-        'established': 5000,  # Committed community
-    }
-    avg_stake = avg_stake_by_maturity.get(platform_maturity, 1000)
+    # Apply modifiers to base participation rate
+    effective_participation = participation_rate * apy_modifier * lock_modifier
+    effective_participation = max(0.01, min(0.60, effective_participation))  # 1-60% cap
+    
+    stakers = int(users * effective_participation)
+    
+    # Average stake amount (directly from params, with APY bonus)
+    # Higher APY encourages larger stakes
+    avg_stake = avg_stake_amount * (1.0 + (staking_apy - 0.10) * 0.5)
+    avg_stake = max(100, avg_stake)  # Minimum 100 VCoin
     
     total_staked = stakers * avg_stake
     total_staked_usd = total_staked * token_price
@@ -187,11 +202,13 @@ def estimate_staking_participation(
     
     return {
         'stakers_count': stakers,
-        'participation_rate': participation_rate,
+        'participation_rate': effective_participation,
         'avg_stake_amount': avg_stake,
         'total_staked': total_staked,
         'total_staked_usd': total_staked_usd,
         'staking_emission_ratio': staking_ratio,
+        'apy_modifier': apy_modifier,
+        'lock_modifier': lock_modifier,
     }
 
 
@@ -229,20 +246,65 @@ def calculate_staking(
     Returns:
         Dict with all staking metrics and Solana-specific data
     """
+    # Check if module is enabled
+    if not getattr(params, 'enable_staking', True):
+        return {
+            'enabled': False,
+            'revenue': 0,
+            'costs': 0,
+            'profit': 0,
+            'margin': 0,
+            'protocol_fee_from_rewards_usd': 0,
+            'protocol_fee_from_rewards_vcoin': 0,
+            'unstake_penalty_usd': 0,
+            'unstake_penalty_vcoin': 0,
+            'tx_fee_revenue_usd': 0,
+            'tx_fee_revenue_vcoin': 0,
+            'total_revenue_vcoin': 0,
+            'staking_apy': 0,
+            'staker_fee_discount': 0,
+            'min_stake_amount': 0,
+            'lock_days': 0,
+            'stakers_count': 0,
+            'participation_rate': 0,
+            'avg_stake_amount': 0,
+            'total_staked': 0,
+            'total_staked_usd': 0,
+            'staking_ratio': 0,
+            'total_monthly_rewards': 0,
+            'total_monthly_rewards_usd': 0,
+            'rewards_per_staker': 0,
+            'rewards_per_staker_usd': 0,
+            'effective_monthly_yield': 0,
+            'tier_distribution': {'bronze': 0, 'silver': 0, 'gold': 0, 'platinum': 0},
+            'total_fee_savings_usd': 0,
+            'locked_supply_percent': 0,
+            'reduced_sell_pressure': 0,
+            'reduced_sell_pressure_usd': 0,
+            'staking_status': 'Disabled',
+            'is_healthy': False,
+            'annual_rewards_total': 0,
+            'annual_rewards_usd': 0,
+        }
+    
     # Get parameters
     staking_apy = params.staking_apy
+    staking_participation_rate = getattr(params, 'staking_participation_rate', 0.15)
+    avg_stake_amount = getattr(params, 'avg_stake_amount', 2000)
     staker_fee_discount = params.staker_fee_discount
     min_stake = params.min_stake_amount
     lock_days = params.stake_lock_days
-    platform_maturity = params.platform_maturity.value
     token_price = params.token_price
     
-    # Estimate participation
+    # Estimate participation using user-configured parameters
     participation = estimate_staking_participation(
-        users,
-        platform_maturity,
-        token_price,
-        monthly_emission
+        users=users,
+        participation_rate=staking_participation_rate,
+        avg_stake_amount=avg_stake_amount,
+        token_price=token_price,
+        monthly_emission=monthly_emission,
+        staking_apy=staking_apy,
+        stake_lock_days=lock_days
     )
     
     stakers_count = participation['stakers_count']

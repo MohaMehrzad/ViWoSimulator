@@ -325,6 +325,37 @@ def calculate_liquidity(
     Returns:
         Dict with all liquidity metrics, health score, and Solana-specific data
     """
+    # Check if module is enabled
+    if not getattr(params, 'enable_liquidity', True):
+        return {
+            'enabled': False,
+            'initial_liquidity': 0,
+            'protocol_owned_percent': 0,
+            'protocol_owned_usd': 0,
+            'community_lp_usd': 0,
+            'market_cap': 0,
+            'liquidity_ratio': 0,
+            'slippage_1k': 0,
+            'slippage_5k': 0,
+            'slippage_10k': 0,
+            'slippage_50k': 0,
+            'slippage_100k': 0,
+            'pool_count': 0,
+            'lock_months': 0,
+            'health_score': 0,
+            'health_status': 'Disabled',
+            'health_color': 'gray',
+            'health_icon': '⚫',
+            'estimated_monthly_volume': 0,
+            'volume_liquidity_ratio': 0,
+            'buy_pressure_usd': 0,
+            'sell_pressure_usd': 0,
+            'net_pressure_usd': 0,
+            'pressure_ratio': 0,
+            'meets_70_target': False,
+            'recommended_liquidity': 0,
+        }
+    
     # Get parameters
     initial_liquidity = params.initial_liquidity_usd
     pol_percent = params.protocol_owned_liquidity

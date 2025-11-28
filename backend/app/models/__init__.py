@@ -7,10 +7,20 @@ from .parameters import (
     RetentionModelType,
     RetentionParameters,
     ComplianceCosts,
+    RegionalComplianceCosts,
     MATURITY_ADJUSTMENTS,
     # Growth scenario types (Nov 2025)
     GrowthScenarioType,
     MarketConditionType,
+    # Future module parameters (Nov 2025)
+    VChainParameters,
+    MarketplaceParameters,
+    BusinessHubParameters,
+    CrossPlatformParameters,
+    # Pre-launch module parameters (Nov 2025)
+    ReferralParameters,
+    PointsParameters,
+    GaslessParameters,
 )
 from .results import (
     ModuleResult,
@@ -38,6 +48,19 @@ from .results import (
     # Growth scenario results (Nov 2025)
     FomoEventResult,
     GrowthProjectionResult,
+    # Governance & future modules (Nov 2025)
+    GovernanceResult,
+    VChainResult,
+    MarketplaceResult,
+    BusinessHubResult,
+    CrossPlatformResult,
+    TokenMetricsResult,
+    SensitivityResult,
+    # Pre-launch module results (Nov 2025)
+    ReferralResult,
+    PointsResult,
+    GaslessResult,
+    PreLaunchResult,
 )
 
 __all__ = [
@@ -50,9 +73,19 @@ __all__ = [
     'RetentionModelType',
     'RetentionParameters',
     'ComplianceCosts',
+    'RegionalComplianceCosts',
     'MATURITY_ADJUSTMENTS',
     'GrowthScenarioType',
     'MarketConditionType',
+    # Future module parameters
+    'VChainParameters',
+    'MarketplaceParameters',
+    'BusinessHubParameters',
+    'CrossPlatformParameters',
+    # Pre-launch module parameters
+    'ReferralParameters',
+    'PointsParameters',
+    'GaslessParameters',
     # Results
     'ModuleResult',
     'RecaptureResult',
@@ -78,4 +111,17 @@ __all__ = [
     'StakingResult',
     'FomoEventResult',
     'GrowthProjectionResult',
+    # Governance & future modules
+    'GovernanceResult',
+    'VChainResult',
+    'MarketplaceResult',
+    'BusinessHubResult',
+    'CrossPlatformResult',
+    'TokenMetricsResult',
+    'SensitivityResult',
+    # Pre-launch module results
+    'ReferralResult',
+    'PointsResult',
+    'GaslessResult',
+    'PreLaunchResult',
 ]

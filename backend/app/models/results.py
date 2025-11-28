@@ -165,16 +165,251 @@ class ModuleResult(BaseModel):
 
 
 class RecaptureResult(BaseModel):
-    """Token recapture result"""
+    """
+    Token recapture result.
+    
+    Updated Nov 2025: Buybacks now use USD REVENUE to purchase tokens from market.
+    - Burns: % of collected VCoin fees destroyed (deflationary)
+    - Buybacks: % of USD revenue used to buy VCoin from market (creates buy pressure)
+    """
     total_recaptured: float
     recapture_rate: float
-    burns: float
-    treasury: float
-    staking: float
-    buybacks: float
+    burns: float  # VCoin burned from collected fees
+    treasury: float  # VCoin accumulated in treasury
+    staking: float  # VCoin locked in staking
+    buybacks: float  # VCoin acquired via buybacks (bought from market)
+    buyback_usd_spent: float = 0  # USD spent on buybacks from protocol revenue
     total_revenue_source_vcoin: float
     total_transaction_fees_usd: float
     total_royalties_usd: float
+
+
+# === GOVERNANCE RESULTS (Nov 2025) ===
+
+class GovernanceResult(BaseModel):
+    """veVCoin governance metrics"""
+    revenue: float = 0
+    costs: float = 0
+    profit: float = 0
+    
+    # veVCoin metrics
+    total_vevcoin_supply: float = 0
+    total_vevcoin_supply_usd: float = 0
+    vevcoin_of_circulating_percent: float = 0
+    avg_vevcoin_per_staker: float = 0
+    avg_lock_weeks: int = 0
+    avg_boost_multiplier: float = 1.0
+    
+    # Direct Participation
+    active_voters: int = 0
+    active_voting_power: float = 0
+    voting_participation_rate: float = 0
+    
+    # Delegation (NEW - Nov 2025)
+    delegators: int = 0
+    delegated_voting_power: float = 0
+    delegation_rate: float = 0
+    
+    # Effective Participation (voters + delegators)
+    total_participants: int = 0
+    effective_participation_rate: float = 0
+    
+    # Tier distribution
+    tier_distribution: Dict[str, int] = {}
+    eligible_proposers: int = 0
+    
+    # Proposal activity
+    expected_monthly_proposals: int = 0
+    
+    # Health metrics
+    voting_power_concentration: float = 0
+    decentralization_score: float = 0
+    governance_health_score: float = 0
+
+
+# === FUTURE MODULE RESULTS (Nov 2025) ===
+
+class VChainResult(BaseModel):
+    """VChain cross-chain network result"""
+    enabled: bool = False
+    launched: bool = False
+    months_active: int = 0
+    growth_factor: float = 0
+    
+    revenue: float = 0
+    tx_fee_revenue: float = 0
+    bridge_fee_revenue: float = 0
+    gas_markup_revenue: float = 0
+    enterprise_api_revenue: float = 0
+    
+    monthly_tx_volume: float = 0
+    monthly_bridge_volume: float = 0
+    estimated_transactions: int = 0
+    active_enterprise_clients: int = 0
+    
+    validators_active: int = 0
+    total_validator_stake: float = 0
+    
+    costs: float = 0
+    profit: float = 0
+    margin: float = 0
+    
+    launch_month: int = 24
+    months_until_launch: int = 0
+
+
+class MarketplaceResult(BaseModel):
+    """Marketplace physical/digital goods result"""
+    enabled: bool = False
+    launched: bool = False
+    months_active: int = 0
+    growth_factor: float = 0
+    
+    revenue: float = 0
+    commission_revenue: float = 0
+    physical_commission: float = 0
+    digital_commission: float = 0
+    nft_commission: float = 0
+    services_commission: float = 0
+    payment_processing_revenue: float = 0
+    escrow_revenue: float = 0
+    featured_revenue_usd: float = 0
+    store_subscription_revenue_usd: float = 0
+    ad_revenue: float = 0
+    
+    monthly_gmv: float = 0
+    active_sellers: int = 0
+    
+    costs: float = 0
+    profit: float = 0
+    margin: float = 0
+    
+    launch_month: int = 18
+    months_until_launch: int = 0
+
+
+class BusinessHubResult(BaseModel):
+    """Business Hub freelancer/startup result"""
+    enabled: bool = False
+    launched: bool = False
+    months_active: int = 0
+    growth_factor: float = 0
+    
+    revenue: float = 0
+    freelancer_revenue: float = 0
+    startup_revenue: float = 0
+    funding_revenue: float = 0
+    pm_saas_revenue: float = 0
+    academy_revenue: float = 0
+    
+    active_freelancers: int = 0
+    monthly_freelance_volume: float = 0
+    monthly_funding_volume: float = 0
+    pm_total_users: int = 0
+    
+    total_vcoin_revenue: float = 0
+    
+    costs: float = 0
+    profit: float = 0
+    margin: float = 0
+    
+    launch_month: int = 21
+    months_until_launch: int = 0
+
+
+class CrossPlatformResult(BaseModel):
+    """Cross-platform content sharing result"""
+    enabled: bool = False
+    launched: bool = False
+    months_active: int = 0
+    growth_factor: float = 0
+    
+    revenue: float = 0
+    subscription_revenue: float = 0
+    rental_revenue: float = 0
+    insurance_revenue: float = 0
+    verification_revenue: float = 0
+    analytics_revenue: float = 0
+    license_revenue: float = 0
+    
+    total_subscribers: int = 0
+    monthly_rental_volume: float = 0
+    active_renters: int = 0
+    active_owners: int = 0
+    
+    total_vcoin_revenue: float = 0
+    
+    costs: float = 0
+    profit: float = 0
+    margin: float = 0
+    
+    launch_month: int = 15
+    months_until_launch: int = 0
+
+
+# === TOKEN METRICS RESULTS (Nov 2025) ===
+
+class TokenVelocityResult(BaseModel):
+    """Token velocity metrics"""
+    velocity: float = 0
+    annualized_velocity: float = 0
+    interpretation: str = ""
+    health_score: float = 0
+    days_to_turnover: float = 0
+    transaction_volume: float = 0
+    circulating_supply: float = 0
+
+
+class RealYieldResult(BaseModel):
+    """Real yield (revenue-based) metrics"""
+    monthly_real_yield: float = 0
+    annual_real_yield: float = 0
+    interpretation: str = ""
+    is_sustainable: bool = False
+    yield_per_1000_usd: float = 0
+    protocol_revenue: float = 0
+    staked_value_usd: float = 0
+
+
+class ValueAccrualResult(BaseModel):
+    """Value accrual score"""
+    total_score: float = 0
+    grade: str = "F"
+    interpretation: str = ""
+    breakdown: Dict[str, float] = {}
+    weights: Dict[str, float] = {}
+
+
+class TokenMetricsResult(BaseModel):
+    """Complete token metrics"""
+    velocity: TokenVelocityResult = TokenVelocityResult()
+    real_yield: RealYieldResult = RealYieldResult()
+    value_accrual: ValueAccrualResult = ValueAccrualResult()
+    overall_health: float = 0
+
+
+# === SENSITIVITY ANALYSIS RESULTS (Nov 2025) ===
+
+class StressTestScenarioResult(BaseModel):
+    """Result of a single stress test scenario"""
+    scenario: str
+    scenario_name: str
+    description: str
+    immediate_impact: Dict[str, float]
+    max_drawdown_percent: Dict[str, float]
+    recovery_months: int
+    permanent_impact_percent: float
+    total_revenue_loss: float
+
+
+class SensitivityResult(BaseModel):
+    """Complete sensitivity analysis result"""
+    stress_tests: Dict[str, StressTestScenarioResult] = {}
+    worst_scenario: str = ""
+    least_severe_scenario: str = ""
+    monte_carlo_p5: float = 0
+    monte_carlo_p50: float = 0
+    monte_carlo_p95: float = 0
 
 
 # === NEW: Liquidity Results (Nov 2025) ===
@@ -334,13 +569,161 @@ class TotalsResult(BaseModel):
     margin: float
 
 
+# === PRE-LAUNCH MODULE RESULTS (Nov 2025) ===
+# NOTE: These must be defined before SimulationResult which references them
+
+class ReferralResult(BaseModel):
+    """
+    Result of referral module calculations.
+    Tracks tiered referral program metrics and costs.
+    """
+    # User segments
+    total_users: int = 0
+    users_with_referrals: int = 0
+    total_referrals: int = 0
+    qualified_referrals: int = 0
+    
+    # Tier distribution
+    referrers_by_tier: Dict[str, int] = {}
+    referrals_by_tier: Dict[str, int] = {}
+    
+    # Token economics
+    bonus_distributed_vcoin: float = 0.0
+    bonus_distributed_usd: float = 0.0
+    avg_bonus_per_referrer_vcoin: float = 0.0
+    
+    # Viral metrics
+    viral_coefficient: float = 0.5
+    effective_referral_rate: float = 0.0
+    qualification_rate: float = 0.70
+    
+    # Cost to platform
+    monthly_referral_cost_vcoin: float = 0.0
+    monthly_referral_cost_usd: float = 0.0
+    
+    # Anti-sybil metrics
+    suspected_sybil_referrals: int = 0
+    sybil_rejection_rate: float = 0.05
+    
+    # Breakdown
+    breakdown: Dict[str, Any] = {}
+
+
+class PointsResult(BaseModel):
+    """
+    Result of pre-launch points system calculations.
+    Models points distribution and TGE token conversion.
+    """
+    # Pool configuration
+    points_pool_tokens: int = 10_000_000
+    points_pool_percent: float = 0.01
+    
+    # Participation metrics
+    waitlist_users: int = 0
+    participating_users: int = 0
+    participation_rate: float = 0.80
+    
+    # Points distribution
+    total_points_distributed: int = 0
+    avg_points_per_user: float = 0.0
+    median_points_estimate: float = 0.0
+    
+    # Token conversion
+    tokens_per_point: float = 0.0
+    avg_tokens_per_user: float = 0.0
+    
+    # Segment breakdown
+    users_by_segment: Dict[str, int] = {}
+    points_by_segment: Dict[str, int] = {}
+    tokens_by_segment: Dict[str, float] = {}
+    
+    # Anti-gaming metrics
+    suspected_sybil_users: int = 0
+    sybil_rejection_rate: float = 0.05
+    points_rejected: int = 0
+    
+    # Activity breakdown
+    points_by_activity: Dict[str, int] = {}
+    
+    # Top earner estimates
+    top_1_percent_tokens: float = 0.0
+    top_10_percent_tokens: float = 0.0
+    bottom_50_percent_tokens: float = 0.0
+    
+    # Breakdown
+    breakdown: Dict[str, Any] = {}
+
+
+class GaslessResult(BaseModel):
+    """
+    Result of gasless onboarding calculations.
+    Models sponsored transaction costs for user tiers.
+    """
+    # User tier distribution
+    total_users: int = 0
+    new_users: int = 0
+    verified_users: int = 0
+    premium_users: int = 0
+    enterprise_users: int = 0
+    
+    # Transaction estimates
+    total_sponsored_transactions: int = 0
+    avg_transactions_per_user: float = 0.0
+    
+    # Cost breakdown
+    base_fee_cost_usd: float = 0.0
+    priority_fee_cost_usd: float = 0.0
+    account_creation_cost_usd: float = 0.0
+    total_sponsorship_cost_usd: float = 0.0
+    
+    # Per-tier costs
+    new_user_cost_usd: float = 0.0
+    verified_user_cost_usd: float = 0.0
+    premium_user_cost_usd: float = 0.0
+    enterprise_user_cost_usd: float = 0.0
+    
+    # Cost per user metrics
+    avg_cost_per_user_usd: float = 0.0
+    cost_per_transaction_usd: float = 0.0
+    
+    # Budget metrics
+    monthly_sponsorship_budget_usd: float = 5000.0
+    budget_utilization: float = 0.0
+    
+    # VCoin equivalent
+    sponsorship_cost_vcoin: float = 0.0
+    
+    # Breakdown
+    breakdown: Dict[str, Any] = {}
+
+
+class PreLaunchResult(BaseModel):
+    """
+    Combined result for all pre-launch modules.
+    Aggregates referral, points, and gasless metrics.
+    """
+    referral: Optional[ReferralResult] = None
+    points: Optional[PointsResult] = None
+    gasless: Optional[GaslessResult] = None
+    
+    # Summary metrics
+    total_prelaunch_cost_usd: float = 0.0
+    total_prelaunch_cost_vcoin: float = 0.0
+    
+    # Token impact
+    points_tokens_allocated: int = 0
+    referral_bonus_distributed: float = 0.0
+    
+    # Growth impact
+    referral_users_acquired: int = 0
+    waitlist_conversion_tokens: int = 0
+
+
 class SimulationResult(BaseModel):
     """Complete simulation result"""
     identity: ModuleResult
     content: ModuleResult
-    community: ModuleResult
     advertising: ModuleResult
-    messaging: ModuleResult
     exchange: ModuleResult  # Exchange/Wallet module for crypto trading fees
     rewards: RewardsResult
     recapture: RecaptureResult
@@ -350,6 +733,19 @@ class SimulationResult(BaseModel):
     # NEW: Liquidity and Staking (Nov 2025)
     liquidity: Optional[LiquidityResult] = None
     staking: Optional[StakingResult] = None
+    # NEW: Governance (Nov 2025)
+    governance: Optional[GovernanceResult] = None
+    # NEW: Future Modules (Nov 2025)
+    vchain: Optional[VChainResult] = None
+    marketplace: Optional[MarketplaceResult] = None
+    business_hub: Optional[BusinessHubResult] = None
+    cross_platform: Optional[CrossPlatformResult] = None
+    # NEW: Token Metrics (Nov 2025)
+    token_metrics: Optional[TokenMetricsResult] = None
+    # NEW: Pre-Launch Modules (Nov 2025)
+    prelaunch: Optional[PreLaunchResult] = None
+    # NEW: Sensitivity Analysis (Nov 2025)
+    sensitivity: Optional[SensitivityResult] = None
 
 
 class PercentileResults(BaseModel):
@@ -432,9 +828,7 @@ class MonthlyMetricsResult(BaseModel):
     # Module breakdown
     identity_revenue: float
     content_revenue: float
-    community_revenue: float
     advertising_revenue: float
-    messaging_revenue: float
     exchange_revenue: float
     platform_fee_revenue: float
     

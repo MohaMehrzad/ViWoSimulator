@@ -23,6 +23,30 @@ def calculate_identity(params: SimulationParameters, users: int) -> ModuleResult
     Issue #3: Conversion rate now uses realistic values (0.5-5%)
     Issue #11: Profile sales now use realistic assumptions
     """
+    # Check if module is enabled
+    if not getattr(params, 'enable_identity', True):
+        return ModuleResult(
+            revenue=0,
+            costs=0,
+            profit=0,
+            margin=0,
+            breakdown={
+                'enabled': False,
+                'basic_users': 0,
+                'verified_users': 0,
+                'premium_users': 0,
+                'enterprise_users': 0,
+                'upgraded_users': 0,
+                'conversion_rate': 0,
+                'tier_revenue': 0,
+                'transfer_revenue': 0,
+                'sale_revenue': 0,
+                'monthly_transfers': 0,
+                'monthly_sales': 0,
+                'avg_profile_price': 0,
+            }
+        )
+    
     dist = config.USER_DISTRIBUTION['IDENTITY_TIERS']
     
     # Issue #3: Get effective conversion rate (may be adjusted for maturity)
