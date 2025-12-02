@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { GrowthScenario, MarketCondition } from '@/types/simulation';
-import { GROWTH_SCENARIOS, MARKET_CONDITIONS, GROWTH_SCENARIO_SUMMARY } from '@/lib/constants';
+import { GROWTH_SCENARIOS, MARKET_CONDITIONS, GROWTH_SCENARIO_SUMMARY, DEFAULT_PARAMETERS } from '@/lib/constants';
 
 // Issue #36 Fix: Named constant for the Month 1 conversion rate
 // This represents the fraction of total calculated users that become Month 1 active users
@@ -271,7 +271,7 @@ export const GrowthScenarioSelector: React.FC<GrowthScenarioSelectorProps> = ({
               <div>
                 <div className="text-xs text-slate-500">Token Price (End)</div>
                 <div className="text-lg font-bold text-amber-400">
-                  ${(0.03 * selectedScenario.tokenPriceEndMultiplier * selectedMarket.priceMultiplier).toFixed(3)}
+                  ${(DEFAULT_PARAMETERS.tokenPrice * selectedScenario.tokenPriceEndMultiplier * selectedMarket.priceMultiplier).toFixed(3)}
                 </div>
               </div>
             </div>

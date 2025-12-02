@@ -10,6 +10,12 @@ interface RecaptureSectionProps {
 
 export function RecaptureSection({ result, parameters }: RecaptureSectionProps) {
   const { recapture, rewards } = result;
+  
+  // NEW-MED-001 FIX: Display effective vs configured burn rate
+  const configuredBurnRate = recapture.configuredBurnRate ?? parameters.burnRate;
+  const effectiveBurnRate = recapture.effectiveBurnRate ?? configuredBurnRate;
+  const hasEffectiveBurnRate = recapture.effectiveBurnRate !== undefined && 
+    Math.abs(effectiveBurnRate - configuredBurnRate) > 0.001;
 
   const recaptureFlows = [
     { 
@@ -17,9 +23,12 @@ export function RecaptureSection({ result, parameters }: RecaptureSectionProps) 
       amount: recapture.burns, 
       icon: '🔥', 
       color: 'bg-red-500',
-      description: 'Destroyed from collected fees',
-      rate: parameters.burnRate,
-      rateLabel: 'Burn Rate'
+      description: hasEffectiveBurnRate 
+        ? `Destroyed from collected fees (effective rate: ${(effectiveBurnRate * 100).toFixed(1)}%)`
+        : 'Destroyed from collected fees',
+      rate: configuredBurnRate,
+      rateLabel: 'Configured Rate',
+      effectiveRate: hasEffectiveBurnRate ? effectiveBurnRate : null
     },
     { 
       name: 'Buybacks', 
@@ -55,6 +64,22 @@ export function RecaptureSection({ result, parameters }: RecaptureSectionProps) 
 
   return (
     <section className="space-y-8">
+      {/* Effective Burn Rate Warning - NEW-MED-001 FIX */}
+      {hasEffectiveBurnRate && (
+        <div className="bg-orange-50 border border-orange-200 rounded-xl p-4 flex items-start gap-3">
+          <span className="text-2xl">⚠️</span>
+          <div>
+            <div className="font-semibold text-orange-800">Effective Burn Rate Differs from Configured</div>
+            <div className="text-sm text-orange-700">
+              Configured burn rate is {(configuredBurnRate * 100).toFixed(1)}%, 
+              but effective rate is only {(effectiveBurnRate * 100).toFixed(1)}% 
+              due to token velocity adjustments. The effective rate accounts for 
+              how often tokens actually flow through burn mechanisms.
+            </div>
+          </div>
+        </div>
+      )}
+      
       {/* Module Header */}
       <div className="bg-gradient-to-r from-cyan-500 to-blue-600 rounded-2xl p-6 text-white">
         <div className="flex items-center gap-3 mb-4">
@@ -142,8 +167,15 @@ export function RecaptureSection({ result, parameters }: RecaptureSectionProps) 
               </div>
               <div className="text-xs text-gray-600">{flow.description}</div>
               {flow.rate !== null && (
-                <div className="mt-2 text-xs bg-gray-200 rounded px-2 py-1 inline-block">
-                  {flow.rateLabel}: {(flow.rate * 100).toFixed(0)}%
+                <div className="mt-2 space-y-1">
+                  <div className="text-xs bg-gray-200 rounded px-2 py-1 inline-block">
+                    {flow.rateLabel}: {(flow.rate * 100).toFixed(1)}%
+                  </div>
+                  {'effectiveRate' in flow && flow.effectiveRate !== null && (
+                    <div className="text-xs bg-orange-100 text-orange-700 rounded px-2 py-1 inline-block ml-1">
+                      Effective: {(flow.effectiveRate * 100).toFixed(1)}%
+                    </div>
+                  )}
                 </div>
               )}
             </div>

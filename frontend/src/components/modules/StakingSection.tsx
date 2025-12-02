@@ -75,6 +75,17 @@ export function StakingSection({ result, parameters }: StakingSectionProps) {
   const protocolFeeFromRewardsUsd = staking?.protocolFeeFromRewardsUsd || 0;
   const unstakePenaltyUsd = staking?.unstakePenaltyUsd || 0;
   const txFeeRevenueUsd = staking?.txFeeRevenueUsd || 0;
+  
+  // NEW-HIGH-003 & NEW-MED-005 FIX: Funding source and early unstake tracking
+  const rewardFundingSource = staking?.rewardFundingSource || 'emission_allocation';
+  const rewardFundingDetails = staking?.rewardFundingDetails;
+  const rewardsExceedModuleIncome = staking?.rewardsExceedModuleIncome || false;
+  const sustainabilityWarning = staking?.sustainabilityWarning;
+  
+  // Early unstake metrics
+  const earlyUnstakeRate = staking?.earlyUnstakeRate || 0;
+  const earlyUnstakersCount = staking?.earlyUnstakersCount || 0;
+  const expectedEarlyUnstakeRewardLoss = staking?.expectedEarlyUnstakeRewardLoss || 0;
 
   // Status colors
   const statusColors = {
@@ -134,6 +145,36 @@ export function StakingSection({ result, parameters }: StakingSectionProps) {
         </div>
       </div>
 
+      {/* Sustainability Warning - NEW-HIGH-003 FIX */}
+      {sustainabilityWarning && (
+        <div className="bg-red-50 border border-red-200 rounded-xl p-4 flex items-start gap-3">
+          <span className="text-2xl">🚨</span>
+          <div>
+            <div className="font-semibold text-red-800">Sustainability Warning</div>
+            <div className="text-sm text-red-700">{sustainabilityWarning}</div>
+          </div>
+        </div>
+      )}
+      
+      {/* Reward Funding Source Info - NEW-HIGH-003 FIX */}
+      <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
+        <div className="flex items-start gap-3">
+          <span className="text-2xl">ℹ️</span>
+          <div>
+            <div className="font-semibold text-blue-800 flex items-center gap-2">
+              Reward Funding: {rewardFundingSource === 'emission_allocation' ? 'Emission Allocation' : rewardFundingSource}
+              {rewardsExceedModuleIncome && (
+                <span className="bg-amber-100 text-amber-700 text-xs px-2 py-0.5 rounded">Subsidized</span>
+              )}
+            </div>
+            <div className="text-sm text-blue-700 mt-1">
+              {rewardFundingDetails || 
+                'Staking rewards are funded from the 35% Ecosystem & Rewards allocation (350M VCoin over 60 months). Protocol fee (5%) on rewards provides partial offset.'}
+            </div>
+          </div>
+        </div>
+      </div>
+      
       {/* Platform Revenue from Staking */}
       <div className="bg-white rounded-xl border border-gray-200 p-6">
         <h3 className="font-bold text-lg mb-4">💵 Platform Revenue from Staking</h3>
@@ -261,6 +302,31 @@ export function StakingSection({ result, parameters }: StakingSectionProps) {
         )}
       </div>
 
+      {/* Early Unstake Metrics - NEW-MED-005 FIX */}
+      {(earlyUnstakeRate > 0 || earlyUnstakersCount > 0) && (
+        <div className="bg-white rounded-xl border border-gray-200 p-6">
+          <h3 className="font-bold text-lg mb-4">⏰ Early Unstake Tracking</h3>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="bg-amber-50 rounded-lg p-4 border border-amber-200 text-center">
+              <div className="text-2xl font-bold text-amber-700">{earlyUnstakeRate.toFixed(1)}%</div>
+              <div className="text-xs text-amber-500 uppercase font-semibold">Early Unstake Rate</div>
+            </div>
+            <div className="bg-amber-50 rounded-lg p-4 border border-amber-200 text-center">
+              <div className="text-2xl font-bold text-amber-700">{earlyUnstakersCount.toLocaleString()}</div>
+              <div className="text-xs text-amber-500 uppercase font-semibold">Early Unstakers</div>
+            </div>
+            <div className="bg-amber-50 rounded-lg p-4 border border-amber-200 text-center">
+              <div className="text-2xl font-bold text-amber-700">{formatNumber(expectedEarlyUnstakeRewardLoss)}</div>
+              <div className="text-xs text-amber-500 uppercase font-semibold">Lost Rewards (VCoin)</div>
+            </div>
+          </div>
+          <div className="mt-3 text-sm text-gray-600 bg-gray-50 rounded-lg p-3">
+            <strong>Note:</strong> Early unstakers forfeit their pending rewards and pay a {instantUnstakePenalty}% penalty. 
+            This forfeited value stays in the reward pool, benefiting long-term stakers.
+          </div>
+        </div>
+      )}
+      
       {/* Staking Tiers */}
       <div className="bg-white rounded-xl border border-gray-200 p-6">
         <h3 className="font-bold text-lg mb-4">🏆 Staking Tiers</h3>

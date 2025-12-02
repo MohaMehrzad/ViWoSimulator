@@ -87,10 +87,6 @@ class RetentionCurve:
     def _interpolate(self, m1: int, r1: float, m2: int, r2: float, target: int) -> float:
         """Exponential interpolation between two points"""
         if m1 == m2:
-            return r1
-        
-        # Issue #31 Fix: Guard against division by zero when m1 == m2
-        if m2 == m1:
             return r1  # Same month, return first retention rate
         
         # Use exponential decay interpolation

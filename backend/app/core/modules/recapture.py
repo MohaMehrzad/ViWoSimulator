@@ -31,17 +31,41 @@ from app.models import (
 )
 
 
-def apply_safety_caps(requested_amount: float, cap_type: str, monthly_emission: float) -> float:
+def apply_safety_caps(
+    requested_amount: float, 
+    cap_type: str, 
+    monthly_emission: float,
+    total_revenue_usd: float = 0,
+    token_price: float = 0.03
+) -> float:
     """
     Apply absolute safety caps to prevent impossible recapture amounts.
+    
+    Args:
+        requested_amount: Requested recapture amount in VCoin
+        cap_type: Type of recapture ('burn', 'buyback', 'staking', 'treasury', 'other')
+        monthly_emission: Monthly token emission for emission-based caps
+        total_revenue_usd: Total platform revenue in USD (for revenue-based buyback caps)
+        token_price: Current token price (for revenue-based buyback caps)
+    
+    Returns:
+        Capped amount in VCoin
     """
     caps = config.ABSOLUTE_CAPS
     circulating_supply = config.SUPPLY.TGE_CIRCULATING
     
-    # Cap 1: Never exceed emission
-    capped = min(requested_amount, monthly_emission * caps.MAX_RECAPTURE_RATE)
+    # Cap 1: Never exceed emission for token-flow based recapture
+    # (burns, treasury, staking come from token circulation)
+    if cap_type != 'buyback':
+        capped = min(requested_amount, monthly_emission * caps.MAX_RECAPTURE_RATE)
+    else:
+        # Buybacks are revenue-based, not emission-based
+        # Cap at 100% of revenue converted to tokens (can't spend more than earned)
+        max_buyback_usd = total_revenue_usd  # Max: spend all revenue on buybacks
+        max_buyback_vcoin = max_buyback_usd / token_price if token_price > 0 else 0
+        capped = min(requested_amount, max_buyback_vcoin)
     
-    # Cap 2: Apply type-specific limits
+    # Cap 2: Apply type-specific limits based on circulating supply
     circulating_limits = {
         'burn': circulating_supply * caps.MONTHLY_BURN_LIMIT,
         'buyback': circulating_supply * caps.MONTHLY_BUYBACK_LIMIT,
@@ -197,11 +221,9 @@ def calculate_recapture(
     # Premium content volume (user choice, not affected by break-even)
     direct_vcoin_spent += params.premium_content_volume_vcoin
     
-    # Content sales (NFT) - platform takes commission only if enabled
-    # In break-even model, creators keep 100%, so no commission
-    platform_creator_fee_rate = content.breakdown.get('platform_creator_fee_rate', 0)
-    if platform_creator_fee_rate > 0:
-        direct_vcoin_spent += params.content_sale_volume_vcoin * params.content_sale_commission
+    # Issue #2 fix: Removed dead code checking for 'platform_creator_fee_rate'
+    # Content module uses break-even anti-bot model where creators keep 100%
+    # (sale_commission is explicitly set to 0.0 in content.py)
     
     # === IDENTITY MODULE ===
     identity_vcoin = identity.breakdown.get('vcoin_spent', 0)
@@ -223,10 +245,19 @@ def calculate_recapture(
         direct_vcoin_spent += exchange_vcoin
     
     # === TOTAL TOKENS FLOWING THROUGH ECONOMY ===
-    # Velocity-based spending + direct VCoin transactions
-    total_tokens_flowing = velocity['tokens_spent'] + direct_vcoin_spent
+    # NEW-CALC-001 FIX: Cap individual sources BEFORE summing to avoid discontinuity
+    # Previously, capping AFTER summing created sudden jumps when inputs were high
+    # Now each source is limited to 40% of emission, ensuring smooth behavior
     
-    # Cap at 80% of emission (can't spend more than earned)
+    velocity_cap = monthly_emission * 0.40
+    direct_cap = monthly_emission * 0.40
+    
+    capped_velocity_tokens = min(velocity['tokens_spent'], velocity_cap)
+    capped_direct_tokens = min(direct_vcoin_spent, direct_cap)
+    
+    total_tokens_flowing = capped_velocity_tokens + capped_direct_tokens
+    
+    # Final sanity cap at 80% of emission (sum of two 40% caps)
     total_tokens_flowing = min(total_tokens_flowing, monthly_emission * 0.80)
     
     # === CALCULATE RECAPTURE COMPONENTS ===
@@ -247,10 +278,13 @@ def calculate_recapture(
     remaining_after_burn = total_tokens_flowing - raw_burn  # Buyback no longer from token flow
     
     # Treasury accumulates from transaction velocity
-    # Base treasury share from fee distribution config
-    treasury_fee_share = config.FEE_DISTRIBUTION.TREASURY / (
-        config.FEE_DISTRIBUTION.TREASURY + config.FEE_DISTRIBUTION.REWARDS
-    )
+    # Use full fee distribution config (BURN: 20%, TREASURY: 50%, REWARDS: 30%)
+    # Treasury share is its portion of the non-burned tokens
+    fee_dist = config.FEE_DISTRIBUTION
+    non_burn_total = fee_dist.TREASURY + fee_dist.REWARDS
+    treasury_fee_share = fee_dist.TREASURY / non_burn_total if non_burn_total > 0 else 0.5
+    # Note: BURN portion is already handled separately via raw_burn calculation
+    
     # Combine with revenue share for total treasury contribution
     effective_treasury_rate = (treasury_fee_share + treasury_revenue_share) * 0.5
     raw_treasury = remaining_after_burn * effective_treasury_rate
@@ -273,7 +307,12 @@ def calculate_recapture(
     
     # === APPLY SAFETY CAPS ===
     burn_vcoin = apply_safety_caps(raw_burn, 'burn', monthly_emission)
-    buyback_vcoin = apply_safety_caps(raw_buyback, 'buyback', monthly_emission)
+    # Buyback uses revenue-based cap instead of emission-based cap
+    buyback_vcoin = apply_safety_caps(
+        raw_buyback, 'buyback', monthly_emission,
+        total_revenue_usd=total_revenue_usd,
+        token_price=params.token_price
+    )
     treasury_vcoin = apply_safety_caps(raw_treasury, 'treasury', monthly_emission)
     staking_vcoin = apply_safety_caps(raw_staking, 'staking', monthly_emission)
     
@@ -297,6 +336,12 @@ def calculate_recapture(
     # USD values for reporting
     total_fees_usd = total_tokens_flowing * params.token_price
     
+    # CRIT-002 Fix: Calculate effective burn rate as % of monthly emission
+    # This shows the ACTUAL deflationary impact, not just the configured rate
+    # Users expect to see "5% burn" meaning 5% of emission, but the configured
+    # burn_rate is applied to token velocity (50% of emission), so effective is ~2.5%
+    effective_burn_rate = (burn_vcoin / monthly_emission * 100) if monthly_emission > 0 else 0
+    
     return RecaptureResult(
         total_recaptured=round(total_recaptured, 2),
         recapture_rate=round(min(recapture_rate, 80), 1),
@@ -308,4 +353,7 @@ def calculate_recapture(
         total_revenue_source_vcoin=round(total_tokens_flowing + staking_vcoin, 2),
         total_transaction_fees_usd=round(total_fees_usd, 2),
         total_royalties_usd=round(direct_vcoin_spent * params.token_price * 0.1, 2),
+        # CRIT-002 Fix: Show effective burn rate vs configured rate
+        effective_burn_rate=round(effective_burn_rate, 2),
+        configured_burn_rate=round(params.burn_rate * 100, 2),
     )

@@ -1,8 +1,8 @@
-import { SimulationParameters, SimulationResult, MonteCarloResult, AgentBasedResult } from '@/types/simulation';
+import { SimulationParameters, SimulationResult, MonteCarloResult, AgentBasedResult, MonthlyProgressionResult } from '@/types/simulation';
 import { API_BASE_URL } from './constants';
 
 export async function exportToJson(
-  result: SimulationResult | MonteCarloResult | AgentBasedResult,
+  result: SimulationResult | MonteCarloResult | AgentBasedResult | MonthlyProgressionResult,
   filename: string = 'simulation_results'
 ): Promise<void> {
   const response = await fetch(`${API_BASE_URL}/api/export`, {
@@ -20,7 +20,7 @@ export async function exportToJson(
 }
 
 export async function exportToCsv(
-  result: SimulationResult | MonteCarloResult | AgentBasedResult,
+  result: SimulationResult | MonteCarloResult | AgentBasedResult | MonthlyProgressionResult,
   filename: string = 'simulation_results'
 ): Promise<void> {
   const response = await fetch(`${API_BASE_URL}/api/export`, {
@@ -55,7 +55,7 @@ export async function exportParameters(parameters: SimulationParameters): Promis
 
 export async function exportFullReport(
   parameters: SimulationParameters,
-  result: SimulationResult | MonteCarloResult | AgentBasedResult
+  result: SimulationResult | MonteCarloResult | AgentBasedResult | MonthlyProgressionResult
 ): Promise<void> {
   const response = await fetch(`${API_BASE_URL}/api/export/full-report`, {
     method: 'POST',

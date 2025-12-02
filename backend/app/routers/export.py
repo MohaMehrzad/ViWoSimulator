@@ -3,7 +3,6 @@ Export endpoints for simulation results.
 """
 
 from fastapi import APIRouter, Response
-from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from typing import Any, Literal
 import json
@@ -54,8 +53,8 @@ async def export_results(request: ExportRequest):
         )
     else:
         # CSV export
-        # Flatten the result for CSV
-        flat_result = flatten_dict(request.result if isinstance(request.result, dict) else request.result.dict())
+        # Flatten the result for CSV (request.result is always a dict from JSON deserialization)
+        flat_result = flatten_dict(request.result)
         
         output = io.StringIO()
         writer = csv.writer(output)
@@ -115,6 +114,12 @@ async def export_full_report(data: dict):
             'Content-Disposition': f'attachment; filename="viwo-full-report-{timestamp}.json"'
         }
     )
+
+
+
+
+
+
 
 
 

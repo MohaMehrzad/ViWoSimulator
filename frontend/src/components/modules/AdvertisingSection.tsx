@@ -158,9 +158,9 @@ export function AdvertisingSection({ result, parameters }: AdvertisingSectionPro
           </div>
           <div className="bg-gray-50 rounded-lg p-4 text-center">
             <div className="text-2xl font-bold text-blue-600">
-              {parameters.adCPMMultiplier}x
+              {(parameters.adFillRate * 100).toFixed(0)}%
             </div>
-            <div className="text-xs text-gray-600 uppercase font-semibold">CPM Multiplier</div>
+            <div className="text-xs text-gray-600 uppercase font-semibold">Fill Rate</div>
           </div>
         </div>
       </div>
@@ -180,6 +180,12 @@ export function AdvertisingSection({ result, parameters }: AdvertisingSectionPro
     </section>
   );
 }
+
+
+
+
+
+
 
 
 

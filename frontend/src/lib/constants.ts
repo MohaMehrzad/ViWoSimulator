@@ -93,7 +93,7 @@ export const DEFAULT_PARAMETERS: SimulationParameters = {
   postsPerUser: 0.6,                // Was 3, now 0.6 (Issue #8)
   creatorPercentage: 0.15,          // Updated: 10% -> 15% (creator-focused)
   postsPerCreator: 6,               // NEW: 6 posts per creator (Issue #8)
-  adCPMMultiplier: 0.20,            // Updated: 20% fill rate (viable launch)
+  adFillRate: 0.20,                 // MED-FE-001 FIX: Renamed from adCPMMultiplier (20% fill rate for launch)
   rewardAllocationPercent: 0.08,
   
   // Dynamic Reward Allocation (NEW - Nov 2025)
@@ -108,9 +108,34 @@ export const DEFAULT_PARAMETERS: SimulationParameters = {
   protocolOwnedLiquidity: 0.70,     // 70% POL target
   liquidityLockMonths: 24,          // 2 year lock
   targetLiquidityRatio: 0.15,       // 15%+ for health
+  // MED-03: Configurable pool distribution
+  liquidityPoolUsdcPercent: 0.40,   // 40% in VCoin/USDC
+  liquidityPoolSolPercent: 0.35,    // 35% in VCoin/SOL
+  liquidityPoolUsdtPercent: 0.25,   // 25% in VCoin/USDT
+  // HIGH-FE-001: CLMM concentration factor for effective liquidity
+  clmmConcentrationFactor: 4.0,     // 4x capital efficiency (range 2-10)
   
   // Staking Parameters (NEW - Nov 2025)
+  // 
+  // NEW-CALC-002 Documentation: Staking Ratio vs Participation Rate
+  // --------------------------------------------------------------------
+  // The Value Accrual score uses stakingParticipationRate (% of users who stake)
+  // instead of raw stakingRatio (staked_tokens / circulating_supply).
+  // 
+  // Rationale:
+  // 1. With 100M+ circulating supply, raw staking ratio is always tiny (<1%)
+  //    which would unfairly penalize the Value Accrual score
+  // 2. Participation rate (15-60% of users staking) better reflects platform
+  //    success in encouraging token lockup behavior
+  // 3. This is a user-configurable parameter for scenario modeling
+  // 
+  // The APY boost further adjusts the effective ratio for scoring:
+  // - Higher APY (>10%) incentivizes more staking, boosting the ratio
+  // - Lower APY (<10%) reduces staking attractiveness, reducing the ratio
+  //
   stakingApy: 0.10,                 // 10% APY
+  stakingParticipationRate: 0.15,   // 15% of users stake (NEW-MED-003 FIX)
+  avgStakeAmount: 500,              // Average 500 VCoin per staker
   stakerFeeDiscount: 0.30,          // 30% fee discount
   minStakeAmount: 100,              // 100 VCoin minimum
   stakeLockDays: 30,                // 30 day lock
@@ -156,6 +181,7 @@ export const DEFAULT_PARAMETERS: SimulationParameters = {
   exchangeUserAdoptionRate: 0.10,   // 10% for token platform
   exchangeAvgMonthlyVolume: 150,    // $150 avg volume
   exchangeWithdrawalsPerUser: 0.5,  // 0.5 withdrawals/user
+  exchangeAvgSwapSize: 30,          // MED-04: $30 avg swap size
   
   // Reward Distribution
   textPostPoints: 3,
@@ -243,7 +269,7 @@ export const PRESETS: Preset[] = [
       buybackPercent: 0.01,
       verificationRate: 0.01,
       postsPerUser: 0.4,
-      adCPMMultiplier: 0.15,           // Increased from 0.08 to show ad revenue
+      adFillRate: 0.15,                // Increased from 0.08 to show ad revenue
       rewardAllocationPercent: 0.06,
       nftMintFeeVcoin: 25,
       nftMintPercentage: 0.005,        // 0.5% NFT mints (increased from 0.1%)
@@ -290,7 +316,7 @@ export const PRESETS: Preset[] = [
       buybackPercent: 0.03,
       verificationRate: 0.02,
       postsPerUser: 0.8,
-      adCPMMultiplier: 0.35,           // Better fill rate for growing platform
+      adFillRate: 0.35,                // Better fill rate for growing platform
       rewardAllocationPercent: 0.10,
       bannerCPM: 2.00,
       videoCPM: 6.00,
@@ -327,7 +353,7 @@ export const PRESETS: Preset[] = [
       buybackPercent: 0.04,
       verificationRate: 0.03,
       postsPerUser: 1.0,
-      adCPMMultiplier: 0.60,
+      adFillRate: 0.60,                // 60% fill rate for established platform
       rewardAllocationPercent: 0.12,
       bannerCPM: 8.00,
       videoCPM: 25.00,
@@ -449,6 +475,8 @@ export const TOKEN_ALLOCATION: Record<string, TokenAllocationCategoryConfig> = {
 };
 
 // TGE Circulating Supply Breakdown
+// FIX: CRIT-01/HIGH-01 - Rewards should NOT be included at TGE
+// TGE only includes allocation unlocks, rewards emission starts Month 1
 export const TGE_BREAKDOWN = {
   SEED: 0,                 // 0% TGE
   PRIVATE: 3_000_000,      // 10% of 30M
@@ -456,18 +484,18 @@ export const TGE_BREAKDOWN = {
   TEAM: 0,                 // 0% TGE
   ADVISORS: 0,             // 0% TGE
   TREASURY: 0,             // Programmatic
-  REWARDS: 5_833_333,      // First month emission
+  REWARDS: 0,              // FIX: Was 5_833_333 - rewards start M1, NOT TGE
   LIQUIDITY: 100_000_000,  // 100% at TGE
   FOUNDATION: 5_000_000,   // 25% of 20M
   MARKETING: 20_000_000,   // 25% of 80M
-  TOTAL: 158_833_333,
+  TOTAL: 153_000_000,      // FIX: Was 158_833_333 - now correct without rewards
 };
 
 // Configuration constants
 export const CONFIG = {
   SUPPLY: {
     TOTAL: 1_000_000_000,
-    TGE_CIRCULATING: 158_833_333,  // Updated to match official tokenomics
+    TGE_CIRCULATING: 153_000_000,  // FIX: Was 158_833_333 - now correct without rewards at TGE
     LIQUIDITY: 100_000_000,
     REWARDS_ALLOCATION: 350_000_000,  // Updated: 35% (was 70%)
     REWARDS_DURATION_MONTHS: 60,  // Updated: 60 months (was 120)
@@ -650,6 +678,23 @@ export const WS_BASE_URL = process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:800
 /**
  * FOMO Events for each scenario
  * Based on research for March 2026 - March 2027 token launch window
+ * 
+ * LOW-FE-002 FIX: Documented magic numbers
+ * 
+ * @property {number} impactMultiplier - Multiplier applied to user growth during event
+ *   - 1.0-1.5: Minor impact (feature launches, small milestones)
+ *   - 1.5-2.5: Moderate impact (partnerships, exchange listings)
+ *   - 2.5-5.0: Major impact (viral moments, tier-1 listings)
+ *   - 5.0-12.0: Exceptional impact (TGE launch, major viral events)
+ * 
+ * @property {number} durationDays - Event duration, typically 14 days (2 weeks)
+ *   - 14 days accounts for: initial hype (3-4 days), sustained attention (7 days),
+ *     and gradual decline (3-4 days) based on typical crypto news cycles
+ * 
+ * @property {number} month - Month when event triggers (1-12)
+ *   - TGE always month 1
+ *   - Holiday events month 11 (Black Friday/Cyber Monday timing)
+ *   - Major milestones strategically spaced for momentum
  */
 export const FOMO_EVENTS: Record<GrowthScenario, FomoEvent[]> = {
   conservative: [

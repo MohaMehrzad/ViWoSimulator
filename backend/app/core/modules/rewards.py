@@ -38,10 +38,11 @@ from app.models import SimulationParameters, RewardsResult
 # PLATFORM FEE CONFIGURATION
 # ============================================================================
 
+# MED-07 Fix: Import centralized PLATFORM_FEE_RATE from config
 # Fixed platform fee rate - 5% of ALL reward emissions
 # This is taken FIRST, BEFORE any distribution to users
 # This is the PRIMARY revenue source for the platform
-PLATFORM_FEE_RATE = 0.05  # 5%
+PLATFORM_FEE_RATE = config.PLATFORM_FEE_RATE  # 5% - centralized in config.py
 
 # Days per month for calculations
 DAYS_PER_MONTH = 30
@@ -145,6 +146,15 @@ def calculate_dynamic_allocation(
             net_emission = gross_emission * (1 - PLATFORM_FEE_RATE)
             per_user_monthly_vcoin = net_emission / current_users
             per_user_monthly_usd = per_user_monthly_vcoin * token_price
+        else:
+            # MED-06 Fix: Log warning when floor cannot be applied
+            import logging
+            logging.warning(
+                f"MED-06: Floor allocation ({floor_allocation:.2%}) exceeds max_allocation "
+                f"({max_allocation:.2%}). Minimum per-user reward of ${min_per_user_monthly_usd:.2f} "
+                f"cannot be guaranteed for {current_users} users. Consider reducing min_per_user_monthly_usd "
+                f"or increasing max_allocation."
+            )
     
     return DynamicAllocationResult(
         allocation_percent=final_allocation,

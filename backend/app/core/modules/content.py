@@ -182,9 +182,10 @@ def calculate_content(params: SimulationParameters, users: int) -> ModuleResult:
     # Posts that incur the anti-bot fee (excess posts from non-verified)
     excess_posts = max(0, posts_from_paying_creators - free_allowance_posts)
     
-    # Anti-bot fee: Very small (0.1 VCoin) - just enough to deter spam
+    # Anti-bot fee: Very small (0.1 VCoin default) - just enough to deter spam
     # This is NOT a revenue source, just a deterrent
-    anti_bot_fee_vcoin = 0.1
+    # Configurable via params for tuning anti-bot economics
+    anti_bot_fee_vcoin = getattr(params, 'anti_bot_fee_vcoin', 0.1)
     anti_bot_fees_vcoin = excess_posts * anti_bot_fee_vcoin
     anti_bot_fees_usd = anti_bot_fees_vcoin * params.token_price
     
@@ -192,14 +193,18 @@ def calculate_content(params: SimulationParameters, users: int) -> ModuleResult:
     # Real posts get engagement and earn rewards that offset any fees
     # Estimate: 80% of excess posts are from real users who get engagement
     # They effectively get refunded through rewards
-    engagement_refund_rate = 0.80
+    # Configurable via params for tuning anti-bot economics
+    engagement_refund_rate = getattr(params, 'engagement_refund_rate', 0.80)
     effective_anti_bot_revenue = anti_bot_fees_usd * (1 - engagement_refund_rate)
     
     # === NFT MINTING (Covers Processing Cost Only) ===
     # NFT fee covers Solana transaction + storage costs, no profit margin
     # Solana NFT costs: ~0.01 SOL ($0.50) for mint + metadata
     nft_processing_cost_usd = 0.50
-    nft_mint_fee_vcoin = nft_processing_cost_usd / params.token_price if params.token_price > 0 else 15
+    # Calculate fee in VCoin; use default token price ($0.03) for consistent fallback
+    default_token_price = 0.03
+    effective_token_price = params.token_price if params.token_price > 0 else default_token_price
+    nft_mint_fee_vcoin = nft_processing_cost_usd / effective_token_price
     nft_fees_vcoin = nft_mints * nft_mint_fee_vcoin
     nft_fees_usd = nft_mints * nft_processing_cost_usd  # Break-even
     

@@ -23,9 +23,10 @@ export function LiquiditySection({ result, parameters }: LiquiditySectionProps) 
   // Solana-specific data
   const network = liquidity?.network || 'solana';
   const primaryDex = liquidity?.primaryDex || 'raydium_clmm';
-  const concentrationFactor = liquidity?.concentrationFactor || 2;
+  const concentrationFactor = liquidity?.concentrationFactor || 4;  // FIX NEW-HIGH-001: Backend default is 4.0
   const effectiveLiquidity = liquidity?.effectiveLiquidity || initialLiquidity * concentrationFactor;
-  const pools = liquidity?.pools || [];
+  // NEW-LOW-001 FIX: Properly type pools array with SolanaPoolInfo
+  const pools: SolanaPoolInfo[] = liquidity?.pools || [];
   const jupiterEnabled = liquidity?.jupiterEnabled !== false;
   const estimatedLpEarnings = liquidity?.estimatedLpEarnings || 0;
   
@@ -453,6 +454,7 @@ function ScoreComponent({
   target,
   description,
   score,
+  maxScore = 40,  // NEW-MED-006 FIX: Accept maxScore prop instead of hardcoded /40
   isInverse = false,
   isCount = false,
 }: {
@@ -461,6 +463,7 @@ function ScoreComponent({
   target: number;
   description: string;
   score: number;
+  maxScore?: number;  // NEW-MED-006 FIX: Different components have different weights
   isInverse?: boolean;
   isCount?: boolean;
 }) {
@@ -474,7 +477,7 @@ function ScoreComponent({
     <div>
       <div className="flex justify-between mb-1">
         <span className="text-sm font-medium">{label}</span>
-        <span className="text-sm font-bold">{score.toFixed(1)}/40</span>
+        <span className="text-sm font-bold">{score.toFixed(1)}/{maxScore}</span>
       </div>
       <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
         <div 

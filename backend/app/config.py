@@ -8,9 +8,17 @@ Addresses Issues #9 (cost scaling), #17 (documented activity rates).
 === TOKEN ALLOCATION (November 2025) ===
 Official VCoin tokenomics with 10 allocation categories:
 - Total Supply: 1,000,000,000 VCoin
-- TGE Circulating: ~158,833,333 VCoin
+- TGE Circulating: 153,000,000 VCoin (HIGH-01 Fix)
 - 60-month vesting schedule for most categories
 - 5-year reward emission (350M tokens)
+
+=== ROUNDING CONVENTIONS (LOW-02) ===
+The following rounding precision standards are used throughout the simulator:
+- Token Prices: 4 decimal places (e.g., $0.0500)
+- Revenue/Costs (USD): 2 decimal places (e.g., $1,234.56)
+- Percentages: 1-2 decimal places (e.g., 15.5%, 0.155)
+- Token Counts: 0 decimal places (integers)
+- User Counts: 0 decimal places (integers)
 
 === SOLANA NETWORK INTEGRATION (November 2025) ===
 All blockchain operations are built on Solana for:
@@ -32,6 +40,32 @@ from dataclasses import dataclass, field
 from typing import Dict, Optional
 
 
+# === ROUNDING PRECISION CONSTANTS (LOW-001 Fix) ===
+
+@dataclass(frozen=True)
+class RoundingPrecision:
+    """
+    LOW-001 Fix: Standardized rounding precision across the simulator.
+    
+    Use these constants for consistent rounding:
+    - TOKEN_PRICE: For VCoin prices (e.g., $0.0300)
+    - USD_AMOUNT: For dollar amounts (e.g., $1,234.56)
+    - PERCENTAGE: For percentages (e.g., 15.50%)
+    - TOKEN_COUNT: For token quantities (integers)
+    - USER_COUNT: For user counts (integers)
+    
+    Example usage:
+        price = round(raw_price, ROUNDING.TOKEN_PRICE)
+        revenue = round(raw_revenue, ROUNDING.USD_AMOUNT)
+    """
+    TOKEN_PRICE: int = 4    # 4 decimals for token prices ($0.0300)
+    USD_AMOUNT: int = 2     # 2 decimals for USD amounts ($1,234.56)
+    PERCENTAGE: int = 2     # 2 decimals for percentages (15.50%)
+    TOKEN_COUNT: int = 0    # Integer for token counts
+    USER_COUNT: int = 0     # Integer for user counts
+    RATE: int = 4           # 4 decimals for rates/ratios (0.0500)
+
+
 # === TOKEN ALLOCATION CONFIGURATION (November 2025) ===
 
 @dataclass(frozen=True)
@@ -45,11 +79,15 @@ class TokenAllocationCategory:
         tokens: Total tokens allocated
         tge_percent: Percentage unlocked at TGE (0.0-1.0)
         cliff_months: Months before vesting starts (after TGE)
-        vesting_months: Total vesting period in months (including cliff)
+        vesting_months: Duration of vesting period AFTER cliff ends.
+                       Total unlock period = cliff_months + vesting_months.
+                       Example: cliff=6, vesting=18 means tokens unlock M7-M24.
         price_usd: Token price for this round (if applicable)
         is_programmatic: Whether release is programmatic (Treasury/Rewards)
         emission_months: For rewards, the emission duration
         description: Category description
+    
+    HIGH-02 Fix: Updated vesting_months docstring to match actual code behavior.
     """
     name: str
     percent: float
@@ -204,13 +242,43 @@ class TokenAllocationConfig:
             'MARKETING': self.MARKETING,
         }
     
+    def validate_allocations(self) -> bool:
+        """
+        Validate that all allocation percentages sum to exactly 100%.
+        
+        Raises:
+            ValueError: If allocations don't sum to 100% (within 0.1% tolerance)
+        
+        Returns:
+            True if validation passes
+        """
+        total = sum(cat.percent for cat in self.get_all_categories().values())
+        if abs(total - 1.0) > 0.001:
+            raise ValueError(
+                f"Token allocations sum to {total*100:.2f}%, not 100%. "
+                f"Please verify allocation percentages."
+            )
+        return True
+    
     def get_tge_circulating(self) -> int:
-        """Calculate total tokens circulating at TGE"""
+        """
+        Calculate total tokens circulating at TGE.
+        
+        HIGH-01 Fix: TGE (Token Generation Event) only includes allocation unlocks,
+        not rewards emission. Rewards emission starts at month 1, not TGE.
+        
+        Returns:
+            Total TGE circulating: 153,000,000 VCoin
+            - PRIVATE: 3,000,000 (10% of 30M)
+            - PUBLIC: 25,000,000 (50% of 50M)
+            - LIQUIDITY: 100,000,000 (100% of 100M)
+            - FOUNDATION: 5,000,000 (25% of 20M)
+            - MARKETING: 20,000,000 (25% of 80M)
+        """
         total = 0
         for cat in self.get_all_categories().values():
             total += int(cat.tokens * cat.tge_percent)
-        # Add first month rewards emission
-        total += 5_833_333  # Monthly emission
+        # HIGH-01 Fix: Removed rewards emission - it starts month 1, not TGE
         return total
     
     def get_monthly_unlock(self, category_key: str, month: int) -> int:
@@ -377,11 +445,11 @@ class SupplyConfig:
     - Total Supply: 1,000,000,000 (unchanged)
     - Rewards Allocation: 350,000,000 (35%, was 70%)
     - Rewards Duration: 60 months (5 years, was 10 years)
-    - TGE Circulating: ~158,833,333
+    - TGE Circulating: 153,000,000 (HIGH-01 Fix: was 158,833,333 - incorrectly included rewards)
     - Treasury Allocation: 200,000,000 (20%, NEW)
     """
     TOTAL: int = 1_000_000_000
-    TGE_CIRCULATING: int = 158_833_333
+    TGE_CIRCULATING: int = 153_000_000  # HIGH-01 Fix: Removed rewards (only allocation unlocks)
     LIQUIDITY: int = 100_000_000
     REWARDS_ALLOCATION: int = 350_000_000  # 35% - Updated from 700M
     REWARDS_DURATION_MONTHS: int = 60  # 5 years - Updated from 120
@@ -390,9 +458,33 @@ class SupplyConfig:
 
 @dataclass(frozen=True)
 class FeeDistributionConfig:
-    BURN: float = 0.20
-    TREASURY: float = 0.50
-    REWARDS: float = 0.30
+    """
+    Fee distribution split for collected VCoin transaction fees.
+    
+    WP-006 Fix: Documentation clarifying the difference between:
+    
+    1. FeeDistributionConfig (THIS CLASS):
+       - Defines how COLLECTED transaction fees are DISTRIBUTED
+       - BURN: 20% of collected fees are burned (deflationary)
+       - TREASURY: 50% of collected fees go to DAO treasury
+       - REWARDS: 30% of collected fees redistributed to users
+       - These apply AFTER fees are collected from the economy
+    
+    2. params.burn_rate (SimulationParameters):
+       - User-configurable burn rate (default 5%)
+       - Applied to TOKEN VELOCITY (tokens flowing through economy)
+       - NOT applied to emission - applied to spend rate
+       - Example: 5% burn_rate on 50% velocity = 2.5% effective burn of emission
+    
+    The effective burn rate displayed to users (CRIT-002) shows the actual
+    deflationary impact as a percentage of monthly emission, which differs
+    from both of these rates due to token velocity dynamics.
+    
+    Total = 1.0 (100%)
+    """
+    BURN: float = 0.20      # 20% burned (deflationary)
+    TREASURY: float = 0.50  # 50% to DAO treasury
+    REWARDS: float = 0.30   # 30% redistributed
 
 
 @dataclass(frozen=True)
@@ -434,13 +526,16 @@ class CostScalingConfig:
     - RPC: Free tiers available (Helius, QuickNode, Alchemy)
     - State rent: One-time ~$0.10 per token account
     - No gas price volatility
+    
+    MED-05 Fix: Removed unused SOLANA_TX_COST field.
+    Solana tx costs are now handled directly in modules that need them.
     """
     BASE: float           # Minimal fixed cost (shared infrastructure)
     PER_USER: float       # Cost per user above threshold
     THRESHOLD: int = 100  # Users before per-user costs kick in
     PER_POST: float = 0   # Optional: cost per post
-    # Solana-specific costs (per transaction)
-    SOLANA_TX_COST: float = 0.00025  # USD per Solana transaction
+    # MED-05: Removed SOLANA_TX_COST - unused in get_linear_cost()
+    # Solana tx costs are handled directly in exchange.py, staking.py, etc.
 
 
 @dataclass(frozen=True)
@@ -475,12 +570,12 @@ class DynamicRewardConfig:
     
     Expected Scaling (with defaults):
         | Users     | Growth Factor | Allocation % | Per-User VCoin/Month |
-        |-----------|---------------|--------------|---------------------|
-        | 1,000     | 0.00          | 5%           | 291,667             |
-        | 10,000    | 0.33          | 33%          | 192,500             |
-        | 100,000   | 0.67          | 62%          | 36,167              |
-        | 500,000   | 0.90          | 82%          | 9,567               |
-        | 1,000,000 | 1.00          | 90%          | 5,250               |
+        |-----------|---------------|--------------|----------------------|
+        | 1,000     | 0.00          | 5%           | ~292                 |
+        | 10,000    | 0.33          | 33%          | ~193                 |
+        | 100,000   | 0.67          | 62%          | ~36                  |
+        | 500,000   | 0.90          | 82%          | ~10                  |
+        | 1,000,000 | 1.00          | 90%          | ~5                   |
     """
     # Allocation bounds
     MIN_ALLOCATION: float = 0.05  # 5% minimum - ensures early users receive meaningful rewards
@@ -504,6 +599,9 @@ class DynamicRewardConfig:
 class Config:
     """Main configuration class with all constants"""
     
+    # === LOW-001 Fix: Standardized rounding precision ===
+    ROUNDING = RoundingPrecision()
+    
     # === TOKEN ALLOCATION (November 2025) ===
     TOKEN_ALLOCATION = TokenAllocationConfig()
     
@@ -522,11 +620,35 @@ class Config:
     SOLANA_DEX = SolanaDexConfig()
     SOLANA_STAKING = SolanaStakingConfig()
     
-    # Monthly emission from rewards pool (350M / 60 months = 5,833,333)
+    # Monthly emission from rewards pool (350M / 60 months)
+    # Base monthly emission (integer truncated)
     MONTHLY_EMISSION: int = 5_833_333
+    # Remainder tokens to add to final month (350M - 5,833,333 * 60 = 20)
+    MONTHLY_EMISSION_REMAINDER: int = 20
+    
+    @classmethod
+    def get_monthly_emission(cls, month: int, total_months: int = 60) -> int:
+        """
+        Get the monthly emission for a specific month.
+        The final month includes the remainder to ensure exact 350M distribution.
+        
+        Args:
+            month: Month number (1-60)
+            total_months: Total vesting months (default 60)
+        
+        Returns:
+            Monthly emission in VCoin
+        """
+        if month == total_months:
+            return cls.MONTHLY_EMISSION + cls.MONTHLY_EMISSION_REMAINDER
+        return cls.MONTHLY_EMISSION
     
     # Fee collection rate for VCoin transactions
     FEE_COLLECTION_RATE: float = 0.10
+    
+    # MED-07 Fix: Centralized platform fee rate (was duplicated in rewards.py and deterministic.py)
+    # 5% of ALL reward emissions goes to platform treasury
+    PLATFORM_FEE_RATE: float = 0.05
     
     # Treasury revenue share (percentage of platform revenue going to treasury)
     TREASURY_REVENUE_SHARE: float = 0.20  # 20% of revenue to treasury
@@ -623,49 +745,44 @@ class Config:
     #   Exchange: $5 + (100 exchange users - 25) * $0.01 = $5.75/month
     #   Blockchain costs: 1000 users * 10 txs * $0.00025 = $2.50/month
     #
+    # MED-05: Removed SOLANA_TX_COST from CostScalingConfig - unused in get_linear_cost()
+    # Solana tx costs (~$0.00025) are handled directly in modules (exchange.py, staking.py)
     COST_SCALING = {
         'IDENTITY': CostScalingConfig(
             BASE=10,          # $10/month base (serverless auth, free tier storage)
             PER_USER=0.01,    # $0.01/user/month above threshold
             THRESHOLD=100,    # First 100 users free tier
-            SOLANA_TX_COST=0.00025,  # Solana tx cost for identity verification
         ),
         'CONTENT': CostScalingConfig(
             BASE=20,          # $20/month base (CDN free tier, basic storage)
             PER_USER=0.02,    # $0.02/user/month
             THRESHOLD=100,
             PER_POST=0.002,   # $0.002/post (processing, transcoding)
-            SOLANA_TX_COST=0.00025,  # Solana tx for on-chain content registry
         ),
         'ADVERTISING': CostScalingConfig(
             BASE=5,           # $5/month base (ad serving is mostly profit)
             PER_USER=0.005,   # $0.005/user
             THRESHOLD=100,
-            SOLANA_TX_COST=0.00025,
         ),
         'COMMUNITY': CostScalingConfig(
             BASE=5,           # $5/month base
             PER_USER=0.005,   # $0.005/user
             THRESHOLD=100,
-            SOLANA_TX_COST=0.00025,
         ),
         'MESSAGING': CostScalingConfig(
             BASE=10,          # $10/month base (message queue, storage)
             PER_USER=0.01,    # $0.01/user
             THRESHOLD=100,
-            SOLANA_TX_COST=0.00025,  # Solana tx for encrypted message keys
         ),
         'REWARDS': CostScalingConfig(
             BASE=10,          # $10/month base (Solana program execution)
             PER_USER=0.003,   # $0.003/user
             THRESHOLD=100,
-            SOLANA_TX_COST=0.00025,  # Solana tx for reward distribution
         ),
         'EXCHANGE': CostScalingConfig(
             BASE=5,           # $5/month base (Helius RPC free tier, minimal infra)
             PER_USER=0.01,    # $0.01/user (includes Solana tx costs)
             THRESHOLD=25,     # Low threshold - exchange scales excellently on Solana
-            SOLANA_TX_COST=0.00025,  # Jupiter swap tx cost
         ),
     }
     

@@ -10,9 +10,30 @@ import {
 } from '@/types/simulation';
 import { API_BASE_URL } from './constants';
 
+// Known acronyms that should remain uppercase in camelCase
+// Only include acronyms that are actually ALL CAPS in frontend type definitions
+// e.g., blendedCAC, bannerCPM, maxDailyRewardUSD
+// Note: Other acronyms like APY, APR, MAU use titlecase (stakingApy, rewardApr, monthlyMau)
+const KNOWN_ACRONYMS = ['cac', 'cpm', 'usd'];
+
 // Convert snake_case to camelCase
 function snakeToCamel(str: string): string {
-  return str.replace(/_([a-z])/g, (_, letter) => letter.toUpperCase());
+  // First handle _[a-z] (underscore + lowercase letter)
+  let result = str.replace(/_([a-z])/g, (_, letter) => letter.toUpperCase());
+  // Then remove underscores before numbers (e.g., top_1 -> top1, top_10 -> top10)
+  result = result.replace(/_(\d)/g, (_, digit) => digit);
+  
+  // Uppercase known acronyms at the end of the string or before another uppercase letter
+  for (const acronym of KNOWN_ACRONYMS) {
+    // Match the capitalized version (e.g., "Cac") at end of string or before uppercase
+    const capitalizedAcronym = acronym.charAt(0).toUpperCase() + acronym.slice(1);
+    const uppercaseAcronym = acronym.toUpperCase();
+    // Replace at end of string
+    if (result.endsWith(capitalizedAcronym)) {
+      result = result.slice(0, -capitalizedAcronym.length) + uppercaseAcronym;
+    }
+  }
+  return result;
 }
 
 // Convert object keys from snake_case to camelCase recursively
@@ -35,8 +56,16 @@ export function convertKeysToCamelCase<T>(obj: unknown): T {
 }
 
 // Convert camelCase to snake_case
+// Handles consecutive uppercase letters (acronyms) correctly:
+// e.g., bannerCPM -> banner_cpm, highQualityCreatorCAC -> high_quality_creator_cac
 function camelToSnake(str: string): string {
-  return str.replace(/[A-Z]/g, letter => `_${letter.toLowerCase()}`);
+  return str
+    // Insert underscore between lowercase/digit and uppercase
+    .replace(/([a-z\d])([A-Z])/g, '$1_$2')
+    // Insert underscore between consecutive uppercase and uppercase followed by lowercase
+    // e.g., XMLParser -> XML_Parser (if it were in the middle)
+    .replace(/([A-Z]+)([A-Z][a-z])/g, '$1_$2')
+    .toLowerCase();
 }
 
 // Convert object keys from camelCase to snake_case recursively
@@ -92,9 +121,16 @@ class ApiClient {
   }
 
   // Run deterministic simulation
-  async runDeterministic(params: SimulationParameters): Promise<SimulationResult> {
+  // HIGH-FE-004 FIX: Added simulationMonth parameter for future module testing
+  async runDeterministic(
+    params: SimulationParameters, 
+    simulationMonth: number = 1
+  ): Promise<SimulationResult> {
     const snakeParams = convertKeysToSnakeCase(params);
-    const result = await this.request<unknown>('/api/simulate/deterministic', {
+    const endpoint = simulationMonth > 1 
+      ? `/api/simulate/deterministic?simulation_month=${simulationMonth}`
+      : '/api/simulate/deterministic';
+    const result = await this.request<unknown>(endpoint, {
       method: 'POST',
       body: JSON.stringify(snakeParams),
     });

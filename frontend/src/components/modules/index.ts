@@ -20,3 +20,8 @@ export { TokenMetricsSection } from './TokenMetricsSection';
 export { FutureModulesSection } from './FutureModulesSection';
 // Pre-Launch Modules (Nov 2025)
 export { PreLaunchSection } from './PreLaunchSection';
+// 2025 Audit Compliance (Dec 2025)
+export { WhaleAnalysisSection } from './WhaleAnalysisSection';
+export { AttackAnalysisSection } from './AttackAnalysisSection';
+export { LiquidityFarmingSection } from './LiquidityFarmingSection';
+export { GameTheorySection } from './GameTheorySection';

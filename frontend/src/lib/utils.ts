@@ -4,6 +4,17 @@ export function cn(...inputs: ClassValue[]) {
   return clsx(inputs);
 }
 
+// LOW-FE-001 FIX: Standardized rounding precision config
+// Matches backend RoundingPrecision config for consistency
+export const ROUNDING = {
+  TOKEN_PRICE: 4,      // 4 decimal places for token prices (e.g., $0.0300)
+  USD_AMOUNT: 2,       // 2 decimal places for USD amounts (e.g., $100.00)
+  PERCENTAGE_1DP: 1,   // 1 decimal place for percentages (e.g., 10.5%)
+  PERCENTAGE_2DP: 2,   // 2 decimal places for precise percentages (e.g., 10.55%)
+  TOKEN_COUNT: 0,      // Whole numbers for token counts
+  USER_COUNT: 0,       // Whole numbers for user counts
+} as const;
+
 export function formatNumber(num: number | string | boolean | undefined | null): string {
   if (num === undefined || num === null) {
     return '0';

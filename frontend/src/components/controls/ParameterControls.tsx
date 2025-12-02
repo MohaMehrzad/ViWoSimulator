@@ -265,8 +265,8 @@ export function ParameterControls({
           />
           <SliderInput
             label="Ad Fill Rate (%)"
-            value={parameters.adCPMMultiplier * 100}
-            onChange={(v) => onUpdateParameter('adCPMMultiplier', v / 100)}
+            value={parameters.adFillRate * 100}
+            onChange={(v) => onUpdateParameter('adFillRate', v / 100)}
             min={5}
             max={100}
           />
@@ -608,8 +608,8 @@ export function ParameterControls({
           />
           <SliderInput
             label="Ad Fill Rate (%)"
-            value={parameters.adCPMMultiplier * 100}
-            onChange={(v) => onUpdateParameter('adCPMMultiplier', v / 100)}
+            value={parameters.adFillRate * 100}
+            onChange={(v) => onUpdateParameter('adFillRate', v / 100)}
             min={5}
             max={100}
           />
@@ -685,6 +685,15 @@ export function ParameterControls({
             min={0}
             max={5}
             step={0.1}
+          />
+          {/* FRONT-004 FIX: Add exchangeAvgSwapSize control */}
+          <NumberInput
+            label="Avg Swap Size ($)"
+            value={parameters.exchangeAvgSwapSize || 30}
+            onChange={(v) => onUpdateParameter('exchangeAvgSwapSize', v)}
+            min={10}
+            max={500}
+            step={5}
           />
         </div>
       </ModuleSection>

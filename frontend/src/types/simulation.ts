@@ -455,11 +455,305 @@ export interface ValueAccrualResult {
   weights: Record<string, number>;
 }
 
+// === GINI & RUNWAY METRICS (December 2025 - 2025 Audit Compliance) ===
+
+export interface GiniResult {
+  gini: number;  // 0=equal, 1=concentrated
+  interpretation: string;
+  decentralizationScore: number;
+  holderCount: number;
+  top1PercentConcentration: number;
+  top10PercentConcentration: number;
+}
+
+export interface RunwayResult {
+  runwayMonths: number;
+  runwayYears: number;
+  isSustainable: boolean;
+  interpretation: string;
+  netBurnMonthly: number;
+  monthlyRevenue: number;
+  monthlyExpenses: number;
+  treasuryBalance: number;
+  runwayHealth: number;
+  monthsToSustainability: number;
+}
+
+export interface InflationResult {
+  // Emission
+  monthlyEmission: number;
+  monthlyEmissionUsd: number;
+  annualEmission: number;
+  emissionRate: number;
+  // Deflationary
+  monthlyBurns: number;
+  monthlyBurnsUsd: number;
+  monthlyBuybacks: number;
+  monthlyBuybacksUsd: number;
+  totalDeflationary: number;
+  // Net inflation
+  netMonthlyInflation: number;
+  netMonthlyInflationUsd: number;
+  netInflationRate: number;
+  annualNetInflationRate: number;
+  // Supply
+  circulatingSupply: number;
+  totalSupply: number;
+  // Health
+  isDeflationary: boolean;
+  deflationStrength: string;
+  supplyHealthScore: number;
+  // Projections
+  monthsToMaxSupply: number;
+  projectedYear1Inflation: number;
+  projectedYear5Supply: number;
+}
+
+// === WHALE ANALYSIS RESULTS (December 2025 - 2025 Audit Compliance) ===
+
+export interface TopHoldersGroup {
+  holdersCount: number;
+  amountVcoin: number;
+  amountUsd: number;
+  percentage: number;
+  avgBalance: number;
+}
+
+export interface WhaleInfo {
+  rank: number;
+  balance: number;
+  percentage: number;
+}
+
+export interface DumpScenarioResult {
+  scenarioName: string;
+  sellersCount: number;
+  sellAmountVcoin: number;
+  sellAmountUsd: number;
+  sellPercentage: number;
+  priceImpactPercent: number;
+  newPrice: number;
+  liquidityAbsorbedPercent: number;
+  marketCapLoss: number;
+  recoveryDaysEstimate: number;
+  severity: 'low' | 'medium' | 'high' | 'critical';
+}
+
+export interface WhaleAnalysisResult {
+  holderCount: number;
+  totalSupply: number;
+  totalHeld: number;
+  tokenPrice: number;
+  
+  // Top holder groups
+  top10: TopHoldersGroup;
+  top50: TopHoldersGroup;
+  top100: TopHoldersGroup;
+  
+  // Percentile groups
+  top1Percent: TopHoldersGroup;
+  top5Percent: TopHoldersGroup;
+  top10Percent: TopHoldersGroup;
+  
+  // Whale breakdown
+  whaleCount: number;
+  largeHolderCount: number;
+  mediumHolderCount: number;
+  smallHolderCount: number;
+  
+  whales: WhaleInfo[];
+  
+  // Risk metrics
+  concentrationRiskScore: number;
+  riskLevel: string;
+  riskColor: string;
+  
+  // Dump scenarios
+  dumpScenarios: DumpScenarioResult[];
+  
+  // Recommendations
+  recommendations: string[];
+}
+
+// === ATTACK ANALYSIS RESULTS (December 2025 - 2025 Audit Compliance) ===
+
+export interface AttackScenarioDetail {
+  name: string;
+  category: string;
+  description: string;
+  attackVector: string;
+  probability: number;
+  severity: 'low' | 'medium' | 'high' | 'critical';
+  potentialLossUsd: number;
+  potentialLossPercent: number;
+  mitigationEffectiveness: number;
+  recoveryTimeDays: number;
+  requiredCapital: number;
+  complexity: string;
+}
+
+export interface SecurityFeatures {
+  hasTimelock: boolean;
+  timelockDelayHours: number;
+  hasMultisig: boolean;
+  multisigThreshold: number;
+  oracleType: string;
+}
+
+export interface AttackAnalysisResult {
+  vulnerabilityScore: number;
+  riskLevel: string;
+  riskColor: string;
+  totalPotentialLossUsd: number;
+  avgSeverityScore: number;
+  marketCap: number;
+  liquidityRatio: number;
+  volumeToLiquidity: number;
+  securityFeatures: SecurityFeatures;
+  scenarios: AttackScenarioDetail[];
+  recommendations: string[];
+}
+
+// === LIQUIDITY FARMING RESULTS (December 2025 - 2025 Audit Compliance) ===
+
+export interface ILScenario {
+  scenario: string;
+  priceChangePercent: number;
+  finalPrice: number;
+  impermanentLossPercent: number;
+  interpretation: string;
+}
+
+export interface FarmingAPY {
+  rewardApr: number;
+  feeApr: number;
+  totalApr: number;
+  rewardApy: number;
+  feeApy: number;
+  totalApy: number;
+  dailyRewardRate: number;
+  dailyTotalRate: number;
+  poolTvlUsd: number;
+  dailyRewardVcoin: number;
+  dailyRewardUsd: number;
+  isSustainable: boolean;
+  example1000Final: number;
+  example1000Profit: number;
+}
+
+export interface FarmingRiskMetrics {
+  riskScore: number;
+  riskLevel: string;
+  ilBreakevenMultiplier: number;
+  ilBreakevenPriceUp: number;
+  ilBreakevenPriceDown: number;
+}
+
+export interface FarmingSimulationMonth {
+  month: number;
+  vcoinPrice: number;
+  priceChangePercent: number;
+  holdValueUsd: number;
+  lpPositionValueUsd: number;
+  cumulativeRewardsUsd: number;
+  cumulativeFeesUsd: number;
+  totalValueUsd: number;
+  impermanentLossPercent: number;
+  impermanentLossUsd: number;
+  netVsHoldingUsd: number;
+  totalPnlUsd: number;
+  totalPnlPercent: number;
+}
+
+export interface FarmingSimulation {
+  initialInvestmentUsd: number;
+  initialVcoinPrice: number;
+  lpSharePercent: number;
+  monthlyProjections: FarmingSimulationMonth[];
+  finalResult?: FarmingSimulationMonth;
+}
+
+export interface LiquidityFarmingResult {
+  apy: FarmingAPY;
+  ilScenarios: ILScenario[];
+  simulations: Record<string, FarmingSimulation>;  // bull_case, bear_case, stable_case
+  riskMetrics: FarmingRiskMetrics;
+  recommendations: string[];
+}
+
+// === GAME THEORY RESULTS (December 2025 - 2025 Audit Compliance) ===
+
+export interface StrategyMetrics {
+  returnPercent: number;
+  riskPercent: number;
+  riskAdjustedReturn: number;
+}
+
+export interface StakingEquilibrium {
+  stakeProbability: number;
+  sellProbability: number;
+  holdProbability: number;
+  dominantStrategy: string;
+  isStable: boolean;
+  deviationIncentive: number;
+}
+
+export interface StakingAnalysis {
+  bestStrategy: string;
+  interpretation: string;
+  recommendation: string;
+  stakingBreakevenPriceDrop: number;
+}
+
+export interface GovernanceParticipation {
+  rationalParticipants: number;
+  totalHolders: number;
+  participationRate: number;
+  participatingPower: number;
+  quorumAchievable: boolean;
+}
+
+export interface VoterApathy {
+  apatheticRatio: number;
+  riskLevel: string;
+  interpretation: string;
+}
+
+export interface CoordinationGameAnalysis {
+  gameType: string;
+  description: string;
+  equilibrium: string;
+  cooperationProbability: number;
+}
+
+export interface GameTheoryResult {
+  strategies: Record<string, StrategyMetrics>;
+  equilibrium: StakingEquilibrium;
+  analysis: StakingAnalysis;
+  governanceParticipation: GovernanceParticipation;
+  voterApathy: VoterApathy;
+  minCoalitionSize: number;
+  minCoalitionPower: number;
+  coordination: CoordinationGameAnalysis;
+  cooperationSustainable: boolean;
+  healthScore: number;
+  primaryRisk: string;
+  recommendations: string[];
+}
+
 export interface TokenMetricsResult {
   velocity: TokenVelocityResult;
   realYield: RealYieldResult;
   valueAccrual: ValueAccrualResult;
   overallHealth: number;
+  // New 2025 Compliance Metrics
+  gini?: GiniResult;
+  runway?: RunwayResult;
+  inflation?: InflationResult;
+  whaleAnalysis?: WhaleAnalysisResult;
+  attackAnalysis?: AttackAnalysisResult;
+  liquidityFarming?: LiquidityFarmingResult;
+  gameTheory?: GameTheoryResult;
 }
 
 // === MARKET CYCLE TYPES (November 2025) ===
@@ -524,6 +818,14 @@ export interface SolanaStakingInfo {
   instantUnstakePenalty: number;
 }
 
+// NEW-LOW-002 FIX: Staking tier type definitions
+export type StakingTierKey = 'bronze' | 'silver' | 'gold' | 'platinum';
+export type StakingTierDistribution = Record<StakingTierKey, number>;
+
+// Governance tier type definitions
+export type GovernanceTierKey = 'community' | 'delegate' | 'council';
+export type GovernanceTierDistribution = Record<GovernanceTierKey, number>;
+
 // Simulation Parameters - Updated with all audit fixes
 export interface SimulationParameters {
   // Platform Maturity (NEW)
@@ -571,7 +873,7 @@ export interface SimulationParameters {
   postsPerUser: number;
   creatorPercentage?: number;      // NEW - Issue #8
   postsPerCreator?: number;        // NEW - Issue #8
-  adCPMMultiplier: number;
+  adFillRate: number;              // MED-FE-001 FIX: Renamed from adCPMMultiplier (% of ad slots filled)
   rewardAllocationPercent: number;
   
   // Dynamic Reward Allocation (NEW - Nov 2025)
@@ -586,6 +888,12 @@ export interface SimulationParameters {
   protocolOwnedLiquidity?: number;
   liquidityLockMonths?: number;
   targetLiquidityRatio?: number;
+  // MED-03 FIX: Configurable liquidity pool distribution
+  liquidityPoolUsdcPercent?: number;  // % in VCoin/USDC pool (default 40%)
+  liquidityPoolSolPercent?: number;   // % in VCoin/SOL pool (default 35%)
+  liquidityPoolUsdtPercent?: number;  // % in VCoin/USDT pool (default 25%)
+  // HIGH-FE-001 FIX: CLMM capital efficiency factor
+  clmmConcentrationFactor?: number;   // CLMM concentration factor (default 4.0, range 2-10)
   
   // Staking Parameters (NEW - Nov 2025)
   stakingApy?: number;
@@ -677,6 +985,8 @@ export interface SimulationParameters {
   exchangeUserAdoptionRate: number;
   exchangeAvgMonthlyVolume: number;
   exchangeWithdrawalsPerUser: number;
+  // MED-04 FIX: Configurable average swap size
+  exchangeAvgSwapSize?: number;  // Average swap size in USD (default $30)
   
   // Reward Distribution
   textPostPoints: number;
@@ -702,13 +1012,48 @@ export interface SimulationParameters {
   maxDailyRewardUSD: number;
 }
 
+// === MODULE BREAKDOWN TYPES (NEW-HIGH-002 FIX) ===
+
+// Secondary AMM pool info for exchange module
+export interface SecondaryAmmInfo {
+  name: string;
+  share: number;
+  fee: number;
+}
+
+// Typed breakdown for Exchange module
+export interface ExchangeBreakdown {
+  swapFeeRevenue: number;
+  withdrawalFeeRevenue: number;
+  totalTradingVolume: number;
+  totalWithdrawals: number;
+  activeExchangeUsers: number;
+  infrastructureCost: number;
+  blockchainCosts: number;
+  liquidityCosts: number;
+  isLossLeader?: boolean;
+  strategicNote?: string;
+  // Solana-specific fields
+  network?: string;
+  dexAggregator?: string;
+  totalSolanaTxs?: number;
+  totalSolanaFeesUsd?: number;
+  solanaSavings?: number;
+  secondaryAmms?: SecondaryAmmInfo[];
+}
+
 // Module Results
 export interface ModuleResult {
   revenue: number;
   costs: number;
   profit: number;
   margin: number;
-  breakdown: Record<string, number | boolean | string>;
+  breakdown: Record<string, unknown>;  // Updated to allow nested objects
+}
+
+// Typed Exchange Module Result
+export interface ExchangeModuleResult extends Omit<ModuleResult, 'breakdown'> {
+  breakdown: ExchangeBreakdown;
 }
 
 // Recapture Results
@@ -723,6 +1068,9 @@ export interface RecaptureResult {
   totalRevenueSourceVcoin: number;
   totalTransactionFeesUsd: number;
   totalRoyaltiesUsd: number;
+  // Effective vs Configured Burn Rate (NEW - Audit Fix CRIT-FE-002)
+  effectiveBurnRate?: number;  // Actual burn rate after token velocity adjustment
+  configuredBurnRate?: number; // User-configured burn rate
 }
 
 // Rewards Results
@@ -917,6 +1265,18 @@ export interface StakingResult {
   governanceEnabled?: boolean;
   governancePlatform?: string;
   voteEscrowPlanned?: boolean;
+  
+  // Early unstake tracking (NEW - Audit Fix)
+  earlyUnstakeRate?: number;
+  earlyUnstakePenaltyRate?: number;
+  earlyUnstakersCount?: number;
+  expectedEarlyUnstakeRewardLoss?: number;
+  
+  // Reward funding source (NEW - Audit Fix WP-005 & MED-002)
+  rewardFundingSource?: string;
+  rewardFundingDetails?: string;
+  rewardsExceedModuleIncome?: boolean;
+  sustainabilityWarning?: string | null;
 }
 
 // Customer Acquisition Metrics
@@ -1052,7 +1412,27 @@ export interface GaslessParameters {
   newUserRate: number;
 }
 
+// Starting Users Summary - Dec 2025
+// Shows clearly where starting users come from
+export interface StartingUsersSummary {
+  totalActiveUsers: number;
+  userSource: 'manual_input' | 'marketing_budget' | 'growth_scenario';
+  manualStartingUsers?: number | null;
+  marketingBudgetUsd?: number | null;
+  acquiredFromMarketing?: number | null;
+  highQualityCreators: number;
+  midLevelCreators: number;
+  northAmericaConsumers: number;
+  globalLowIncomeConsumers: number;
+  retentionApplied: boolean;
+  usersBeforeRetention?: number | null;
+  usersAfterRetention?: number | null;
+  retentionRate?: number | null;
+}
+
 export interface SimulationResult {
+  // Starting users summary at the top for easy reference (Dec 2025)
+  startingUsersSummary?: StartingUsersSummary;
   identity: ModuleResult;
   content: ModuleResult;
   advertising: ModuleResult;

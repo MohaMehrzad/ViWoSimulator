@@ -6,7 +6,7 @@ Nov 2025: Added LiquidityResult, StakingResult, and Growth Scenario results.
 Nov 2025: Added CirculatingSupplyResult and TreasuryResult for token allocation tracking.
 """
 
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from typing import Dict, List, Optional, Any
 
 
@@ -88,7 +88,8 @@ class VestingScheduleResult(BaseModel):
     monthly_supply: List[CirculatingSupplyResult] = []
     
     # Summary statistics
-    tge_circulating: int = 158_833_333
+    # CRIT-FE-001 Fix: Updated to match config.py (removed rewards from TGE)
+    tge_circulating: int = 153_000_000
     final_circulating: int = 0
     max_circulating: int = 1_000_000_000
     
@@ -99,11 +100,12 @@ class VestingScheduleResult(BaseModel):
     month_full_circulating: int = 60  # Month when 100% circulating
     
     # Category completion months
+    # CRIT-02/03 Fix: Private and Advisors vest M7-M24 (cliff 6 + vesting 18 = 24)
     seed_completion_month: int = 36
-    private_completion_month: int = 18
+    private_completion_month: int = 24  # Fixed: was 18, but vesting ends at M24
     public_completion_month: int = 3
     team_completion_month: int = 48
-    advisors_completion_month: int = 18
+    advisors_completion_month: int = 24  # Fixed: was 18, but vesting ends at M24
     foundation_completion_month: int = 27
     marketing_completion_month: int = 21
     rewards_completion_month: int = 60
@@ -118,6 +120,19 @@ class FomoEventResult(BaseModel):
     impact_multiplier: float
     description: str
     duration_days: int = 14
+    
+    # LOW-03 Fix: Validate event_type against FomoEventType enum values
+    @field_validator('event_type')
+    @classmethod
+    def validate_event_type(cls, v: str) -> str:
+        """Validate that event_type matches a valid FomoEventType value"""
+        from app.core.growth_scenarios import FomoEventType
+        valid_types = [e.value for e in FomoEventType]
+        if v not in valid_types:
+            raise ValueError(
+                f"Invalid event_type '{v}'. Must be one of: {', '.join(valid_types)}"
+            )
+        return v
 
 
 class GrowthProjectionResult(BaseModel):
@@ -171,6 +186,9 @@ class RecaptureResult(BaseModel):
     Updated Nov 2025: Buybacks now use USD REVENUE to purchase tokens from market.
     - Burns: % of collected VCoin fees destroyed (deflationary)
     - Buybacks: % of USD revenue used to buy VCoin from market (creates buy pressure)
+    
+    CRIT-002 Fix: Added effective_burn_rate to show actual burn as % of emission,
+    not just the configured burn_rate which is applied to token velocity.
     """
     total_recaptured: float
     recapture_rate: float
@@ -182,6 +200,10 @@ class RecaptureResult(BaseModel):
     total_revenue_source_vcoin: float
     total_transaction_fees_usd: float
     total_royalties_usd: float
+    # CRIT-002 Fix: Effective burn rate shows actual burns as % of monthly emission
+    # This differs from params.burn_rate which is applied to token velocity, not emission
+    effective_burn_rate: float = 0  # Actual burn % of monthly emission (burns / emission)
+    configured_burn_rate: float = 0  # User-configured burn rate for reference
 
 
 # === GOVERNANCE RESULTS (Nov 2025) ===
@@ -380,12 +402,361 @@ class ValueAccrualResult(BaseModel):
     weights: Dict[str, float] = {}
 
 
+class GiniResult(BaseModel):
+    """Token distribution fairness metrics (Gini coefficient)"""
+    gini: float = 0.7  # 0=equal, 1=concentrated
+    interpretation: str = "Concentrated"
+    decentralization_score: float = 30.0  # 100 - gini*100
+    holder_count: int = 0
+    top_1_percent_concentration: float = 0.0
+    top_10_percent_concentration: float = 0.0
+
+
+class RunwayResult(BaseModel):
+    """Treasury runway analysis"""
+    runway_months: float = 0
+    runway_years: float = 0
+    is_sustainable: bool = False
+    interpretation: str = ""
+    net_burn_monthly: float = 0
+    monthly_revenue: float = 0
+    monthly_expenses: float = 0
+    treasury_balance: float = 0
+    runway_health: float = 0
+    months_to_sustainability: float = 0
+
+
+class InflationResult(BaseModel):
+    """
+    Token inflation metrics - tracks supply dynamics over time.
+    
+    Key metrics:
+    - Gross inflation: Total new tokens entering circulation (emission)
+    - Net inflation: Emission - Burns - Buybacks
+    - Inflation rate: Net inflation as % of circulating supply
+    """
+    # Emission (new tokens entering)
+    monthly_emission: float = 0  # VCoin minted this month
+    monthly_emission_usd: float = 0
+    annual_emission: float = 0
+    emission_rate: float = 0  # As % of circulating
+    
+    # Deflationary mechanisms
+    monthly_burns: float = 0  # VCoin burned
+    monthly_burns_usd: float = 0
+    monthly_buybacks: float = 0  # VCoin bought back from market
+    monthly_buybacks_usd: float = 0
+    total_deflationary: float = 0  # Burns + Buybacks
+    
+    # Net inflation
+    net_monthly_inflation: float = 0  # Emission - Burns - Buybacks
+    net_monthly_inflation_usd: float = 0
+    net_inflation_rate: float = 0  # As % of circulating supply
+    annual_net_inflation_rate: float = 0
+    
+    # Supply metrics
+    circulating_supply: float = 0
+    total_supply: float = 1_000_000_000
+    
+    # Health indicators
+    is_deflationary: bool = False  # True if net inflation < 0
+    deflation_strength: str = ""  # "Strong", "Moderate", "Weak", or inflation levels
+    supply_health_score: float = 50  # 0-100, higher = healthier
+    
+    # Projections
+    months_to_max_supply: int = 60  # Months until emission stops
+    projected_year1_inflation: float = 0
+    projected_year5_supply: float = 0
+    runway_health: float = 0
+    months_to_sustainability: float = 0
+
+
+class DumpScenarioResult(BaseModel):
+    """Result of a whale dump scenario"""
+    scenario_name: str = ""
+    sellers_count: int = 0
+    sell_amount_vcoin: float = 0
+    sell_amount_usd: float = 0
+    sell_percentage: float = 0
+    price_impact_percent: float = 0
+    new_price: float = 0
+    liquidity_absorbed_percent: float = 0
+    market_cap_loss: float = 0
+    recovery_days_estimate: int = 0
+    severity: str = "low"  # low, medium, high, critical
+
+
+class TopHoldersGroup(BaseModel):
+    """Metrics for a group of top holders"""
+    holders_count: int = 0
+    amount_vcoin: float = 0
+    amount_usd: float = 0
+    percentage: float = 0
+    avg_balance: float = 0
+
+
+class WhaleInfo(BaseModel):
+    """Information about a single whale"""
+    rank: int = 0
+    balance: float = 0
+    percentage: float = 0
+
+
+class WhaleAnalysisResult(BaseModel):
+    """
+    Comprehensive whale concentration risk analysis.
+    2025 Industry Compliance metric.
+    """
+    # Basic counts
+    holder_count: int = 0
+    total_supply: float = 0
+    total_held: float = 0
+    token_price: float = 0
+    
+    # Top holder groups
+    top_10: TopHoldersGroup = TopHoldersGroup()
+    top_50: TopHoldersGroup = TopHoldersGroup()
+    top_100: TopHoldersGroup = TopHoldersGroup()
+    
+    # Percentile groups
+    top_1_percent: TopHoldersGroup = TopHoldersGroup()
+    top_5_percent: TopHoldersGroup = TopHoldersGroup()
+    top_10_percent: TopHoldersGroup = TopHoldersGroup()
+    
+    # Whale breakdown
+    whale_count: int = 0
+    large_holder_count: int = 0
+    medium_holder_count: int = 0
+    small_holder_count: int = 0
+    
+    whales: List[WhaleInfo] = []
+    
+    # Risk metrics
+    concentration_risk_score: float = 0  # 0-100
+    risk_level: str = "Unknown"
+    risk_color: str = "gray"
+    
+    # Dump scenarios
+    dump_scenarios: List[DumpScenarioResult] = []
+    
+    # Recommendations
+    recommendations: List[str] = []
+
+
+class AttackScenarioDetail(BaseModel):
+    """Details of a single attack scenario"""
+    name: str = ""
+    category: str = ""
+    description: str = ""
+    attack_vector: str = ""
+    probability: float = 0
+    severity: str = "low"
+    potential_loss_usd: float = 0
+    potential_loss_percent: float = 0
+    mitigation_effectiveness: float = 0
+    recovery_time_days: int = 0
+    required_capital: float = 0
+    complexity: str = "medium"
+
+
+class SecurityFeatures(BaseModel):
+    """Protocol security features"""
+    has_timelock: bool = False
+    timelock_delay_hours: int = 0
+    has_multisig: bool = False
+    multisig_threshold: int = 0
+    oracle_type: str = "chainlink"
+
+
+class AttackAnalysisResult(BaseModel):
+    """
+    Economic attack vulnerability analysis.
+    2025 Industry Compliance metric.
+    """
+    vulnerability_score: float = 50  # 0-100
+    risk_level: str = "Moderate"
+    risk_color: str = "amber"
+    total_potential_loss_usd: float = 0
+    avg_severity_score: float = 50
+    
+    # Market metrics
+    market_cap: float = 0
+    liquidity_ratio: float = 0
+    volume_to_liquidity: float = 0
+    
+    # Security features
+    security_features: SecurityFeatures = SecurityFeatures()
+    
+    # Attack scenarios
+    scenarios: List[AttackScenarioDetail] = []
+    
+    # Recommendations
+    recommendations: List[str] = []
+
+
+class ILScenario(BaseModel):
+    """Impermanent loss scenario"""
+    scenario: str = ""
+    price_change_percent: float = 0
+    final_price: float = 0
+    impermanent_loss_percent: float = 0
+    interpretation: str = ""
+
+
+class FarmingAPY(BaseModel):
+    """Farming APY breakdown"""
+    reward_apr: float = 0
+    fee_apr: float = 0
+    total_apr: float = 0
+    reward_apy: float = 0
+    fee_apy: float = 0
+    total_apy: float = 0
+    daily_reward_rate: float = 0
+    daily_total_rate: float = 0
+    pool_tvl_usd: float = 0
+    daily_reward_vcoin: float = 0
+    daily_reward_usd: float = 0
+    is_sustainable: bool = True
+    example_1000_final: float = 1000
+    example_1000_profit: float = 0
+
+
+class FarmingRiskMetrics(BaseModel):
+    """Farming risk assessment"""
+    risk_score: float = 30
+    risk_level: str = "Moderate"
+    il_breakeven_multiplier: float = 1.5
+    il_breakeven_price_up: float = 0
+    il_breakeven_price_down: float = 0
+
+
+class FarmingSimulationMonth(BaseModel):
+    """Single month in farming simulation"""
+    month: int = 0
+    vcoin_price: float = 0
+    price_change_percent: float = 0
+    hold_value_usd: float = 0
+    lp_position_value_usd: float = 0
+    cumulative_rewards_usd: float = 0
+    cumulative_fees_usd: float = 0
+    total_value_usd: float = 0
+    impermanent_loss_percent: float = 0
+    impermanent_loss_usd: float = 0
+    net_vs_holding_usd: float = 0
+    total_pnl_usd: float = 0
+    total_pnl_percent: float = 0
+
+
+class FarmingSimulation(BaseModel):
+    """Complete farming simulation for one scenario"""
+    initial_investment_usd: float = 1000
+    initial_vcoin_price: float = 0.1
+    lp_share_percent: float = 0
+    monthly_projections: List[FarmingSimulationMonth] = []
+    final_result: Optional[FarmingSimulationMonth] = None
+
+
+class LiquidityFarmingResult(BaseModel):
+    """
+    Liquidity farming analysis results.
+    2025 Industry Compliance metric.
+    """
+    apy: FarmingAPY = FarmingAPY()
+    il_scenarios: List[ILScenario] = []
+    simulations: Dict[str, FarmingSimulation] = {}  # bull_case, bear_case, stable_case
+    risk_metrics: FarmingRiskMetrics = FarmingRiskMetrics()
+    recommendations: List[str] = []
+
+
+class StrategyMetrics(BaseModel):
+    """Metrics for a single strategy"""
+    return_percent: float = 0
+    risk_percent: float = 0
+    risk_adjusted_return: float = 0
+
+
+class StakingEquilibrium(BaseModel):
+    """Staking vs selling equilibrium analysis"""
+    stake_probability: float = 0
+    sell_probability: float = 0
+    hold_probability: float = 0
+    dominant_strategy: str = "hold"
+    is_stable: bool = True
+    deviation_incentive: float = 0
+
+
+class StakingAnalysis(BaseModel):
+    """Analysis of staking decision"""
+    best_strategy: str = "stake"
+    interpretation: str = ""
+    recommendation: str = ""
+    staking_breakeven_price_drop: float = 0
+
+
+class GovernanceParticipation(BaseModel):
+    """Governance participation metrics"""
+    rational_participants: int = 0
+    total_holders: int = 0
+    participation_rate: float = 0
+    participating_power: float = 0
+    quorum_achievable: bool = True
+
+
+class VoterApathy(BaseModel):
+    """Voter apathy analysis"""
+    apathetic_ratio: float = 0
+    risk_level: str = "Low"
+    interpretation: str = ""
+
+
+class CoordinationGameAnalysis(BaseModel):
+    """Coordination game analysis"""
+    game_type: str = ""
+    description: str = ""
+    equilibrium: str = ""
+    cooperation_probability: float = 50
+
+
+class GameTheoryResult(BaseModel):
+    """
+    Game theory analysis results.
+    2025 Industry Compliance metric.
+    """
+    # Staking equilibrium
+    strategies: Dict[str, StrategyMetrics] = {}
+    equilibrium: StakingEquilibrium = StakingEquilibrium()
+    analysis: StakingAnalysis = StakingAnalysis()
+    
+    # Governance game
+    governance_participation: GovernanceParticipation = GovernanceParticipation()
+    voter_apathy: VoterApathy = VoterApathy()
+    min_coalition_size: int = 0
+    min_coalition_power: float = 0
+    
+    # Coordination game
+    coordination: CoordinationGameAnalysis = CoordinationGameAnalysis()
+    cooperation_sustainable: bool = True
+    
+    # Overall
+    health_score: float = 50
+    primary_risk: str = "None"
+    recommendations: List[str] = []
+
+
 class TokenMetricsResult(BaseModel):
     """Complete token metrics"""
     velocity: TokenVelocityResult = TokenVelocityResult()
     real_yield: RealYieldResult = RealYieldResult()
     value_accrual: ValueAccrualResult = ValueAccrualResult()
     overall_health: float = 0
+    # New metrics for 2025 compliance
+    gini: Optional[GiniResult] = None
+    runway: Optional[RunwayResult] = None
+    inflation: Optional['InflationResult'] = None
+    whale_analysis: Optional[WhaleAnalysisResult] = None
+    attack_analysis: Optional[AttackAnalysisResult] = None
+    liquidity_farming: Optional[LiquidityFarmingResult] = None
+    game_theory: Optional[GameTheoryResult] = None
 
 
 # === SENSITIVITY ANALYSIS RESULTS (Nov 2025) ===
@@ -514,6 +885,55 @@ class StakingResult(BaseModel):
     # Annual projections
     annual_rewards_total: float
     annual_rewards_usd: float
+    
+    # Early unstake impact tracking
+    early_unstake_rate: float = 0  # As percentage
+    early_unstake_penalty_rate: float = 0  # As percentage
+    early_unstakers_count: int = 0
+    expected_early_unstake_reward_loss: float = 0
+    
+    # === SOLANA-SPECIFIC DATA ===
+    network: str = 'solana'
+    program_type: str = 'spl_token_staking'
+    framework: str = 'anchor'
+    
+    # On-chain costs
+    stake_account_rent_sol: float = 0
+    stake_account_rent_usd: float = 0
+    total_stake_accounts_cost_usd: float = 0
+    staking_tx_cost_usd: float = 0
+    monthly_tx_costs_usd: float = 0
+    
+    # Reward distribution
+    reward_frequency: str = 'per_block'
+    blocks_per_month: int = 0
+    rewards_per_block: float = 0
+    
+    # Compound options
+    auto_compound_enabled: bool = True
+    daily_compound_apy: float = 0
+    compound_boost: float = 0
+    
+    # Unstaking
+    cooldown_epochs: int = 0
+    cooldown_days: float = 0
+    instant_unstake_available: bool = True
+    instant_unstake_penalty: float = 0
+    
+    # Solana advantages
+    eth_equivalent_tx_cost: float = 0
+    solana_savings: float = 0
+    
+    # Governance (future)
+    governance_enabled: bool = False
+    governance_platform: str = 'realms'
+    vote_escrow_planned: bool = True
+    
+    # Reward funding source (WP-005 & MED-002 Fix)
+    reward_funding_source: str = 'emission_allocation'
+    reward_funding_details: Optional[str] = None
+    rewards_exceed_module_income: bool = False
+    sustainability_warning: Optional[str] = None
 
 
 class RewardsResult(BaseModel):
@@ -559,6 +979,11 @@ class CustomerAcquisitionMetrics(BaseModel):
     global_low_income_users: int
     total_users: int
     blended_cac: float
+    # Issue #6: Added fields for budget constraint handling
+    high_quality_creators_actual: int = 0
+    mid_level_creators_actual: int = 0
+    budget_shortfall: bool = False
+    budget_shortfall_amount: float = 0.0
 
 
 class TotalsResult(BaseModel):
@@ -719,8 +1144,42 @@ class PreLaunchResult(BaseModel):
     waitlist_conversion_tokens: int = 0
 
 
+class StartingUsersSummary(BaseModel):
+    """
+    Summary of starting/initial user counts for easy reference.
+    Added to make user counts clearly visible at the top level of results.
+    """
+    # Total active users used in simulation
+    total_active_users: int
+    
+    # Source of users
+    user_source: str  # 'manual_input', 'marketing_budget', 'growth_scenario'
+    
+    # If from manual input
+    manual_starting_users: Optional[int] = None
+    
+    # If from marketing budget calculation
+    marketing_budget_usd: Optional[float] = None
+    acquired_from_marketing: Optional[int] = None
+    
+    # User breakdown
+    high_quality_creators: int = 0
+    mid_level_creators: int = 0
+    north_america_consumers: int = 0
+    global_low_income_consumers: int = 0
+    
+    # Retention adjustment (if applied)
+    retention_applied: bool = False
+    users_before_retention: Optional[int] = None
+    users_after_retention: Optional[int] = None
+    retention_rate: Optional[float] = None
+
+
 class SimulationResult(BaseModel):
     """Complete simulation result"""
+    # NEW: Starting users summary at the top for easy reference
+    starting_users_summary: Optional[StartingUsersSummary] = None
+    
     identity: ModuleResult
     content: ModuleResult
     advertising: ModuleResult

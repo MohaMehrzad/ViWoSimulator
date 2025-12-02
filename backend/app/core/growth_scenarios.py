@@ -25,6 +25,15 @@ from typing import List, Dict, Optional, Tuple
 from enum import Enum
 import math
 
+# === CONSTANTS ===
+
+# Monthly churn dampening factor
+# Converts cumulative retention rates to monthly churn estimates.
+# Retention rates (e.g., month6_retention = 0.06) represent cumulative retention from Day 0,
+# not month-over-month retention. This factor approximates monthly churn from cumulative rates.
+# Value of 0.3 means ~30% of the implied cumulative churn actually occurs in each month.
+MONTHLY_CHURN_DAMPENING_FACTOR = 0.3
+
 
 class GrowthScenario(str, Enum):
     """Growth scenario selection"""
@@ -694,7 +703,7 @@ def calculate_monthly_growth(
     Calculate user growth for a specific month.
     
     Args:
-        month: Month number (1-12)
+        month: Month number (1-60, extended from original 1-12)
         current_users: Current active user count
         scenario: Selected growth scenario
         market_condition: Current market condition
@@ -702,14 +711,39 @@ def calculate_monthly_growth(
     
     Returns:
         Tuple of (new_users, churned_users, growth_rate)
+    
+    MED-08 Fix: Extended to support months 13-60 by extrapolating from year 1 data.
+    For months > 12, uses year-specific market cycle multipliers if available,
+    otherwise extrapolates with a decay factor toward steady-state growth.
     """
-    if month < 1 or month > 12:
+    if month < 1:
         return 0, 0, 0.0
     
     market_config = MARKET_CONDITIONS[market_condition]
     
-    # Base growth rate from scenario
-    base_growth_rate = scenario.monthly_growth_rates[month - 1]
+    # MED-08 Fix: Extend beyond 12 months
+    if month > 12:
+        # For months 13-60, extrapolate from last year's data with decay
+        # Get the equivalent month in year 1 (cyclic pattern)
+        equivalent_month = ((month - 1) % 12) + 1
+        base_growth_rate = scenario.monthly_growth_rates[equivalent_month - 1]
+        
+        # Apply decay factor: growth stabilizes over time
+        # Year 2: 80% of year 1 rate, Year 3: 65%, Year 4: 55%, Year 5: 50%
+        years_elapsed = (month - 1) // 12
+        decay_factors = [1.0, 0.80, 0.65, 0.55, 0.50]
+        decay_factor = decay_factors[min(years_elapsed, len(decay_factors) - 1)]
+        
+        # Apply market cycle multiplier if available
+        year = 2025 + years_elapsed
+        if year in MARKET_CYCLE_2025_2030:
+            cycle_config = MARKET_CYCLE_2025_2030[year]
+            base_growth_rate = base_growth_rate * decay_factor * cycle_config.growth_multiplier
+        else:
+            base_growth_rate = base_growth_rate * decay_factor
+    else:
+        # Original behavior for months 1-12
+        base_growth_rate = scenario.monthly_growth_rates[month - 1]
     
     # Apply market condition modifier
     adjusted_growth_rate = base_growth_rate * market_config.growth_multiplier
@@ -744,13 +778,10 @@ def calculate_monthly_growth(
     # Apply market condition to retention
     adjusted_retention = retention_rate * market_config.retention_multiplier
     
-    # Issue #7: Churned users calculation with 0.3 dampening factor
-    # The 0.3 multiplier converts cumulative retention rates to monthly churn.
-    # Retention rates (e.g., month6_retention = 0.06) represent cumulative retention from Day 0,
-    # not month-over-month retention. The 0.3 factor approximates monthly churn from these
-    # cumulative rates, preventing over-estimation of churn in the monthly growth model.
+    # Apply monthly churn dampening factor to convert cumulative retention to monthly churn
+    # See MONTHLY_CHURN_DAMPENING_FACTOR constant for detailed explanation
     churn_rate = 1 - adjusted_retention
-    churned_users = int(current_users * churn_rate * 0.3)  # Monthly churn portion (30% of implied rate)
+    churned_users = int(current_users * churn_rate * MONTHLY_CHURN_DAMPENING_FACTOR)
     
     return new_users, churned_users, adjusted_growth_rate
 

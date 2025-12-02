@@ -289,14 +289,18 @@ def calculate_staking(
     
     # Get parameters
     staking_apy = params.staking_apy
-    staking_participation_rate = getattr(params, 'staking_participation_rate', 0.15)
+    # HIGH-04 Fix: Use maturity-adjusted staking participation rate
+    if hasattr(params, 'get_effective_staking_participation'):
+        staking_participation_rate = params.get_effective_staking_participation()
+    else:
+        staking_participation_rate = getattr(params, 'staking_participation_rate', 0.15)
     avg_stake_amount = getattr(params, 'avg_stake_amount', 2000)
     staker_fee_discount = params.staker_fee_discount
     min_stake = params.min_stake_amount
     lock_days = params.stake_lock_days
     token_price = params.token_price
     
-    # Estimate participation using user-configured parameters
+    # Estimate participation using maturity-adjusted parameters
     participation = estimate_staking_participation(
         users=users,
         participation_rate=staking_participation_rate,
@@ -372,19 +376,38 @@ def calculate_staking(
     protocol_fee_from_rewards = total_monthly_rewards * protocol_reward_fee_rate
     protocol_fee_from_rewards_usd = protocol_fee_from_rewards * token_price
     
-    # 2. Unstaking Fees (1% penalty on early unstakes, 15% of stakers unstake monthly)
-    early_unstake_rate = 0.15  # 15% of stakers unstake early per month
-    early_unstake_penalty_rate = 0.01  # 1% penalty
-    early_unstakers = max(1, int(stakers_count * early_unstake_rate))
-    unstake_penalty_vcoin = early_unstakers * avg_stake * early_unstake_penalty_rate
-    unstake_penalty_usd = unstake_penalty_vcoin * token_price
+    # 2. Unstaking Fees (penalty on early unstakes)
+    # Configurable rates for scenario modeling
+    early_unstake_rate = getattr(params, 'early_unstake_rate', 0.15)  # 15% default
+    early_unstake_penalty_rate = getattr(params, 'early_unstake_penalty_rate', 0.01)  # 1% default
     
-    # 3. Stake/Unstake Transaction Fees (platform keeps small fee per transaction)
-    # Platform charges 0.1% on stake/unstake operations
-    platform_tx_fee_rate = 0.001  # 0.1% of staked amount per transaction
-    monthly_stake_txs = max(1, stakers_count * 2)  # avg 2 txs per staker per month
-    tx_fee_revenue_vcoin = monthly_stake_txs * avg_stake * platform_tx_fee_rate
-    tx_fee_revenue_usd = tx_fee_revenue_vcoin * token_price
+    if stakers_count > 0:
+        early_unstakers = int(stakers_count * early_unstake_rate)
+        unstake_penalty_vcoin = early_unstakers * avg_stake * early_unstake_penalty_rate
+        unstake_penalty_usd = unstake_penalty_vcoin * token_price
+        
+        # 3. Stake/Unstake Transaction Fees (platform keeps small fee per transaction)
+        # Platform charges 0.1% on stake/unstake operations
+        platform_tx_fee_rate = 0.001  # 0.1% of staked amount per transaction
+        monthly_stake_txs = stakers_count * 2  # avg 2 txs per staker per month
+        tx_fee_revenue_vcoin = monthly_stake_txs * avg_stake * platform_tx_fee_rate
+        tx_fee_revenue_usd = tx_fee_revenue_vcoin * token_price
+    else:
+        # No stakers = no penalties or transaction fees
+        early_unstakers = 0
+        unstake_penalty_vcoin = 0
+        unstake_penalty_usd = 0
+        platform_tx_fee_rate = 0.001  # Keep for reference
+        monthly_stake_txs = 0
+        tx_fee_revenue_vcoin = 0
+        tx_fee_revenue_usd = 0
+    
+    # Calculate expected early unstake impact on net rewards
+    # Note: Early unstakers forfeit their pending rewards (penalty applies to staked amount)
+    # The net rewards reported are for stakers who complete the full staking period
+    expected_early_unstake_reward_loss = (
+        early_unstakers * (total_monthly_rewards / stakers_count) if stakers_count > 0 else 0
+    )
     
     # Total Platform Revenue from Staking
     staking_revenue_vcoin = protocol_fee_from_rewards + unstake_penalty_vcoin + tx_fee_revenue_vcoin
@@ -481,6 +504,12 @@ def calculate_staking(
         'annual_rewards_total': round(total_monthly_rewards * 12, 2),
         'annual_rewards_usd': round(rewards_usd * 12, 2),
         
+        # Early unstake impact tracking
+        'early_unstake_rate': round(early_unstake_rate * 100, 1),
+        'early_unstake_penalty_rate': round(early_unstake_penalty_rate * 100, 2),
+        'early_unstakers_count': early_unstakers,
+        'expected_early_unstake_reward_loss': round(expected_early_unstake_reward_loss, 2),
+        
         # === SOLANA-SPECIFIC DATA ===
         'network': 'solana',
         'program_type': 'spl_token_staking',
@@ -517,5 +546,21 @@ def calculate_staking(
         'governance_enabled': False,  # Coming soon
         'governance_platform': 'realms',
         'vote_escrow_planned': True,  # veVCoin coming
+        
+        # WP-005 & MED-002 Fix: Document staking reward funding source
+        # Staking rewards are NOT from platform revenue - they come from emission allocation
+        'reward_funding_source': 'emission_allocation',
+        'reward_funding_details': (
+            "Staking rewards are funded from the 35% Ecosystem & Rewards allocation "
+            "(350M VCoin over 60 months = 5.83M VCoin/month). The 10% APY is a target rate "
+            "that may require treasury subsidies if staking participation exceeds projections. "
+            "Protocol fee (5%) on rewards provides some offset but does not fully fund APY."
+        ),
+        # Calculate if rewards exceed module fee income (sustainability warning)
+        'rewards_exceed_module_income': staking_revenue_usd < (total_monthly_rewards * token_price),
+        'sustainability_warning': (
+            "WARNING: Staking rewards exceed platform staking revenue. "
+            "Difference is subsidized from emission allocation or treasury."
+        ) if staking_revenue_usd < (total_monthly_rewards * token_price) else None,
     }
 

@@ -79,18 +79,22 @@ def calculate_token_velocity(
     annualized_velocity = velocity * (365 / time_period_days)
     
     # Determine interpretation
+    # MED-02 Fix: Health score measures ECOSYSTEM health, not just price outlook.
+    # A healthy ecosystem has balanced velocity - not too low (no utility) or too high (no holding).
+    # Low velocity is good for price (holding) but indicates low platform usage.
+    # We score low velocity at 80 (not 100) because it suggests underutilization.
     config = DEFAULT_METRICS_CONFIG
     if velocity < config.velocity_low:
-        interpretation = 'Low - tokens being held (bullish)'
-        health_score = 70  # Good for price, but low utility
+        interpretation = 'Low - tokens being held (bullish for price, low utility)'
+        health_score = 80  # MED-02: Raised from 70 to 80 for consistency
     elif velocity <= config.velocity_optimal_high:
-        interpretation = 'Optimal - healthy usage'
+        interpretation = 'Optimal - healthy balance of usage and holding'
         health_score = 100
     elif velocity <= config.velocity_high:
-        interpretation = 'Elevated - active trading'
+        interpretation = 'Elevated - active trading (increased sell pressure)'
         health_score = 60
     else:
-        interpretation = 'High - excessive selling pressure'
+        interpretation = 'High - excessive selling pressure (bearish)'
         health_score = 30
     
     # Calculate days to turn over supply
@@ -212,7 +216,11 @@ def calculate_value_accrual_score(
     buyback_score = min(100, buyback_rate * 1000)  # 10% buyback = 100
     staking_score = min(100, staking_ratio * 200)  # 50% staked = 100
     utility_input = min(100, utility_score)
-    governance_score = min(100, governance_participation * 500)  # 20% participation = 100
+    # HIGH-002 Fix: Adjusted governance multiplier from 500 to 200
+    # Industry benchmarks show 20% participation is already good (Compound, Uniswap)
+    # Now: 50% participation = 100 (more realistic threshold)
+    # Before: 20% participation = 100 (too easy to max)
+    governance_score = min(100, governance_participation * 200)  # 50% participation = 100
     liquidity_score = min(100, liquidity_ratio * 500)  # 20% liquidity = 100
     
     # Calculate weighted score
@@ -304,15 +312,23 @@ def calculate_utility_score(
     # How many users are actively engaging with modules
     
     # Identity: upgraded users (not free basic users)
+    # HIGH-003 Fix: Calibrated to industry benchmarks
+    # Industry reality: 2-5% paid conversion is excellent for freemium apps
+    # Now: 4% upgraded = 100 (using * 2500)
+    # Before: 20% upgraded = 100 (unrealistic - most platforms never hit 20%)
     identity_breakdown = identity_result.get('breakdown', {})
     upgraded_users = identity_breakdown.get('upgraded_users', 0)
-    identity_engagement = min(100, (upgraded_users / max(users, 1)) * 500)  # 20% upgraded = 100
+    identity_engagement = min(100, (upgraded_users / max(users, 1)) * 2500)  # 4% upgraded = 100
     
     # Content: creators actively posting
+    # HIGH-003 Fix: Calibrated to industry benchmarks
+    # Industry reality: 5-15% of users create content (1% rule: 90% lurk, 9% engage, 1% create)
+    # Now: 15% creators = 100 (using * 667)
+    # Before: 50% creators = 100 (unrealistic - no platform has 50% creators)
     content_breakdown = content_result.get('breakdown', {})
     creators = content_breakdown.get('creators', 0)
     monthly_posts = content_breakdown.get('monthly_posts', 0)
-    content_engagement = min(100, (creators / max(users, 1)) * 200)  # 50% creators = 100
+    content_engagement = min(100, (creators / max(users, 1)) * 667)  # 15% creators = 100
     posts_per_creator = monthly_posts / max(creators, 1) if creators > 0 else 0
     content_activity = min(100, posts_per_creator * 5)  # 20 posts/creator = 100
     
@@ -322,9 +338,10 @@ def calculate_utility_score(
     ad_engagement = min(100, (advertisers / max(users, 1)) * 1000)  # 10% advertisers = 100
     
     # Exchange: traders using swap
+    # Issue #1 fix: Use existing 'active_exchange_users' instead of non-existent 'traders'
     exchange_breakdown = exchange_result.get('breakdown', {})
-    traders = exchange_breakdown.get('traders', 0)
-    exchange_engagement = min(100, (traders / max(users, 1)) * 500)  # 20% traders = 100
+    active_exchange_users = exchange_breakdown.get('active_exchange_users', 0)
+    exchange_engagement = min(100, (active_exchange_users / max(users, 1)) * 500)  # 20% traders = 100
     
     module_engagement = (
         identity_engagement * 0.25 +
@@ -365,13 +382,16 @@ def calculate_utility_score(
     # === 4. FEATURE ADOPTION (25%) ===
     # Premium features, NFTs, staking participation
     
-    # Premium content users
-    premium_content_users = content_breakdown.get('premium_content_users', 0)
-    premium_adoption = min(100, (premium_content_users / max(users, 1)) * 2000)  # 5% = 100
+    # Premium content users - use premium DM users as proxy (10% of users use premium DMs)
+    # Issue #1 fix: Use existing breakdown keys instead of non-existent 'premium_content_users'
+    premium_dm_users = content_breakdown.get('premium_dms', 0) / 3  # 3 DMs per user
+    premium_adoption = min(100, (premium_dm_users / max(users, 1)) * 2000)  # 5% = 100
     
-    # NFT minters
-    nft_creators = content_breakdown.get('nft_creators', 0)
-    nft_adoption = min(100, (nft_creators / max(users, 1)) * 1000)  # 10% = 100
+    # NFT minters - estimate from nft_mints (1 creator per ~3 mints on average)
+    # Issue #1 fix: Use existing 'nft_mints' instead of non-existent 'nft_creators'
+    nft_mints = content_breakdown.get('nft_mints', 0)
+    nft_creators_estimate = max(1, nft_mints // 3) if nft_mints > 0 else 0
+    nft_adoption = min(100, (nft_creators_estimate / max(users, 1)) * 1000)  # 10% = 100
     
     # Staking participation
     stakers = staking_result.get('stakers_count', 0)
@@ -479,6 +499,227 @@ def calculate_gini_coefficient(
         'top_1_percent_concentration': round(top_1_concentration * 100, 2),
         'top_10_percent_concentration': round(top_10_concentration * 100, 2),
     }
+
+
+def generate_realistic_holder_distribution(
+    simulation_month: int,
+    active_users: int,
+    monthly_rewards_vcoin: float = 0,
+    avg_user_balance: float = 0,
+) -> list:
+    """
+    Generate realistic holder balances based on ACTUAL VCoin token allocation.
+    
+    This models the real-world distribution of tokens at any given month,
+    accounting for:
+    1. Vesting schedules for each allocation category
+    2. Number of holders per category (team members, investors, users, etc.)
+    3. Power-law distribution within categories (some holders have more)
+    4. User rewards earned through platform participation
+    
+    Token Allocation (1B Total):
+    - Seed Round: 2% (20M) - ~10-15 early investors
+    - Private Round: 3% (30M) - ~15-25 VCs/strategic investors  
+    - Public Sale: 5% (50M) - ~500-5000 public buyers
+    - Team: 10% (100M) - ~20-50 team members
+    - Advisors: 5% (50M) - ~10-20 advisors
+    - Treasury/DAO: 20% (200M) - 1 governance wallet (excluded from Gini)
+    - Ecosystem/Rewards: 35% (350M) - Distributed to users over 60 months
+    - Liquidity: 10% (100M) - Protocol-owned in DEX (excluded from Gini)
+    - Foundation: 2% (20M) - 1-2 foundation wallets
+    - Marketing: 8% (80M) - 2-5 marketing wallets
+    
+    Args:
+        simulation_month: Current simulation month (0 = TGE)
+        active_users: Number of active platform users
+        monthly_rewards_vcoin: Monthly reward distribution
+        avg_user_balance: Average user balance (from staking/rewards)
+    
+    Returns:
+        List of holder balances (VCoin amounts)
+    """
+    import random
+    random.seed(42 + simulation_month)  # Deterministic but varies by month
+    
+    holder_balances = []
+    
+    # === VESTING SCHEDULE CALCULATIONS ===
+    # Calculate what each category has unlocked by this month
+    
+    def get_vested_amount(total: int, tge_pct: float, cliff: int, vesting: int, month: int) -> int:
+        """Calculate vested amount for a category at given month."""
+        tge_unlock = int(total * tge_pct)
+        remaining = total - tge_unlock
+        
+        if month == 0:
+            return tge_unlock
+        
+        if month <= cliff:
+            return tge_unlock
+        
+        if vesting == 0:
+            return total
+        
+        vesting_end = cliff + vesting
+        if month >= vesting_end:
+            return total
+        
+        # Linear vesting during vesting period
+        months_vested = month - cliff
+        vested_amount = tge_unlock + (remaining * months_vested // vesting)
+        return min(vested_amount, total)
+    
+    # === SEED ROUND: 20M, 0% TGE, 12 cliff, 24 vesting ===
+    seed_vested = get_vested_amount(20_000_000, 0.0, 12, 24, simulation_month)
+    if seed_vested > 0:
+        # ~10-15 seed investors with power-law distribution
+        seed_investors = 12
+        for i in range(seed_investors):
+            # Top 3 investors hold ~60% of seed round
+            if i == 0:
+                share = seed_vested * 0.25
+            elif i == 1:
+                share = seed_vested * 0.20
+            elif i == 2:
+                share = seed_vested * 0.15
+            else:
+                # Remaining 9 investors share 40%
+                share = (seed_vested * 0.40) / (seed_investors - 3) * (0.7 + random.random() * 0.6)
+            holder_balances.append(share)
+    
+    # === PRIVATE ROUND: 30M, 10% TGE, 6 cliff, 18 vesting ===
+    private_vested = get_vested_amount(30_000_000, 0.10, 6, 18, simulation_month)
+    if private_vested > 0:
+        # ~15-25 private investors (VCs, strategic)
+        private_investors = 20
+        for i in range(private_investors):
+            # Top 5 VCs hold ~65% of private round
+            if i < 5:
+                share = private_vested * 0.13 * (1 - i * 0.15)  # Decreasing share
+            else:
+                # Remaining 15 investors share 35%
+                share = (private_vested * 0.35) / (private_investors - 5) * (0.6 + random.random() * 0.8)
+            holder_balances.append(share)
+    
+    # === PUBLIC SALE: 50M, 50% TGE, 0 cliff, 3 vesting ===
+    public_vested = get_vested_amount(50_000_000, 0.50, 0, 3, simulation_month)
+    if public_vested > 0:
+        # Public sale has many more holders - ~500-2000 at TGE, grows with users
+        # Some whales, many small holders
+        public_holders = max(500, min(active_users // 2, 5000))
+        
+        # Top 10% hold ~50% (whales who got in early)
+        whale_count = max(10, public_holders // 10)
+        whale_pool = public_vested * 0.50
+        for i in range(whale_count):
+            # Power-law among whales
+            share = whale_pool * (0.4 ** (i / 3)) / whale_count * 3
+            holder_balances.append(max(share, 100))
+        
+        # Remaining 90% hold 50%
+        retail_count = public_holders - whale_count
+        retail_pool = public_vested * 0.50
+        avg_retail = retail_pool / max(1, retail_count)
+        for i in range(retail_count):
+            variance = 0.1 + random.random() * 2.5  # High variance in retail
+            holder_balances.append(max(avg_retail * variance, 50))
+    
+    # === TEAM: 100M, 0% TGE, 12 cliff, 36 vesting ===
+    team_vested = get_vested_amount(100_000_000, 0.0, 12, 36, simulation_month)
+    if team_vested > 0:
+        # ~30 team members with different allocation levels
+        team_members = 30
+        # Founders (2-3) hold ~40%, exec team (5-7) hold ~30%, rest hold 30%
+        for i in range(team_members):
+            if i < 3:  # Founders
+                share = team_vested * 0.40 / 3 * (1 - i * 0.1)
+            elif i < 10:  # Executive team
+                share = team_vested * 0.30 / 7 * (0.8 + random.random() * 0.4)
+            else:  # Rest of team
+                share = team_vested * 0.30 / (team_members - 10) * (0.5 + random.random())
+            holder_balances.append(share)
+    
+    # === ADVISORS: 50M, 0% TGE, 6 cliff, 18 vesting ===
+    advisors_vested = get_vested_amount(50_000_000, 0.0, 6, 18, simulation_month)
+    if advisors_vested > 0:
+        # ~12 advisors
+        advisor_count = 12
+        for i in range(advisor_count):
+            # Top 3 advisors hold ~50%
+            if i < 3:
+                share = advisors_vested * 0.50 / 3 * (1 - i * 0.15)
+            else:
+                share = advisors_vested * 0.50 / (advisor_count - 3) * (0.7 + random.random() * 0.6)
+            holder_balances.append(share)
+    
+    # === FOUNDATION: 20M, 25% TGE, 3 cliff, 24 vesting ===
+    foundation_vested = get_vested_amount(20_000_000, 0.25, 3, 24, simulation_month)
+    if foundation_vested > 0:
+        # 2 foundation wallets (operational + reserve)
+        holder_balances.append(foundation_vested * 0.6)
+        holder_balances.append(foundation_vested * 0.4)
+    
+    # === MARKETING: 80M, 25% TGE, 3 cliff, 18 vesting ===
+    marketing_vested = get_vested_amount(80_000_000, 0.25, 3, 18, simulation_month)
+    if marketing_vested > 0:
+        # 3 marketing wallets (campaigns, partnerships, reserves)
+        holder_balances.append(marketing_vested * 0.50)
+        holder_balances.append(marketing_vested * 0.30)
+        holder_balances.append(marketing_vested * 0.20)
+    
+    # === REWARDS DISTRIBUTED TO USERS ===
+    # Users earn tokens through rewards, staking, etc.
+    # This is the main driver of decentralization over time
+    if active_users > 0 and monthly_rewards_vcoin > 0:
+        # Cumulative rewards distributed by this month
+        # Rewards: 5.83M/month for 60 months
+        months_of_rewards = min(simulation_month, 60)
+        total_rewards_distributed = months_of_rewards * 5_833_333
+        
+        # Not all rewards go to user wallets - some to staking, burns, etc.
+        # Assume ~60% ends up in user wallets (rest is burned, fees, etc.)
+        user_reward_pool = total_rewards_distributed * 0.60
+        
+        if user_reward_pool > 0:
+            # Distribute among active users with power-law
+            # Top 10% (power users) hold 50% of rewards earned
+            # Next 30% (regular users) hold 35%  
+            # Bottom 60% (casual users) hold 15%
+            
+            power_users = max(1, int(active_users * 0.10))
+            regular_users = max(1, int(active_users * 0.30))
+            casual_users = max(1, active_users - power_users - regular_users)
+            
+            # Power users (top 10%)
+            power_pool = user_reward_pool * 0.50
+            avg_power = power_pool / power_users
+            for i in range(power_users):
+                variance = 0.3 + random.random() * 1.4
+                holder_balances.append(avg_power * variance)
+            
+            # Regular users (30%)
+            regular_pool = user_reward_pool * 0.35
+            avg_regular = regular_pool / regular_users
+            for i in range(regular_users):
+                variance = 0.4 + random.random() * 1.2
+                holder_balances.append(avg_regular * variance)
+            
+            # Casual users (60%)
+            casual_pool = user_reward_pool * 0.15
+            avg_casual = casual_pool / casual_users
+            for i in range(casual_users):
+                variance = 0.2 + random.random() * 1.6
+                holder_balances.append(max(avg_casual * variance, 10))
+    
+    # === EXCLUDED FROM GINI (Protocol-controlled, not tradeable) ===
+    # - Treasury (200M): DAO-governed, not individual holdings
+    # - Liquidity (100M): Locked in DEX pools, protocol-owned
+    # These are NOT added to holder_balances as they don't represent individual wealth
+    
+    # Remove any zero or negative balances
+    holder_balances = [b for b in holder_balances if b > 0]
+    
+    return holder_balances
 
 
 def calculate_runway(

@@ -50,8 +50,12 @@ Solana-specific advantages:
 from dataclasses import dataclass
 from typing import Dict, Optional, List
 from enum import Enum
+import logging
 from app.models import SimulationParameters
 from app.config import config
+
+# LOW-003 Fix: Add logging for edge case debugging
+logger = logging.getLogger(__name__)
 
 
 class SolanaDex(Enum):
@@ -361,6 +365,27 @@ def calculate_liquidity(
     pol_percent = params.protocol_owned_liquidity
     token_price = params.token_price
     
+    # LOW-003 Fix: Log warnings for edge cases
+    if token_price <= 0:
+        logger.warning(
+            f"Liquidity calculation: token_price is {token_price} (should be > 0). "
+            "This will cause division issues. Using 0.01 as fallback."
+        )
+        token_price = 0.01
+    
+    if circulating_supply <= 0:
+        logger.warning(
+            f"Liquidity calculation: circulating_supply is {circulating_supply} (should be > 0). "
+            "Using 100M as fallback."
+        )
+        circulating_supply = 100_000_000
+    
+    if initial_liquidity <= 0:
+        logger.warning(
+            f"Liquidity calculation: initial_liquidity is {initial_liquidity} (should be > 0). "
+            "Liquidity health will be 0."
+        )
+    
     # Calculate market cap
     market_cap = token_price * circulating_supply
     
@@ -372,15 +397,28 @@ def calculate_liquidity(
     )
     
     # === SOLANA POOL CONFIGURATION ===
+    # MED-03 Fix: Use configurable pool distribution from parameters
+    usdc_pct = getattr(params, 'liquidity_pool_usdc_percent', 0.40)
+    sol_pct = getattr(params, 'liquidity_pool_sol_percent', 0.35)
+    usdt_pct = getattr(params, 'liquidity_pool_usdt_percent', 0.25)
+    
+    # MED-004 Fix: Use configurable CLMM concentration factor
+    # Real CLMM efficiency depends on price range:
+    # - Narrow range (stable pairs): 10-20x capital efficiency
+    # - Typical range: 4x capital efficiency
+    # - Wide range: 2-3x capital efficiency
+    # - Full range: 1x (same as constant product AMM)
+    user_clmm_factor = getattr(params, 'clmm_concentration_factor', 4.0)
+    
     # Determine pool strategy based on liquidity size
     if initial_liquidity >= 500000:
-        # Large liquidity: Multi-DEX strategy
+        # Large liquidity: Multi-DEX strategy with configurable distribution
         pools = [
             LiquidityPool(
                 name="VCoin/USDC",
-                token_amount=initial_liquidity * 0.4 / token_price,
-                paired_asset_usd=initial_liquidity * 0.4,
-                pool_share=0.40,
+                token_amount=initial_liquidity * usdc_pct / token_price,
+                paired_asset_usd=initial_liquidity * usdc_pct,
+                pool_share=usdc_pct,
                 is_protocol_owned=True,
                 dex=SolanaDex.RAYDIUM_CLMM,
                 pool_type=PoolType.CONCENTRATED,
@@ -388,9 +426,9 @@ def calculate_liquidity(
             ),
             LiquidityPool(
                 name="VCoin/SOL",
-                token_amount=initial_liquidity * 0.35 / token_price,
-                paired_asset_usd=initial_liquidity * 0.35,
-                pool_share=0.35,
+                token_amount=initial_liquidity * sol_pct / token_price,
+                paired_asset_usd=initial_liquidity * sol_pct,
+                pool_share=sol_pct,
                 is_protocol_owned=True,
                 dex=SolanaDex.ORCA_WHIRLPOOL,
                 pool_type=PoolType.CONCENTRATED,
@@ -398,9 +436,9 @@ def calculate_liquidity(
             ),
             LiquidityPool(
                 name="VCoin/USDT",
-                token_amount=initial_liquidity * 0.25 / token_price,
-                paired_asset_usd=initial_liquidity * 0.25,
-                pool_share=0.25,
+                token_amount=initial_liquidity * usdt_pct / token_price,
+                paired_asset_usd=initial_liquidity * usdt_pct,
+                pool_share=usdt_pct,
                 is_protocol_owned=True,
                 dex=SolanaDex.METEORA,
                 pool_type=PoolType.DYNAMIC,
@@ -408,16 +446,19 @@ def calculate_liquidity(
             ),
         ]
         pool_count = 3
-        concentration_factor = 4.0  # 4x capital efficiency from CLMM
+        # MED-004 Fix: Use configurable CLMM factor (default for large = user config)
+        concentration_factor = user_clmm_factor
         
     elif initial_liquidity >= 200000:
-        # Medium liquidity: Dual pool
+        # Medium liquidity: Dual pool (USDC and SOL only)
+        usdc_share = usdc_pct / (usdc_pct + sol_pct) if (usdc_pct + sol_pct) > 0 else 0.6
+        sol_share = 1 - usdc_share
         pools = [
             LiquidityPool(
                 name="VCoin/USDC",
-                token_amount=initial_liquidity * 0.6 / token_price,
-                paired_asset_usd=initial_liquidity * 0.6,
-                pool_share=0.60,
+                token_amount=initial_liquidity * usdc_share / token_price,
+                paired_asset_usd=initial_liquidity * usdc_share,
+                pool_share=usdc_share,
                 is_protocol_owned=True,
                 dex=SolanaDex.RAYDIUM_CLMM,
                 pool_type=PoolType.CONCENTRATED,
@@ -425,9 +466,9 @@ def calculate_liquidity(
             ),
             LiquidityPool(
                 name="VCoin/SOL",
-                token_amount=initial_liquidity * 0.4 / token_price,
-                paired_asset_usd=initial_liquidity * 0.4,
-                pool_share=0.40,
+                token_amount=initial_liquidity * sol_share / token_price,
+                paired_asset_usd=initial_liquidity * sol_share,
+                pool_share=sol_share,
                 is_protocol_owned=True,
                 dex=SolanaDex.ORCA_WHIRLPOOL,
                 pool_type=PoolType.CONCENTRATED,
@@ -435,7 +476,8 @@ def calculate_liquidity(
             ),
         ]
         pool_count = 2
-        concentration_factor = 3.0
+        # MED-004 Fix: Use configurable CLMM factor (medium = 75% of user config)
+        concentration_factor = user_clmm_factor * 0.75
         
     else:
         # Small liquidity: Single concentrated pool
@@ -452,7 +494,8 @@ def calculate_liquidity(
             ),
         ]
         pool_count = 1
-        concentration_factor = 2.0
+        # MED-004 Fix: Use configurable CLMM factor (small = 50% of user config)
+        concentration_factor = user_clmm_factor * 0.50
     
     # Calculate slippage with CLMM advantages
     slippage_data = calculate_slippage_for_sizes(
@@ -475,10 +518,16 @@ def calculate_liquidity(
     protocol_owned_usd = initial_liquidity * pol_percent
     community_lp_usd = initial_liquidity * (1 - pol_percent)
     
-    # Estimate daily volume based on users
-    # Solana users tend to trade more frequently due to low fees
-    estimated_daily_volume = users * 0.75 * token_price  # $0.75 per user/day (higher than ETH)
-    estimated_monthly_volume = estimated_daily_volume * 30
+    # Issue #3 fix: Use actual monthly_volume from simulation when provided
+    # instead of synthetic user-based estimate
+    if monthly_volume > 0:
+        # Convert VCoin volume to USD
+        estimated_monthly_volume = monthly_volume * token_price
+    else:
+        # Fallback to user-based estimate when no actual volume provided
+        # Solana users tend to trade more frequently due to low fees
+        estimated_daily_volume = users * 0.75 * token_price  # $0.75 per user/day
+        estimated_monthly_volume = estimated_daily_volume * 30
     
     # Volume/liquidity ratio (healthy: 10-50% monthly)
     volume_liquidity_ratio = (

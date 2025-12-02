@@ -263,12 +263,12 @@ def calculate_gasless(
                     'name': config.name,
                     'free_tx_per_month': config.free_transactions_per_month,
                     'priority_included': config.priority_fee_included,
-                    'users': tier_transactions.get(tier.value, 0) // max(1, 
-                        new_users if tier == UserTier.NEW_USER else
-                        verified_users if tier == UserTier.VERIFIED else
-                        premium_users if tier == UserTier.PREMIUM else
-                        enterprise_users
-                    ) if tier.value in tier_transactions else 0,
+                    # Issue #4 fix: Return actual user counts, not avg transactions
+                    'users': (new_users if tier == UserTier.NEW_USER else
+                              verified_users if tier == UserTier.VERIFIED else
+                              premium_users if tier == UserTier.PREMIUM else
+                              enterprise_users),
+                    'sponsored_transactions': tier_transactions.get(tier.value, 0),
                     'cost_usd': round(tier_costs.get(tier.value, 0), 2),
                 }
                 for tier, config in GASLESS_TIERS.items()

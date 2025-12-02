@@ -22,6 +22,7 @@ MONEY FLOW DOCUMENTATION (Issue #15):
 5. Recapture (VCoin only) -> Tracked separately, NOT revenue
 """
 
+from pydantic import BaseModel  # LOW-05: For filter_model_fields utility
 from app.models import (
     SimulationParameters,
     SimulationResult,
@@ -36,11 +37,35 @@ from app.models import (
     BusinessHubResult,
     CrossPlatformResult,
     TokenMetricsResult,
+    StartingUsersSummary,
 )
 from app.models.results import (
     TokenVelocityResult, 
     RealYieldResult, 
     ValueAccrualResult,
+    GiniResult,
+    RunwayResult,
+    InflationResult,
+    WhaleAnalysisResult,
+    TopHoldersGroup,
+    WhaleInfo,
+    DumpScenarioResult,
+    AttackAnalysisResult,
+    AttackScenarioDetail,
+    SecurityFeatures,
+    LiquidityFarmingResult,
+    FarmingAPY,
+    FarmingRiskMetrics,
+    FarmingSimulation,
+    FarmingSimulationMonth,
+    ILScenario,
+    GameTheoryResult,
+    StrategyMetrics,
+    StakingEquilibrium,
+    StakingAnalysis,
+    GovernanceParticipation,
+    VoterApathy,
+    CoordinationGameAnalysis,
     ReferralResult,
     PointsResult,
     GaslessResult,
@@ -50,7 +75,8 @@ from app.core.modules.identity import calculate_identity
 from app.core.modules.content import calculate_content
 from app.core.modules.advertising import calculate_advertising
 from app.core.modules.exchange import calculate_exchange
-from app.core.modules.rewards import calculate_rewards, PLATFORM_FEE_RATE
+from app.core.modules.rewards import calculate_rewards
+# MED-07 Fix: Import PLATFORM_FEE_RATE from centralized config (not from rewards.py)
 from app.core.modules.recapture import calculate_recapture
 from app.core.modules.liquidity import calculate_liquidity
 from app.core.modules.staking import calculate_staking
@@ -68,9 +94,50 @@ from app.core.metrics import (
     calculate_real_yield,
     calculate_value_accrual_score,
     calculate_utility_score,
+    calculate_gini_coefficient,
+    calculate_runway,
 )
+from app.core.whale_analysis import calculate_whale_concentration
+from app.core.attack_scenarios import calculate_attack_scenarios
+from app.core.liquidity_farming import calculate_full_farming_analysis
+from app.core.game_theory import calculate_full_game_theory_analysis
 from app.core.retention import apply_retention_to_snapshot, VCOIN_RETENTION
 from app.config import config
+
+# MED-07 Fix: Use centralized PLATFORM_FEE_RATE from config
+PLATFORM_FEE_RATE = config.PLATFORM_FEE_RATE
+
+# LOW-04 Fix: APY boost calculation constants (extracted from inline magic numbers)
+# These control how staking APY affects the effective staking ratio for value accrual scoring
+APY_BOOST_BASE_RATE = 0.10        # Base APY threshold (10%) - APY at this level = 1.0x boost
+APY_BOOST_MULTIPLIER = 5.0        # How much each 1% APY above base increases boost (e.g., 20% APY = 1.5x)
+APY_BOOST_MIN = 0.5               # Minimum boost (for APY well below base rate)
+APY_BOOST_MAX = 2.0               # Maximum boost (caps at 2x regardless of APY)
+STAKING_RATIO_CAP = 0.60          # Maximum staking ratio for value accrual (60%)
+
+
+# LOW-05 Fix: Utility function to filter dict keys to match Pydantic model fields
+from typing import Type, Dict, Any, TypeVar
+T = TypeVar('T', bound=BaseModel)
+
+def filter_model_fields(data: Dict[str, Any], model_class: Type[T]) -> T:
+    """
+    Create a Pydantic model instance by filtering dict keys to only those in the model.
+    
+    LOW-05 Fix: Extracted from repeated dict comprehension pattern to reduce code duplication.
+    
+    Args:
+        data: Dictionary containing potentially extra keys
+        model_class: Pydantic model class to instantiate
+    
+    Returns:
+        Instance of model_class with only valid fields from data
+    
+    Example:
+        result = filter_model_fields(raw_data, GovernanceResult)
+    """
+    filtered = {k: v for k, v in data.items() if k in model_class.model_fields}
+    return model_class(**filtered)
 
 
 def calculate_customer_acquisition(params: SimulationParameters) -> CustomerAcquisitionMetrics:
@@ -79,16 +146,32 @@ def calculate_customer_acquisition(params: SimulationParameters) -> CustomerAcqu
     Uses segmented acquisition model: creators + consumers across regions.
     
     Issue #2 fix: Uses updated realistic CAC values.
+    Issue #6 fix: Scales down creators when budget is insufficient.
     """
     total_budget = params.marketing_budget
     
     # Creator costs (using updated realistic CAC from Issue #2)
-    high_creator_cost = params.high_quality_creators_needed * params.high_quality_creator_cac
-    mid_creator_cost = params.mid_level_creators_needed * params.mid_level_creator_cac
-    total_creator_cost = high_creator_cost + mid_creator_cost
+    high_creator_cost_requested = params.high_quality_creators_needed * params.high_quality_creator_cac
+    mid_creator_cost_requested = params.mid_level_creators_needed * params.mid_level_creator_cac
+    total_creator_cost_requested = high_creator_cost_requested + mid_creator_cost_requested
     
-    # Consumer budget (remaining after creators)
-    consumer_budget = max(0, total_budget - total_creator_cost)
+    # Issue #6 fix: Scale down creators proportionally when budget is insufficient
+    if total_creator_cost_requested > total_budget and total_creator_cost_requested > 0:
+        scale_factor = total_budget / total_creator_cost_requested
+        high_creators_actual = int(params.high_quality_creators_needed * scale_factor)
+        mid_creators_actual = int(params.mid_level_creators_needed * scale_factor)
+        total_creator_cost = (high_creators_actual * params.high_quality_creator_cac +
+                              mid_creators_actual * params.mid_level_creator_cac)
+        consumer_budget = 0
+        budget_shortfall = True
+        budget_shortfall_amount = total_creator_cost_requested - total_budget
+    else:
+        high_creators_actual = params.high_quality_creators_needed
+        mid_creators_actual = params.mid_level_creators_needed
+        total_creator_cost = total_creator_cost_requested
+        consumer_budget = max(0, total_budget - total_creator_cost)
+        budget_shortfall = False
+        budget_shortfall_amount = 0.0
     
     # Normalize regional percentages
     total_percent = params.north_america_budget_percent + params.global_low_income_budget_percent
@@ -107,11 +190,11 @@ def calculate_customer_acquisition(params: SimulationParameters) -> CustomerAcqu
     na_users = int(na_budget / params.cac_north_america_consumer) if params.cac_north_america_consumer > 0 else 0
     global_users = int(global_budget / params.cac_global_low_income_consumer) if params.cac_global_low_income_consumer > 0 else 0
     
-    # Total users includes creators
-    total_creators = params.high_quality_creators_needed + params.mid_level_creators_needed
+    # Total users includes actual creators (not requested)
+    total_creators = high_creators_actual + mid_creators_actual
     total_users = total_creators + na_users + global_users
     
-    # Blended CAC
+    # Blended CAC - now uses actual spend and actual users
     blended_cac = total_budget / total_users if total_users > 0 else 0
     
     return CustomerAcquisitionMetrics(
@@ -123,13 +206,30 @@ def calculate_customer_acquisition(params: SimulationParameters) -> CustomerAcqu
         global_low_income_users=global_users,
         total_users=total_users,
         blended_cac=round(blended_cac, 2),
+        # Issue #6: New fields for budget constraint handling
+        high_quality_creators_actual=high_creators_actual,
+        mid_level_creators_actual=mid_creators_actual,
+        budget_shortfall=budget_shortfall,
+        budget_shortfall_amount=round(budget_shortfall_amount, 2),
     )
 
 
-def run_deterministic_simulation(params: SimulationParameters) -> SimulationResult:
+def run_deterministic_simulation(
+    params: SimulationParameters,
+    simulation_month: int = 1
+) -> SimulationResult:
     """
     Run a complete deterministic simulation.
     Same inputs always produce same outputs.
+    
+    Args:
+        params: Simulation parameters
+        simulation_month: Current month in simulation (1-60). Default is 1.
+            HIGH-006 Fix: Added to allow future modules to launch in snapshot mode.
+            Future modules (VChain, Marketplace, etc.) only activate when
+            simulation_month >= their launch_month. Default of 1 means
+            future modules won't show revenue in basic snapshot simulations.
+            Set to higher values to simulate future states.
     
     Key updates for 2025:
     - Issue #1: Applies retention model if enabled
@@ -137,6 +237,7 @@ def run_deterministic_simulation(params: SimulationParameters) -> SimulationResu
     - Issue #10: Includes exchange in recapture
     - Issue #13: Includes compliance costs
     - Nov 2025: Applies growth scenario multipliers when enabled
+    - HIGH-006: Added simulation_month for future module testing
     """
     # Step 1: Calculate customer acquisition to get user count
     customer_acquisition = calculate_customer_acquisition(params)
@@ -177,7 +278,12 @@ def run_deterministic_simulation(params: SimulationParameters) -> SimulationResu
     
     # Issue #1 Fix: Apply retention model
     active_users = acquired_users
+    users_before_retention = acquired_users
+    retention_applied = False
+    retention_rate = None
+    
     if params.apply_retention and hasattr(params, 'retention'):
+        retention_applied = True
         platform_age = params.retention.platform_age_months
         active_users, retention_stats = apply_retention_to_snapshot(
             acquired_users,
@@ -186,8 +292,34 @@ def run_deterministic_simulation(params: SimulationParameters) -> SimulationResu
         )
         # Ensure at least some users remain (minimum 10% of acquired)
         active_users = max(active_users, int(acquired_users * 0.10))
+        retention_rate = (active_users / users_before_retention * 100) if users_before_retention > 0 else 0
     
     users = active_users
+    
+    # Determine user source for summary
+    if params.starting_users > 0:
+        user_source = 'manual_input'
+    elif hasattr(params, 'use_growth_scenarios') and params.use_growth_scenarios:
+        user_source = 'growth_scenario'
+    else:
+        user_source = 'marketing_budget'
+    
+    # Build starting users summary
+    starting_users_summary = StartingUsersSummary(
+        total_active_users=users,
+        user_source=user_source,
+        manual_starting_users=params.starting_users if params.starting_users > 0 else None,
+        marketing_budget_usd=params.marketing_budget if user_source == 'marketing_budget' else None,
+        acquired_from_marketing=customer_acquisition.total_users if user_source == 'marketing_budget' else None,
+        high_quality_creators=customer_acquisition.high_quality_creators_actual,
+        mid_level_creators=customer_acquisition.mid_level_creators_actual,
+        north_america_consumers=customer_acquisition.north_america_users,
+        global_low_income_consumers=customer_acquisition.global_low_income_users,
+        retention_applied=retention_applied,
+        users_before_retention=users_before_retention if retention_applied else None,
+        users_after_retention=active_users if retention_applied else None,
+        retention_rate=round(retention_rate, 1) if retention_rate is not None else None,
+    )
     
     # Step 2: Calculate each module
     identity = calculate_identity(params, users)
@@ -249,14 +381,14 @@ def run_deterministic_simulation(params: SimulationParameters) -> SimulationResu
         total_staked=staking_result.total_staked,
         circulating_supply=circulating_supply
     )
-    governance_result = GovernanceResult(**{
-        k: v for k, v in governance_data.items() 
-        if k in GovernanceResult.model_fields
-    })
+    # LOW-05: Use filter_model_fields utility
+    governance_result = filter_model_fields(governance_data, GovernanceResult)
     
     # Step 5e (NEW): Calculate Future Module metrics (if enabled)
-    # Default to month 1 for deterministic (snapshot) simulation
-    current_month = 1
+    # HIGH-006 Fix: Use simulation_month parameter instead of hardcoded 1
+    # This allows future modules to be tested in snapshot mode by setting
+    # simulation_month >= module's launch_month
+    current_month = simulation_month
     
     vchain_result = None
     marketplace_result = None
@@ -267,57 +399,57 @@ def run_deterministic_simulation(params: SimulationParameters) -> SimulationResu
     
     if params.vchain and params.vchain.enable_vchain:
         vchain_data = calculate_vchain(params, current_month, users, params.token_price)
-        vchain_result = VChainResult(**{
-            k: v for k, v in vchain_data.items() 
-            if k in VChainResult.model_fields
-        })
+        vchain_result = filter_model_fields(vchain_data, VChainResult)
         future_modules_revenue += vchain_result.revenue
         future_modules_costs += vchain_result.costs
     
     if params.marketplace and params.marketplace.enable_marketplace:
         mp_data = calculate_marketplace(params, current_month, users, params.token_price)
-        marketplace_result = MarketplaceResult(**{
-            k: v for k, v in mp_data.items() 
-            if k in MarketplaceResult.model_fields
-        })
+        marketplace_result = filter_model_fields(mp_data, MarketplaceResult)
         future_modules_revenue += marketplace_result.revenue
         future_modules_costs += marketplace_result.costs
     
     if params.business_hub and params.business_hub.enable_business_hub:
         bh_data = calculate_business_hub(params, current_month, users, params.token_price)
-        business_hub_result = BusinessHubResult(**{
-            k: v for k, v in bh_data.items() 
-            if k in BusinessHubResult.model_fields
-        })
+        business_hub_result = filter_model_fields(bh_data, BusinessHubResult)
         future_modules_revenue += business_hub_result.revenue
         future_modules_costs += business_hub_result.costs
     
     if params.cross_platform and params.cross_platform.enable_cross_platform:
         cp_data = calculate_cross_platform(params, current_month, users, params.token_price)
-        cross_platform_result = CrossPlatformResult(**{
-            k: v for k, v in cp_data.items() 
-            if k in CrossPlatformResult.model_fields
-        })
+        cross_platform_result = filter_model_fields(cp_data, CrossPlatformResult)
         future_modules_revenue += cross_platform_result.revenue
         future_modules_costs += cross_platform_result.costs
     
     # Step 5f (NEW): Calculate Token Metrics
     transaction_volume = recapture.total_revenue_source_vcoin
     
-    # For staking ratio in Value Accrual: use the CONFIGURED participation rate
-    # The raw staking_ratio (staked / circulating) is always tiny with 100M supply
-    # The user's configured rate better represents their commitment to staking
+    # === STAKING RATIO FOR VALUE ACCRUAL SCORING ===
+    # 
+    # Design Decision: We use staking_participation_rate (% of users who stake)
+    # instead of the raw staking_ratio (staked_tokens / circulating_supply).
+    # 
+    # Rationale:
+    # 1. With 100M+ circulating supply, raw staking ratio is always tiny (<1%)
+    #    which would unfairly penalize the Value Accrual score
+    # 2. Participation rate (15-60% of users staking) better reflects the
+    #    platform's success in encouraging token lockup behavior
+    # 3. This is a user-configurable parameter, allowing scenario modeling
+    # 
+    # The APY boost further adjusts the effective ratio:
+    # - Higher APY (>10%) incentivizes more staking, boosting the ratio
+    # - Lower APY (<10%) reduces staking attractiveness, reducing the ratio
+    #
     staking_participation = getattr(params, 'staking_participation_rate', 0.15)
     staking_apy = params.staking_apy
     
-    # Boost the effective staking ratio based on APY (higher APY = more effective)
-    # 10% APY = 1.0x, 20% APY = 1.5x, 30% APY = 2.0x
-    apy_boost = 1.0 + (staking_apy - 0.10) * 5
-    apy_boost = max(0.5, min(2.0, apy_boost))
+    # LOW-04 Fix: APY boost calculation using named constants
+    # Example: 10% APY = 1.0x, 20% APY = 1.5x, 30% APY = 2.0x
+    apy_boost = 1.0 + (staking_apy - APY_BOOST_BASE_RATE) * APY_BOOST_MULTIPLIER
+    apy_boost = max(APY_BOOST_MIN, min(APY_BOOST_MAX, apy_boost))
     
-    # Use participation rate as the staking_ratio for Value Accrual scoring
-    # This reflects the % of users staking, which is what matters for token lockup
-    staking_ratio = min(0.60, staking_participation * apy_boost)
+    # Effective staking ratio for Value Accrual scoring
+    staking_ratio = min(STAKING_RATIO_CAP, staking_participation * apy_boost)
     
     velocity_data = calculate_token_velocity(
         transaction_volume=transaction_volume,
@@ -381,23 +513,385 @@ def run_deterministic_simulation(params: SimulationParameters) -> SimulationResu
         liquidity_ratio=liquidity_result.liquidity_ratio / 100 if liquidity_result.liquidity_ratio else 0
     )
     
+    # Step 5f-2: Calculate Gini coefficient for token distribution
+    # Uses REALISTIC holder distribution based on ACTUAL VCoin tokenomics:
+    # - Real vesting schedules for each allocation category
+    # - Actual number of holders per category (team, investors, users, etc.)
+    # - Month-aware unlocks (distribution improves over time as vesting occurs)
+    # - User rewards earned through platform participation
+    
+    from app.core.metrics import generate_realistic_holder_distribution
+    
+    # Get simulation month from params (default to platformAgeMonths or 1)
+    simulation_month = getattr(params, 'platform_age_months', 6)
+    
+    # Monthly rewards for user distribution calculation
+    monthly_rewards = rewards.gross_monthly_emission if rewards else 5_833_333
+    
+    # Generate realistic holder balances based on actual tokenomics
+    holder_balances = generate_realistic_holder_distribution(
+        simulation_month=simulation_month,
+        active_users=users,
+        monthly_rewards_vcoin=monthly_rewards,
+        avg_user_balance=getattr(params, 'avg_stake_amount', 2000),
+    )
+    
+    # Calculate Gini from realistic distribution
+    gini_data = calculate_gini_coefficient(holder_balances)
+    gini_result = GiniResult(
+        gini=gini_data.get('gini', 0.7),
+        interpretation=gini_data.get('interpretation', 'Concentrated'),
+        decentralization_score=gini_data.get('decentralization_score', 30),
+        holder_count=gini_data.get('holder_count', 0),
+        top_1_percent_concentration=gini_data.get('top_1_percent_concentration', 0),
+        top_10_percent_concentration=gini_data.get('top_10_percent_concentration', 0),
+    )
+    
+    # Step 5f-3: Calculate Treasury Runway
+    # Estimate treasury balance from accumulated reserves
+    treasury_balance = getattr(params, 'treasury_revenue_share', 0.20) * base_revenue * 12  # Year's accumulation
+    treasury_tokens = config.SUPPLY.TREASURY_ALLOCATION  # 200M VCoin reserved
+    treasury_balance_from_tokens = treasury_tokens * params.token_price
+    total_treasury_balance = treasury_balance + treasury_balance_from_tokens * 0.1  # 10% liquid
+    
+    # Estimate monthly expenses for runway calculation (detailed costs calculated later)
+    estimated_monthly_expenses = base_revenue * 0.7  # Assume ~70% of revenue goes to costs
+    
+    runway_data = calculate_runway(
+        treasury_balance_usd=total_treasury_balance,
+        monthly_expenses_usd=estimated_monthly_expenses,
+        monthly_revenue_usd=base_revenue
+    )
+    runway_result = RunwayResult(
+        runway_months=runway_data.get('runway_months', 0) if runway_data.get('runway_months') != float('inf') else 999,
+        runway_years=runway_data.get('runway_years', 0) if runway_data.get('runway_years') != float('inf') else 83,
+        is_sustainable=runway_data.get('is_sustainable', False),
+        interpretation=runway_data.get('interpretation', ''),
+        net_burn_monthly=runway_data.get('net_burn_monthly', 0),
+        monthly_revenue=runway_data.get('monthly_revenue', 0),
+        monthly_expenses=runway_data.get('monthly_expenses', 0),
+        treasury_balance=runway_data.get('treasury_balance', 0),
+        runway_health=runway_data.get('runway_health', 0),
+        months_to_sustainability=runway_data.get('months_to_sustainability', 0) if runway_data.get('months_to_sustainability') != float('inf') else 999,
+    )
+    
+    # Step 5f-4: Calculate Inflation metrics
+    monthly_emission_vcoin = rewards.gross_monthly_emission
+    monthly_emission_usd = monthly_emission_vcoin * params.token_price
+    monthly_burns = recapture.burns
+    monthly_burns_usd = monthly_burns * params.token_price
+    monthly_buybacks = recapture.buybacks
+    monthly_buybacks_usd = recapture.buyback_usd_spent
+    
+    total_deflationary = monthly_burns + monthly_buybacks
+    net_monthly_inflation = monthly_emission_vcoin - total_deflationary
+    net_monthly_inflation_usd = net_monthly_inflation * params.token_price
+    
+    # Calculate rates
+    emission_rate = (monthly_emission_vcoin / circulating_supply * 100) if circulating_supply > 0 else 0
+    net_inflation_rate = (net_monthly_inflation / circulating_supply * 100) if circulating_supply > 0 else 0
+    annual_net_inflation_rate = net_inflation_rate * 12
+    
+    # Determine deflation strength
+    is_deflationary = net_monthly_inflation < 0
+    if is_deflationary:
+        deflation_pct = abs(net_inflation_rate)
+        if deflation_pct > 1:
+            deflation_strength = "Strong Deflation"
+        elif deflation_pct > 0.3:
+            deflation_strength = "Moderate Deflation"
+        else:
+            deflation_strength = "Weak Deflation"
+    else:
+        inflation_pct = net_inflation_rate
+        if inflation_pct > 2:
+            deflation_strength = "High Inflation"
+        elif inflation_pct > 1:
+            deflation_strength = "Moderate Inflation"
+        else:
+            deflation_strength = "Low Inflation"
+    
+    # Health score: lower inflation = healthier (for tokens)
+    # Target: 0-1% net inflation = 100, >5% = 0
+    supply_health_score = max(0, min(100, 100 - (abs(net_inflation_rate) * 20)))
+    if is_deflationary:
+        supply_health_score = min(100, supply_health_score + 20)  # Bonus for deflation
+    
+    inflation_result = InflationResult(
+        monthly_emission=monthly_emission_vcoin,
+        monthly_emission_usd=monthly_emission_usd,
+        annual_emission=monthly_emission_vcoin * 12,
+        emission_rate=round(emission_rate, 3),
+        monthly_burns=monthly_burns,
+        monthly_burns_usd=monthly_burns_usd,
+        monthly_buybacks=monthly_buybacks,
+        monthly_buybacks_usd=monthly_buybacks_usd,
+        total_deflationary=total_deflationary,
+        net_monthly_inflation=net_monthly_inflation,
+        net_monthly_inflation_usd=net_monthly_inflation_usd,
+        net_inflation_rate=round(net_inflation_rate, 3),
+        annual_net_inflation_rate=round(annual_net_inflation_rate, 2),
+        circulating_supply=circulating_supply,
+        total_supply=config.SUPPLY.TOTAL,
+        is_deflationary=is_deflationary,
+        deflation_strength=deflation_strength,
+        supply_health_score=round(supply_health_score, 1),
+        months_to_max_supply=config.SUPPLY.REWARDS_DURATION_MONTHS,
+        projected_year1_inflation=round(annual_net_inflation_rate, 2),
+        projected_year5_supply=circulating_supply + (net_monthly_inflation * 60),
+    )
+    
+    # Step 5f-5: Calculate Whale Concentration Analysis
+    # Calculate pool TVL from protocol owned + community LP
+    if liquidity_result:
+        liquidity_pool_usd = liquidity_result.protocol_owned_usd + liquidity_result.community_lp_usd
+    else:
+        liquidity_pool_usd = 500_000
+    whale_data = calculate_whale_concentration(
+        holder_balances=holder_balances,
+        total_supply=circulating_supply,
+        token_price=params.token_price,
+        liquidity_pool_usd=liquidity_pool_usd
+    )
+    
+    # Convert whale data to result models
+    def to_top_holders_group(data: dict) -> TopHoldersGroup:
+        return TopHoldersGroup(
+            holders_count=data.get('holders_count', 0),
+            amount_vcoin=data.get('amount_vcoin', 0),
+            amount_usd=data.get('amount_usd', 0),
+            percentage=data.get('percentage', 0),
+            avg_balance=data.get('avg_balance', 0),
+        )
+    
+    whale_analysis_result = WhaleAnalysisResult(
+        holder_count=whale_data.get('holder_count', 0),
+        total_supply=whale_data.get('total_supply', 0),
+        total_held=whale_data.get('total_held', 0),
+        token_price=whale_data.get('token_price', 0),
+        top_10=to_top_holders_group(whale_data.get('top_10', {})),
+        top_50=to_top_holders_group(whale_data.get('top_50', {})),
+        top_100=to_top_holders_group(whale_data.get('top_100', {})),
+        top_1_percent=to_top_holders_group(whale_data.get('top_1_percent', {})),
+        top_5_percent=to_top_holders_group(whale_data.get('top_5_percent', {})),
+        top_10_percent=to_top_holders_group(whale_data.get('top_10_percent', {})),
+        whale_count=whale_data.get('whale_count', 0),
+        large_holder_count=whale_data.get('large_holder_count', 0),
+        medium_holder_count=whale_data.get('medium_holder_count', 0),
+        small_holder_count=whale_data.get('small_holder_count', 0),
+        whales=[WhaleInfo(**w) for w in whale_data.get('whales', [])],
+        concentration_risk_score=whale_data.get('concentration_risk_score', 0),
+        risk_level=whale_data.get('risk_level', 'Unknown'),
+        risk_color=whale_data.get('risk_color', 'gray'),
+        dump_scenarios=[DumpScenarioResult(**s) for s in whale_data.get('dump_scenarios', [])],
+        recommendations=whale_data.get('recommendations', []),
+    )
+    
+    # Step 5f-6: Calculate Attack Scenario Analysis
+    # Get governance voting power from top 10 (from whale data)
+    top_10_voting = whale_data.get('top_10', {}).get('percentage', 30)
+    team_token_pct = (config.TOKEN_ALLOCATION.TEAM.percent + config.TOKEN_ALLOCATION.ADVISORS.percent) * 100  # Convert to %
+    
+    # Estimate daily volume from activity
+    daily_volume_estimate = base_revenue * 30  # Rough estimate
+    
+    attack_data = calculate_attack_scenarios(
+        token_price=params.token_price,
+        circulating_supply=circulating_supply,
+        liquidity_pool_usd=liquidity_pool_usd,
+        daily_volume_usd=daily_volume_estimate,
+        staking_tvl_usd=staking_result.total_staked_usd if staking_result else 100_000,
+        governance_voting_power_top_10=top_10_voting,
+        team_token_percentage=team_token_pct,
+        vesting_remaining_months=48,  # Assume 4 years vesting
+        oracle_type="pyth",  # Solana uses Pyth
+        has_timelock=True,
+        timelock_delay_hours=48,
+        has_multisig=True,
+        multisig_threshold=3,
+        slippage_tolerance=0.5,
+    )
+    
+    # Convert to result model
+    attack_analysis_result = AttackAnalysisResult(
+        vulnerability_score=attack_data.get('vulnerability_score', 50),
+        risk_level=attack_data.get('risk_level', 'Moderate'),
+        risk_color=attack_data.get('risk_color', 'amber'),
+        total_potential_loss_usd=attack_data.get('total_potential_loss_usd', 0),
+        avg_severity_score=attack_data.get('avg_severity_score', 50),
+        market_cap=attack_data.get('market_cap', 0),
+        liquidity_ratio=attack_data.get('liquidity_ratio', 0),
+        volume_to_liquidity=attack_data.get('volume_to_liquidity', 0),
+        security_features=SecurityFeatures(
+            **attack_data.get('security_features', {})
+        ),
+        scenarios=[
+            AttackScenarioDetail(
+                name=s.get('name', ''),
+                category=s.get('category', ''),
+                description=s.get('description', ''),
+                attack_vector=s.get('attack_vector', ''),
+                probability=s.get('probability', 0),
+                severity=s.get('severity', 'low'),
+                potential_loss_usd=s.get('potential_loss_usd', 0),
+                potential_loss_percent=s.get('potential_loss_percent', 0),
+                mitigation_effectiveness=s.get('mitigation_effectiveness', 0),
+                recovery_time_days=s.get('recovery_time_days', 0),
+                required_capital=s.get('required_capital', 0),
+                complexity=s.get('complexity', 'medium'),
+            )
+            for s in attack_data.get('scenarios', [])
+        ],
+        recommendations=attack_data.get('recommendations', []),
+    )
+    
+    # Step 5f-7: Calculate Liquidity Farming Analysis
+    # Use liquidity pool TVL and estimate daily rewards based on reward allocation
+    lp_reward_allocation = 0.10  # 10% of rewards go to LP
+    daily_lp_rewards = (rewards.gross_monthly_emission / 30) * lp_reward_allocation
+    trading_fee_apr = 0.12  # 12% from trading fees (Solana DEX typical)
+    
+    farming_data = calculate_full_farming_analysis(
+        vcoin_price=params.token_price,
+        pool_tvl_usd=liquidity_pool_usd,
+        daily_reward_vcoin=daily_lp_rewards,
+        trading_fee_apr=trading_fee_apr,
+    )
+    
+    # Convert to result models
+    def to_farming_simulation(sim_data: dict) -> FarmingSimulation:
+        monthly_data = sim_data.get('monthly_projections', [])
+        return FarmingSimulation(
+            initial_investment_usd=sim_data.get('initial_investment_usd', 1000),
+            initial_vcoin_price=sim_data.get('initial_vcoin_price', params.token_price),
+            lp_share_percent=sim_data.get('lp_share_percent', 0),
+            monthly_projections=[
+                FarmingSimulationMonth(**m) for m in monthly_data
+            ],
+            final_result=FarmingSimulationMonth(**sim_data['final_result']) if sim_data.get('final_result') else None,
+        )
+    
+    # Safely get nested data with defaults
+    apy_data = farming_data.get('apy', {})
+    risk_data = farming_data.get('risk_metrics', {})
+    
+    liquidity_farming_result = LiquidityFarmingResult(
+        apy=FarmingAPY(
+            reward_apr=apy_data.get('reward_apr', 0),
+            fee_apr=apy_data.get('fee_apr', 0),
+            total_apr=apy_data.get('total_apr', 0),
+            reward_apy=apy_data.get('reward_apy', 0),
+            fee_apy=apy_data.get('fee_apy', 0),
+            total_apy=apy_data.get('total_apy', 0),
+            daily_reward_rate=apy_data.get('daily_reward_rate', 0),
+            daily_total_rate=apy_data.get('daily_total_rate', 0),
+            pool_tvl_usd=apy_data.get('pool_tvl_usd', 0),
+            daily_reward_vcoin=apy_data.get('daily_reward_vcoin', 0),
+            daily_reward_usd=apy_data.get('daily_reward_usd', 0),
+            is_sustainable=apy_data.get('is_sustainable', True),
+            example_1000_final=apy_data.get('example_1000_final', 1000),
+            example_1000_profit=apy_data.get('example_1000_profit', 0),
+        ),
+        il_scenarios=[
+            ILScenario(**s) for s in farming_data.get('il_scenarios', [])
+        ],
+        simulations={
+            case: to_farming_simulation(sim_data)
+            for case, sim_data in farming_data.get('simulations', {}).items()
+        },
+        risk_metrics=FarmingRiskMetrics(
+            risk_score=risk_data.get('risk_score', 30),
+            risk_level=risk_data.get('risk_level', 'Moderate'),
+            il_breakeven_multiplier=risk_data.get('il_breakeven_multiplier', 1.5),
+            il_breakeven_price_up=risk_data.get('il_breakeven_price_up', 0),
+            il_breakeven_price_down=risk_data.get('il_breakeven_price_down', 0),
+        ),
+        recommendations=farming_data.get('recommendations', []),
+    )
+    
+    # Step 5f-8: Calculate Game Theory Analysis
+    # Get staking APY from staking_result
+    staking_apy = staking_result.staking_apy if staking_result else 15
+    # Get whale distribution for voting power - ensure we have at least some data
+    whale_balances = [w.balance for w in whale_analysis_result.whales] if whale_analysis_result and whale_analysis_result.whales else [100, 50, 30]
+    if not whale_balances:
+        whale_balances = [100, 50, 30]  # Fallback default
+    
+    game_theory_data = calculate_full_game_theory_analysis(
+        staking_apy=staking_apy,
+        expected_price_change=10,  # Assume 10% annual appreciation
+        price_volatility=40,  # 40% annual volatility for crypto
+        lock_period_months=getattr(params, 'lock_period_months', 3),
+        early_unstake_penalty=getattr(params, 'early_unstake_penalty', 10),
+        voting_power_distribution=whale_balances[:10],  # Top 10 holders
+        proposal_value_usd=100_000,  # Average proposal value
+    )
+    
+    # Convert to result models
+    game_theory_result = GameTheoryResult(
+        strategies={
+            k: StrategyMetrics(
+                return_percent=v.get('return', 0),
+                risk_percent=v.get('risk', 0),
+                risk_adjusted_return=v.get('rar', 0),
+            )
+            for k, v in game_theory_data.get('staking_equilibrium', {}).get('strategies', {}).items()
+        },
+        equilibrium=StakingEquilibrium(
+            stake_probability=game_theory_data.get('staking_equilibrium', {}).get('equilibrium', {}).get('stake_probability', 0),
+            sell_probability=game_theory_data.get('staking_equilibrium', {}).get('equilibrium', {}).get('sell_probability', 0),
+            hold_probability=game_theory_data.get('staking_equilibrium', {}).get('equilibrium', {}).get('hold_probability', 0),
+            dominant_strategy=game_theory_data.get('staking_equilibrium', {}).get('equilibrium', {}).get('dominant_strategy', 'hold'),
+            is_stable=game_theory_data.get('staking_equilibrium', {}).get('equilibrium', {}).get('is_stable', True),
+            deviation_incentive=game_theory_data.get('staking_equilibrium', {}).get('equilibrium', {}).get('deviation_incentive', 0),
+        ),
+        analysis=StakingAnalysis(
+            best_strategy=game_theory_data.get('staking_equilibrium', {}).get('analysis', {}).get('best_strategy', 'stake'),
+            interpretation=game_theory_data.get('staking_equilibrium', {}).get('analysis', {}).get('interpretation', ''),
+            recommendation=game_theory_data.get('staking_equilibrium', {}).get('analysis', {}).get('recommendation', ''),
+            staking_breakeven_price_drop=game_theory_data.get('staking_equilibrium', {}).get('analysis', {}).get('staking_breakeven_price_drop', 0),
+        ),
+        governance_participation=GovernanceParticipation(
+            rational_participants=game_theory_data.get('governance_game', {}).get('participation', {}).get('rational_participants', 0),
+            total_holders=game_theory_data.get('governance_game', {}).get('participation', {}).get('total_holders', 0),
+            participation_rate=game_theory_data.get('governance_game', {}).get('participation', {}).get('participation_rate', 0),
+            participating_power=game_theory_data.get('governance_game', {}).get('participation', {}).get('participating_power', 0),
+            quorum_achievable=game_theory_data.get('governance_game', {}).get('participation', {}).get('quorum_achievable', True),
+        ),
+        voter_apathy=VoterApathy(
+            apathetic_ratio=game_theory_data.get('governance_game', {}).get('apathy', {}).get('apathetic_ratio', 0),
+            risk_level=game_theory_data.get('governance_game', {}).get('apathy', {}).get('risk_level', 'Low'),
+            interpretation=game_theory_data.get('governance_game', {}).get('apathy', {}).get('interpretation', ''),
+        ),
+        min_coalition_size=game_theory_data.get('governance_game', {}).get('coalition', {}).get('min_coalition_size', 0),
+        min_coalition_power=game_theory_data.get('governance_game', {}).get('coalition', {}).get('min_coalition_power', 0),
+        coordination=CoordinationGameAnalysis(
+            game_type=game_theory_data.get('coordination_game', {}).get('game_analysis', {}).get('game_type', ''),
+            description=game_theory_data.get('coordination_game', {}).get('game_analysis', {}).get('description', ''),
+            equilibrium=game_theory_data.get('coordination_game', {}).get('game_analysis', {}).get('equilibrium', ''),
+            cooperation_probability=game_theory_data.get('coordination_game', {}).get('mixed_equilibrium', {}).get('cooperation_probability', 50),
+        ),
+        cooperation_sustainable=game_theory_data.get('coordination_game', {}).get('repeated_game', {}).get('cooperation_sustainable', True),
+        health_score=game_theory_data.get('overall', {}).get('health_score', 50),
+        primary_risk=game_theory_data.get('overall', {}).get('primary_risk', 'None'),
+        recommendations=game_theory_data.get('coordination_game', {}).get('recommendations', []),
+    )
+    
     token_metrics_result = TokenMetricsResult(
-        velocity=TokenVelocityResult(**{
-            k: v for k, v in velocity_data.items()
-            if k in TokenVelocityResult.model_fields
-        }),
-        real_yield=RealYieldResult(**{
-            k: v for k, v in real_yield_data.items()
-            if k in RealYieldResult.model_fields
-        }),
-        value_accrual=ValueAccrualResult(**{
-            k: v for k, v in value_accrual_data.items()
-            if k in ValueAccrualResult.model_fields
-        }),
+        velocity=filter_model_fields(velocity_data, TokenVelocityResult),
+        real_yield=filter_model_fields(real_yield_data, RealYieldResult),
+        value_accrual=filter_model_fields(value_accrual_data, ValueAccrualResult),
         overall_health=round(
             (velocity_data.get('health_score', 50) + 
              value_accrual_data.get('total_score', 50)) / 2, 1
-        )
+        ),
+        gini=gini_result,
+        runway=runway_result,
+        inflation=inflation_result,
+        whale_analysis=whale_analysis_result,
+        attack_analysis=attack_analysis_result,
+        liquidity_farming=liquidity_farming_result,
+        game_theory=game_theory_result,
     )
     
     # Step 5g (NEW): Calculate Pre-Launch Module metrics
@@ -424,8 +918,14 @@ def run_deterministic_simulation(params: SimulationParameters) -> SimulationResu
     gasless_result = None
     
     # Referral module
+    # CRIT-004 Fix: Only allocate referral budget when platform has positive revenue
+    # Previously, this allocated $500 minimum even when losing money
     # Budget is 10% of module revenue, minimum $500, capped at $5,000 in early stage
-    referral_budget = max(500, min(5000, base_module_revenue * 0.10))
+    if base_module_revenue > 0:
+        referral_budget = max(500, min(5000, base_module_revenue * 0.10))
+    else:
+        # Platform is losing money - don't spend on referrals
+        referral_budget = 0
     
     if params.referral and getattr(params.referral, 'enable_referral', True):
         ref_data = calculate_referral(params, users, viral_coefficient, referral_budget)
@@ -576,6 +1076,8 @@ def run_deterministic_simulation(params: SimulationParameters) -> SimulationResu
     )
     
     return SimulationResult(
+        # Starting users summary at the top for easy reference
+        starting_users_summary=starting_users_summary,
         identity=identity,
         content=content,
         advertising=advertising,

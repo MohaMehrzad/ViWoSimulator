@@ -1,12 +1,12 @@
 'use client';
 
 import { useRef } from 'react';
-import { SimulationParameters, SimulationResult, MonteCarloResult, AgentBasedResult } from '@/types/simulation';
+import { SimulationParameters, SimulationResult, MonteCarloResult, AgentBasedResult, MonthlyProgressionResult } from '@/types/simulation';
 import { exportToJsonClient, exportToCsvClient, importParameters } from '@/lib/export';
 
 interface ExportButtonsProps {
   parameters: SimulationParameters;
-  result: SimulationResult | MonteCarloResult | AgentBasedResult | null;
+  result: SimulationResult | MonteCarloResult | AgentBasedResult | MonthlyProgressionResult | null;
   onImportParameters: (params: Partial<SimulationParameters>) => void;
 }
 

@@ -44,18 +44,26 @@ simulation_runner = SimulationRunner()
 
 
 @router.post("/simulate/deterministic", response_model=SimulationResult)
-async def simulate_deterministic(params: SimulationParameters):
+async def simulate_deterministic(params: SimulationParameters, simulation_month: int = 1):
     """
     Run a deterministic simulation with the given parameters.
     Returns immediate results - same inputs always produce same outputs.
+    
+    Args:
+        params: Simulation parameters
+        simulation_month: Current month in simulation (1-60). Default is 1.
+            HIGH-FE-004 Fix: Exposed as API query parameter.
+            Future modules (VChain, Marketplace, etc.) only activate when
+            simulation_month >= their launch_month.
     
     Now includes:
     - Retention model (Issue #1)
     - Platform maturity adjustments (Issue #2, #3, #7)
     - Compliance costs (Issue #13)
+    - HIGH-FE-004: simulation_month parameter for future module testing
     """
     try:
-        result = run_deterministic_simulation(params)
+        result = run_deterministic_simulation(params, simulation_month=simulation_month)
         return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

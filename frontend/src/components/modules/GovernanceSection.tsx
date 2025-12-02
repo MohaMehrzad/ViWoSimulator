@@ -39,6 +39,13 @@ export function GovernanceSection({ result }: GovernanceSectionProps) {
   const decentralizationScore = governance.decentralizationScore ?? 0;
   const vevcoinOfCirculatingPercent = governance.vevcoinOfCirculatingPercent ?? 0;
   const revenue = governance.revenue ?? 0;
+  
+  // NEW-MED-002 FIX: Delegation metrics
+  const delegators = governance.delegators ?? 0;
+  const delegatedVotingPower = governance.delegatedVotingPower ?? 0;
+  const delegationRate = governance.delegationRate ?? 0;
+  const totalParticipants = governance.totalParticipants ?? activeVoters;
+  const effectiveParticipationRate = governance.effectiveParticipationRate ?? votingParticipationRate;
 
   // Tier distribution
   const tierData = governance.tierDistribution || {};
@@ -99,20 +106,20 @@ export function GovernanceSection({ result }: GovernanceSectionProps) {
         </div>
       </div>
 
-      {/* Key Metrics */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        {/* Participation */}
+      {/* Key Metrics - Updated grid for delegation section */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* Participation - Updated with delegation */}
         <div className="bg-white rounded-xl border border-slate-200 p-5">
           <h3 className="font-semibold text-slate-800 mb-3 flex items-center gap-2">
             👥 Participation
           </h3>
           <div className="space-y-3">
             <div className="flex justify-between">
-              <span className="text-slate-500">Active Voters</span>
+              <span className="text-slate-500">Direct Voters</span>
               <span className="font-medium">{activeVoters.toLocaleString()}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-slate-500">Participation Rate</span>
+              <span className="text-slate-500">Direct Voting Rate</span>
               <span className="font-medium">{votingParticipationRate.toFixed(1)}%</span>
             </div>
             <div className="flex justify-between">
@@ -122,6 +129,35 @@ export function GovernanceSection({ result }: GovernanceSectionProps) {
             <div className="flex justify-between">
               <span className="text-slate-500">Eligible Proposers</span>
               <span className="font-medium">{eligibleProposers}</span>
+            </div>
+          </div>
+        </div>
+        
+        {/* NEW-MED-002 FIX: Delegation Section */}
+        <div className="bg-white rounded-xl border border-slate-200 p-5">
+          <h3 className="font-semibold text-slate-800 mb-3 flex items-center gap-2">
+            🤝 Delegation
+          </h3>
+          <div className="space-y-3">
+            <div className="flex justify-between">
+              <span className="text-slate-500">Delegators</span>
+              <span className="font-medium">{delegators.toLocaleString()}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-slate-500">Delegation Rate</span>
+              <span className="font-medium">{delegationRate.toFixed(1)}%</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-slate-500">Delegated Power</span>
+              <span className="font-medium">{(delegatedVotingPower / 1_000_000).toFixed(2)}M</span>
+            </div>
+            <div className="flex justify-between border-t border-slate-100 pt-2 mt-2">
+              <span className="text-slate-700 font-medium">Total Participants</span>
+              <span className="font-bold text-violet-600">{totalParticipants.toLocaleString()}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-slate-700 font-medium">Effective Rate</span>
+              <span className="font-bold text-violet-600">{effectiveParticipationRate.toFixed(1)}%</span>
             </div>
           </div>
         </div>

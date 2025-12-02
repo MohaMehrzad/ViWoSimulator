@@ -1143,10 +1143,17 @@ class SimulationParameters(BaseModel):
         default=6.0, ge=1.0, le=30.0,  # NEW: Active creators post 6/month
         description="Posts per active creator per month"
     )
-    ad_cpm_multiplier: float = Field(
+    # MED-001 Fix: Renamed from ad_cpm_multiplier to ad_fill_rate for clarity
+    # The parameter name was confusing - it's not a CPM multiplier, it's the fill rate
+    ad_fill_rate: float = Field(
         default=0.20, ge=0.05, le=1.0,  # Updated: 20% fill rate (viable launch)
-        description="Ad fill rate (platform maturity dependent)"
+        description="Ad fill rate - percentage of ad inventory that gets filled (platform maturity dependent)"
     )
+    # Backward compatibility alias (deprecated)
+    @property
+    def ad_cpm_multiplier(self) -> float:
+        """Deprecated: Use ad_fill_rate instead. This alias exists for backward compatibility."""
+        return self.ad_fill_rate
     reward_allocation_percent: float = Field(
         default=0.08, ge=0.05, le=0.90, 
         description="% of daily emission allocated for rewards (5-90%)"
@@ -1190,6 +1197,26 @@ class SimulationParameters(BaseModel):
     target_liquidity_ratio: float = Field(
         default=0.15, ge=0.05, le=0.50,
         description="Target liquidity/market cap ratio (15%+ for health)"
+    )
+    # MED-03: Configurable liquidity pool distribution
+    liquidity_pool_usdc_percent: float = Field(
+        default=0.40, ge=0.0, le=1.0,
+        description="Percentage of liquidity in VCoin/USDC pool (40% default)"
+    )
+    liquidity_pool_sol_percent: float = Field(
+        default=0.35, ge=0.0, le=1.0,
+        description="Percentage of liquidity in VCoin/SOL pool (35% default)"
+    )
+    liquidity_pool_usdt_percent: float = Field(
+        default=0.25, ge=0.0, le=1.0,
+        description="Percentage of liquidity in VCoin/USDT pool (25% default)"
+    )
+    # MED-004 Fix: Make CLMM concentration factor configurable
+    # Previously hardcoded to 4.0/3.0/2.0 based on liquidity level
+    # Real CLMM efficiency depends on price range: Narrow=10-20x, Wide=2-3x, Full=1x
+    clmm_concentration_factor: float = Field(
+        default=4.0, ge=1.0, le=20.0,
+        description="CLMM capital efficiency multiplier (1x=full range, 4x=typical, 10-20x=narrow range)"
     )
     
     # === STAKING PARAMETERS (NEW - Nov 2025) ===
@@ -1372,6 +1399,11 @@ class SimulationParameters(BaseModel):
         default=0.5, ge=0, le=5,  # Was 0.4, now 0.5
         description="Avg monthly withdrawals per active user"
     )
+    # MED-04: Configurable average swap size
+    exchange_avg_swap_size: float = Field(
+        default=30.0, ge=1.0, le=1000.0,
+        description="Average swap size in USD for swap count calculations"
+    )
     
     # === REWARD DISTRIBUTION ===
     text_post_points: float = Field(default=3, ge=0, description="Points for text posts")
@@ -1434,10 +1466,10 @@ class SimulationParameters(BaseModel):
     def get_effective_ad_fill_rate(self) -> float:
         """Get ad fill rate adjusted for platform maturity"""
         if not self.auto_adjust_for_maturity:
-            return self.ad_cpm_multiplier
+            return self.ad_fill_rate
         
         adjustments = self.get_maturity_adjustments()
-        return adjustments.get('ad_fill_rate', self.ad_cpm_multiplier)
+        return adjustments.get('ad_fill_rate', self.ad_fill_rate)
     
     def get_effective_cpm(self) -> tuple:
         """Get CPM rates adjusted for platform maturity"""
@@ -1449,6 +1481,24 @@ class SimulationParameters(BaseModel):
             adjustments.get('banner_cpm', self.banner_cpm),
             adjustments.get('video_cpm', self.video_cpm)
         )
+    
+    def get_effective_staking_participation(self) -> float:
+        """
+        Get staking participation rate adjusted for platform maturity.
+        
+        HIGH-04 Fix: Staking participation varies by platform maturity:
+        - Launch: 8% (early adopters only)
+        - Growing: 12% (building community)
+        - Established: 20% (mature ecosystem)
+        
+        Returns:
+            Effective staking participation rate (0.0-1.0)
+        """
+        if not self.auto_adjust_for_maturity:
+            return self.staking_participation_rate
+        
+        adjustments = self.get_maturity_adjustments()
+        return adjustments.get('staking_participation', self.staking_participation_rate)
     
     def get_future_modules_enabled(self) -> list:
         """Return list of enabled future modules"""

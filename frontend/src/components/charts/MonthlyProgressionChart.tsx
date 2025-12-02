@@ -2,6 +2,10 @@
 
 import React, { useState } from 'react';
 import { MonthlyProgressionResult, MonthlyMetrics, FomoEvent } from '@/types/simulation';
+import { DEFAULT_PARAMETERS } from '@/lib/constants';
+
+// NEW-LOW-003 FIX: Use constant for default token price
+const DEFAULT_TOKEN_PRICE = DEFAULT_PARAMETERS.tokenPrice;
 
 interface MonthlyProgressionChartProps {
   result: MonthlyProgressionResult;
@@ -47,7 +51,7 @@ export const MonthlyProgressionChart: React.FC<MonthlyProgressionChartProps> = (
   const maxUsers = Math.max(...monthlyData.map(m => m.activeUsers));
   const maxRevenue = Math.max(...monthlyData.map(m => m.revenue));
   const maxTokens = Math.max(...monthlyData.map(m => m.tokensDistributed));
-  const maxPrice = Math.max(...monthlyData.map(m => m.tokenPrice || 0.03));
+  const maxPrice = Math.max(...monthlyData.map(m => m.tokenPrice || DEFAULT_TOKEN_PRICE));
   const maxAllocation = 90; // Max allocation is always 90%
   
   // Check if dynamic allocation is being used
@@ -117,7 +121,7 @@ export const MonthlyProgressionChart: React.FC<MonthlyProgressionChartProps> = (
           maxValue = 100;
           break;
         case 'price':
-          primaryValue = month.tokenPrice || 0.03;
+          primaryValue = month.tokenPrice || DEFAULT_TOKEN_PRICE;
           secondaryValue = 0;
           primaryLabel = 'Token Price';
           secondaryLabel = '';

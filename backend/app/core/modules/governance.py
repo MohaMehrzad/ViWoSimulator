@@ -378,20 +378,25 @@ def calculate_governance_revenue(
     badge_price_vcoin = getattr(params, 'governance_badge_price', 50) if params else 50
     premium_fee_vcoin = getattr(params, 'governance_premium_fee', 100) if params else 100
     
+    # Get configurable adoption rates from params or use defaults
+    # These rates can be tuned to model different governance engagement scenarios
+    badge_buyer_rate = getattr(params, 'governance_badge_buyer_rate', 0.02) if params else 0.02  # 2% default
+    premium_subscriber_rate = getattr(params, 'governance_premium_subscriber_rate', 0.05) if params else 0.05  # 5% default
+    
     # Proposal creation fee revenue
     proposal_revenue_vcoin = proposals_count * proposal_fee_vcoin
     proposal_revenue_usd = proposal_revenue_vcoin * token_price
     
     # Governance badge NFTs (one-time purchase)
-    # Estimate 2% of stakers buy badges per month
-    badge_buyers = int(stakers_count * 0.02)
+    # Configurable: % of stakers who buy badges per month
+    badge_buyers = int(stakers_count * badge_buyer_rate)
     badge_revenue_vcoin = badge_buyers * badge_price_vcoin
     badge_revenue_usd = badge_revenue_vcoin * token_price
     
     # Premium governance features (delegate dashboard, analytics)
-    # 5% of delegates subscribe
+    # Configurable: % of delegates who subscribe
     delegates = int(stakers_count * 0.12)
-    premium_subscribers = int(delegates * 0.05)
+    premium_subscribers = int(delegates * premium_subscriber_rate)
     premium_revenue_vcoin = premium_subscribers * premium_fee_vcoin
     premium_revenue_usd = premium_revenue_vcoin * token_price
     
@@ -402,10 +407,14 @@ def calculate_governance_revenue(
         'proposal_fee_vcoin': proposal_fee_vcoin,
         'badge_price_vcoin': badge_price_vcoin,
         'premium_fee_vcoin': premium_fee_vcoin,
+        'badge_buyer_rate': round(badge_buyer_rate * 100, 1),
+        'premium_subscriber_rate': round(premium_subscriber_rate * 100, 1),
         'proposal_revenue_vcoin': round(proposal_revenue_vcoin, 2),
         'proposal_revenue_usd': round(proposal_revenue_usd, 2),
+        'badge_buyers': badge_buyers,
         'badge_revenue_vcoin': round(badge_revenue_vcoin, 2),
         'badge_revenue_usd': round(badge_revenue_usd, 2),
+        'premium_subscribers': premium_subscribers,
         'premium_revenue_vcoin': round(premium_revenue_vcoin, 2),
         'premium_revenue_usd': round(premium_revenue_usd, 2),
         'total_revenue_vcoin': round(total_revenue_vcoin, 2),

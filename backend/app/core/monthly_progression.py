@@ -208,13 +208,15 @@ def calculate_vesting_unlock(month: int) -> Dict[str, int]:
     }
     
     # TGE (month 0)
+    # CRIT-01 Fix: Rewards should NOT emit at TGE - only months 1-60
+    # TGE is the token generation event; rewards emission starts month 1
     if month == 0:
         unlocks['private'] = 3_000_000      # 10% of 30M
         unlocks['public'] = 25_000_000      # 50% of 50M
         unlocks['liquidity'] = 100_000_000  # 100% of 100M
         unlocks['foundation'] = 5_000_000   # 25% of 20M
         unlocks['marketing'] = 20_000_000   # 25% of 80M
-        unlocks['rewards'] = 5_833_333      # First month emission
+        # unlocks['rewards'] removed - rewards start month 1, not TGE
         return unlocks
     
     # Seed: 20M total, 0% TGE, cliff 12, vesting 24 months
@@ -232,11 +234,10 @@ def calculate_vesting_unlock(month: int) -> Dict[str, int]:
     if 1 <= month <= 3:
         unlocks['public'] = 8_333_333
     
-    # Team: 100M total, 0% TGE, cliff 12, vesting 36 months
-    # After cliff (M12), vest 100M / 24 = 4,166,667/month for 24 months (M13-M36)
-    # Wait, vesting is 36 total, cliff is 12, so vesting period is 36-12 = 24 months
+    # Team: 100M total, 0% TGE, 12 month cliff, 36 month vesting period
+    # After cliff ends at M12, vest 100M over 36 months (M13-M48)
+    # Monthly unlock: 100M / 36 = 2,777,778 VCoin
     if 13 <= month <= 48:
-        # Vest 100M over 36 months (after 12 month cliff)
         unlocks['team'] = 2_777_778
     
     # Advisors: 50M total, 0% TGE, cliff 6, vesting 18 months
@@ -244,8 +245,20 @@ def calculate_vesting_unlock(month: int) -> Dict[str, int]:
     if 7 <= month <= 24:
         unlocks['advisors'] = 2_777_778
     
-    # Treasury: 200M, Programmatic - no automatic unlocks
-    # Treasury releases are governance-controlled
+    # Treasury: 200M (20% of supply) - Programmatic/Governance-Controlled Release
+    # 
+    # IMPORTANT: Treasury unlocks are NOT included in the vesting schedule because:
+    # 1. Treasury releases are governance-controlled (DAO votes required)
+    # 2. Release timing and amounts depend on protocol needs (grants, partnerships, etc.)
+    # 3. This provides flexibility for the protocol to respond to market conditions
+    # 
+    # Treasury funds may be used for:
+    # - Community grants and ecosystem development
+    # - Strategic partnerships and integrations
+    # - Protocol development and maintenance
+    # - Emergency reserves and liquidity support
+    # 
+    # To model treasury releases, use the governance module or add custom logic.
     unlocks['treasury'] = 0
     
     # Rewards: 350M / 60 months = 5,833,333/month
@@ -380,10 +393,13 @@ def generate_full_vesting_schedule(duration_months: int = 60) -> VestingSchedule
     
     final_supply = monthly_supply[-1] if monthly_supply else calculate_circulating_supply_at_month(0)
     
+    # MED-01 Fix: Use dynamic TGE value from monthly_supply instead of hardcoded value
+    tge_supply = monthly_supply[0] if monthly_supply else calculate_circulating_supply_at_month(0)
+    
     return VestingScheduleResult(
         duration_months=duration_months,
         monthly_supply=monthly_supply,
-        tge_circulating=158_833_333,
+        tge_circulating=tge_supply.cumulative_circulating,  # MED-01: Was hardcoded 158_833_333
         final_circulating=final_supply.cumulative_circulating,
         max_circulating=1_000_000_000,
         month_25_percent_circulating=month_25,
@@ -391,10 +407,10 @@ def generate_full_vesting_schedule(duration_months: int = 60) -> VestingSchedule
         month_75_percent_circulating=month_75,
         month_full_circulating=60,
         seed_completion_month=36,
-        private_completion_month=18,
+        private_completion_month=24,  # CRIT-02 Fix: was 18, but vests M7-M24
         public_completion_month=3,
         team_completion_month=48,
-        advisors_completion_month=18,
+        advisors_completion_month=24,  # CRIT-03 Fix: was 18, but vests M7-M24
         foundation_completion_month=27,
         marketing_completion_month=21,
         rewards_completion_month=60,
@@ -554,17 +570,31 @@ def calculate_saturated_cac(
 def estimate_ltv(
     arpu_monthly: float,
     retention_curve: RetentionCurve,
-    months: int = 24
+    months: int = 24,
+    arpu_growth_rate: float = 0.0
 ) -> float:
     """
-    Estimate Lifetime Value based on ARPU and retention curve.
+    Estimate Lifetime Value based on ARPU, retention curve, and ARPU growth.
     
     LTV = Sum of (Monthly Revenue × Retention Rate) over lifetime
+    
+    Args:
+        arpu_monthly: Starting Average Revenue Per User per month
+        retention_curve: Retention curve defining user drop-off
+        months: Number of months to project (default 24)
+        arpu_growth_rate: Monthly ARPU growth rate (default 0.0, e.g., 0.02 = 2%)
+            Typically ARPU grows as users become more engaged and adopt premium features.
+    
+    Returns:
+        Estimated Lifetime Value in same currency as arpu_monthly
     """
     ltv = 0
+    current_arpu = arpu_monthly
     for month in range(1, months + 1):
         retention = retention_curve.get_retention_at_month(month)
-        ltv += arpu_monthly * retention
+        ltv += current_arpu * retention
+        # Apply ARPU growth for next month
+        current_arpu *= (1 + arpu_growth_rate)
     return ltv
 
 
@@ -575,6 +605,9 @@ def run_monthly_progression_simulation(
     market_saturation_factor: float = 0.0,
     target_market_size: int = 1_000_000,  # Total addressable market
     progress_callback: Optional[Callable[[int, int], None]] = None,
+    start_year: int = 2025,  # HIGH-03: Starting year for market cycle
+    start_month: int = 3,    # HIGH-03: Starting month (default March)
+    apply_market_cycle: bool = True,  # HIGH-03: Apply 5-year market cycle
 ) -> MonthlyProgressionResult:
     """
     Run monthly progression simulation with retention, seasonality, and market dynamics.
@@ -586,9 +619,15 @@ def run_monthly_progression_simulation(
         market_saturation_factor: How saturated the market is (0-1)
         target_market_size: Total addressable market for saturation calc
         progress_callback: Optional callback for progress updates
+        start_year: Calendar year when simulation starts (default 2025)
+        start_month: Calendar month when simulation starts (default March = 3)
+        apply_market_cycle: Whether to apply 5-year market cycle adjustments
     
     Returns:
         MonthlyProgressionResult with full time-series data
+    
+    HIGH-03 Fix: Added market cycle integration for simulations > 12 months.
+    Uses MARKET_CYCLE_2025_2030 for growth, retention, and price multipliers.
     """
     # Select retention curve based on parameters
     retention_curve = VCOIN_RETENTION
@@ -620,9 +659,38 @@ def run_monthly_progression_simulation(
     # Base monthly marketing budget
     base_monthly_marketing = params.marketing_budget / 12
     
+    # HIGH-03: Track current calendar year/month for market cycle
+    current_calendar_year = start_year
+    current_calendar_month = start_month
+    
     for month in range(1, duration_months + 1):
         # Apply seasonality to marketing effectiveness
         seasonality = calculate_seasonality_multiplier(month, include_seasonality)
+        
+        # HIGH-03: Apply 5-year market cycle multipliers for simulations > 12 months
+        cycle_growth_mult = 1.0
+        cycle_retention_mult = 1.0
+        cycle_price_mult = 1.0
+        cycle_phase = "Year 1"
+        
+        if apply_market_cycle and duration_months > 12:
+            cycle_data = apply_market_cycle_multipliers(
+                base_growth_rate=1.0,
+                base_retention=1.0,
+                base_price_multiplier=1.0,
+                year=current_calendar_year,
+                month_in_year=current_calendar_month
+            )
+            cycle_growth_mult = cycle_data['growth_rate']
+            cycle_retention_mult = cycle_data['retention_rate']
+            cycle_price_mult = cycle_data['price_multiplier']
+            cycle_phase = cycle_data.get('phase', 'Unknown')
+        
+        # Advance calendar month/year for next iteration
+        current_calendar_month += 1
+        if current_calendar_month > 12:
+            current_calendar_month = 1
+            current_calendar_year += 1
         
         # Calculate market penetration
         total_acquired_so_far = tracker.get_total_acquired()
@@ -638,6 +706,9 @@ def run_monthly_progression_simulation(
             market_penetration, 
             market_saturation_factor
         )
+        
+        # HIGH-03: Apply market cycle growth multiplier to user acquisition
+        effective_cac = effective_cac / cycle_growth_mult if cycle_growth_mult > 0 else effective_cac
         
         # Calculate users acquired this month
         monthly_marketing = base_monthly_marketing * seasonality
@@ -660,7 +731,17 @@ def run_monthly_progression_simulation(
         tracker.add_cohort(month, total_acquired_this_month)
         
         # Calculate active users with retention
-        active_users = tracker.get_active_users_at_month(month)
+        base_active_users = tracker.get_active_users_at_month(month)
+        
+        # HIGH-03: Apply market cycle retention multiplier
+        # Bull markets have better retention (people stay engaged with crypto)
+        # Bear markets have worse retention (people lose interest)
+        if apply_market_cycle and duration_months > 12 and cycle_retention_mult != 1.0:
+            # Adjust active users based on cycle retention
+            retention_adjustment = (cycle_retention_mult - 1.0) * 0.3  # Dampen the effect
+            active_users = int(base_active_users * (1 + retention_adjustment))
+        else:
+            active_users = base_active_users
         
         # Calculate churned users
         prev_active = monthly_data[-1].active_users if monthly_data else 0
@@ -767,10 +848,19 @@ def run_monthly_progression_simulation(
     avg_margin = sum(m.margin for m in monthly_data) / len(monthly_data) if monthly_data else 0
     
     # Calculate CAGR
-    def calculate_cagr(start: float, end: float, periods: int) -> float:
-        if start <= 0 or end <= 0 or periods <= 0:
+    # HIGH-004 Fix: CAGR is only meaningful for periods >= 12 months
+    # For shorter periods, the annualization creates misleading results
+    # (e.g., 2x growth in 6 months = 300% CAGR, which is technically correct but misleading)
+    def calculate_cagr(start: float, end: float, periods_in_years: float) -> float:
+        if start <= 0 or end <= 0 or periods_in_years <= 0:
             return 0
-        return ((end / start) ** (1 / periods) - 1) * 100
+        # HIGH-004 Fix: Return 0 for periods < 1 year to avoid misleading CAGR
+        # CAGR is Compound ANNUAL Growth Rate - sub-year periods are extrapolated
+        if periods_in_years < 1.0:
+            # For sub-year periods, return simple growth rate instead of CAGR
+            # This is more intuitive: "grew 50% in 6 months" vs "300% CAGR"
+            return 0  # Return 0 to indicate CAGR not applicable
+        return ((end / start) ** (1 / periods_in_years) - 1) * 100
     
     cagr_users = calculate_cagr(
         monthly_data[0].active_users if monthly_data else 1,
@@ -898,10 +988,22 @@ def run_growth_scenario_simulation(
     
     Returns:
         MonthlyProgressionResult with growth scenario data
+    
+    Note:
+        Growth scenarios are limited to 12 months as scenario data (FOMO events,
+        growth rates, retention benchmarks) is only defined for the first year.
+        For longer projections, use run_monthly_progression_simulation() instead.
     """
+    import logging
     from app.core.deterministic import calculate_customer_acquisition
     
     # Limit to 12 months for growth scenarios (that's what we have data for)
+    if duration_months > 12:
+        logging.warning(
+            f"Growth scenario simulation requested for {duration_months} months, "
+            f"but scenario data is only available for 12 months. "
+            f"Limiting to 12 months. Use run_monthly_progression_simulation() for longer projections."
+        )
     duration_months = min(duration_months, 12)
     
     # Map parameter enum to core enum
@@ -1103,10 +1205,14 @@ def run_growth_scenario_simulation(
     avg_margin = sum(m.margin for m in monthly_data) / len(monthly_data) if monthly_data else 0
     
     # Calculate CAGR
-    def calculate_cagr(start: float, end: float, periods: int) -> float:
-        if start <= 0 or end <= 0 or periods <= 0:
+    # HIGH-004 Fix: CAGR is only meaningful for periods >= 12 months
+    def calculate_cagr(start: float, end: float, periods_in_years: float) -> float:
+        if start <= 0 or end <= 0 or periods_in_years <= 0:
             return 0
-        return ((end / start) ** (1 / periods) - 1) * 100
+        # HIGH-004 Fix: Return 0 for periods < 1 year to avoid misleading CAGR
+        if periods_in_years < 1.0:
+            return 0  # CAGR not applicable for sub-year periods
+        return ((end / start) ** (1 / periods_in_years) - 1) * 100
     
     cagr_users = calculate_cagr(
         monthly_mau[0] if monthly_mau else 1,

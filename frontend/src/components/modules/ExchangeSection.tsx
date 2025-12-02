@@ -17,6 +17,10 @@ export function ExchangeSection({ result, parameters }: ExchangeSectionProps) {
   const totalSolanaTxs = exchange.breakdown.totalSolanaTxs || 0;
   const totalSolanaFeesUsd = exchange.breakdown.totalSolanaFeesUsd || 0;
   const solanaSavings = exchange.breakdown.solanaSavings || 0;
+  
+  // NEW-MED-004 FIX: Loss-leader detection
+  const isLossLeader = exchange.breakdown.isLossLeader || exchange.margin < 10;
+  const strategicNote = exchange.breakdown.strategicNote as string | undefined;
 
   return (
     <section className="space-y-8">
@@ -58,6 +62,25 @@ export function ExchangeSection({ result, parameters }: ExchangeSectionProps) {
         </div>
       </div>
 
+      {/* Loss-Leader Warning - NEW-MED-004 FIX */}
+      {isLossLeader && (
+        <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-start gap-3">
+          <span className="text-2xl">⚠️</span>
+          <div>
+            <div className="font-semibold text-amber-800">Loss-Leader Strategy Detected</div>
+            <div className="text-sm text-amber-700">
+              {strategicNote || (
+                <>
+                  Exchange module is operating with a margin below 10% ({exchange.margin.toFixed(1)}%). 
+                  This may be intentional as a user acquisition strategy - subsidized trading 
+                  helps attract users who generate revenue through other platform features.
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+      
       {/* Solana Network Info */}
       <div className="bg-gradient-to-r from-purple-50 to-indigo-50 border border-purple-200 rounded-xl p-4">
         <div className="flex items-start gap-3">
