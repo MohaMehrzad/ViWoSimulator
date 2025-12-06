@@ -294,7 +294,7 @@ export function GameTheorySection({ result }: GameTheorySectionProps) {
           </div>
           <div className="flex justify-between text-xs text-slate-500 mt-1">
             <span>🤝 Cooperate ({(gameData.coordination?.cooperationProbability ?? 50).toFixed(0)}%)</span>
-            <span>({100 - (gameData.coordination?.cooperationProbability ?? 50).toFixed(0)}%) Defect 💨</span>
+            <span>({(100 - (gameData.coordination?.cooperationProbability ?? 50)).toFixed(0)}%) Defect 💨</span>
           </div>
         </div>
       </div>

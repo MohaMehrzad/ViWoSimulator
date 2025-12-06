@@ -1,6 +1,6 @@
 'use client';
 
-import { SimulationResult, SimulationParameters } from '@/types/simulation';
+import { SimulationResult, SimulationParameters, ExchangeBreakdown } from '@/types/simulation';
 import { formatNumber, formatCurrency } from '@/lib/utils';
 
 interface ExchangeSectionProps {
@@ -10,17 +10,18 @@ interface ExchangeSectionProps {
 
 export function ExchangeSection({ result, parameters }: ExchangeSectionProps) {
   const { exchange } = result;
+  const breakdown = exchange.breakdown as unknown as ExchangeBreakdown;
   
   // Solana-specific data from breakdown
-  const network = exchange.breakdown.network || 'solana';
-  const dexAggregator = exchange.breakdown.dexAggregator || 'jupiter_v6';
-  const totalSolanaTxs = exchange.breakdown.totalSolanaTxs || 0;
-  const totalSolanaFeesUsd = exchange.breakdown.totalSolanaFeesUsd || 0;
-  const solanaSavings = exchange.breakdown.solanaSavings || 0;
+  const network = breakdown.network || 'solana';
+  const dexAggregator = breakdown.dexAggregator || 'jupiter_v6';
+  const totalSolanaTxs = breakdown.totalSolanaTxs || 0;
+  const totalSolanaFeesUsd = breakdown.totalSolanaFeesUsd || 0;
+  const solanaSavings = breakdown.solanaSavings || 0;
   
   // NEW-MED-004 FIX: Loss-leader detection
-  const isLossLeader = exchange.breakdown.isLossLeader || exchange.margin < 10;
-  const strategicNote = exchange.breakdown.strategicNote as string | undefined;
+  const isLossLeader = breakdown.isLossLeader || exchange.margin < 10;
+  const strategicNote = breakdown.strategicNote;
 
   return (
     <section className="space-y-8">
@@ -134,7 +135,7 @@ export function ExchangeSection({ result, parameters }: ExchangeSectionProps) {
               <h4 className="font-bold text-emerald-800">Swap/Exchange Fees</h4>
             </div>
             <div className="text-3xl font-bold text-emerald-700 mb-2">
-              {formatCurrency(exchange.breakdown.swapFeeRevenue || 0)}
+              {formatCurrency(breakdown.swapFeeRevenue || 0)}
             </div>
             <div className="space-y-1 text-sm text-emerald-600">
               <div className="flex justify-between">
@@ -143,7 +144,7 @@ export function ExchangeSection({ result, parameters }: ExchangeSectionProps) {
               </div>
               <div className="flex justify-between">
                 <span>Total Volume:</span>
-                <span className="font-semibold">{formatCurrency(exchange.breakdown.totalTradingVolume || 0)}</span>
+                <span className="font-semibold">{formatCurrency(breakdown.totalTradingVolume || 0)}</span>
               </div>
             </div>
           </div>
@@ -155,7 +156,7 @@ export function ExchangeSection({ result, parameters }: ExchangeSectionProps) {
               <h4 className="font-bold text-blue-800">Withdrawal Fees</h4>
             </div>
             <div className="text-3xl font-bold text-blue-700 mb-2">
-              {formatCurrency(exchange.breakdown.withdrawalFeeRevenue || 0)}
+              {formatCurrency(breakdown.withdrawalFeeRevenue || 0)}
             </div>
             <div className="space-y-1 text-sm text-blue-600">
               <div className="flex justify-between">
@@ -164,7 +165,7 @@ export function ExchangeSection({ result, parameters }: ExchangeSectionProps) {
               </div>
               <div className="flex justify-between">
                 <span>Total Withdrawals:</span>
-                <span className="font-semibold">{formatNumber(exchange.breakdown.totalWithdrawals || 0)}</span>
+                <span className="font-semibold">{formatNumber(breakdown.totalWithdrawals || 0)}</span>
               </div>
             </div>
           </div>
@@ -177,7 +178,7 @@ export function ExchangeSection({ result, parameters }: ExchangeSectionProps) {
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <div className="bg-gray-50 rounded-lg p-4 text-center">
             <div className="text-2xl font-bold text-gray-900">
-              {formatNumber(exchange.breakdown.activeExchangeUsers || 0)}
+              {formatNumber(breakdown.activeExchangeUsers || 0)}
             </div>
             <div className="text-xs text-gray-600 uppercase font-semibold">Active Exchange Users</div>
           </div>
@@ -225,17 +226,17 @@ export function ExchangeSection({ result, parameters }: ExchangeSectionProps) {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div className="bg-red-50 rounded-lg p-4 border border-red-200">
             <div className="text-sm text-red-600 mb-1">Infrastructure</div>
-            <div className="text-xl font-bold text-red-700">{formatCurrency(exchange.breakdown.infrastructureCost || 0)}</div>
+            <div className="text-xl font-bold text-red-700">{formatCurrency(breakdown.infrastructureCost || 0)}</div>
             <div className="text-xs text-red-500">Helius RPC, servers</div>
           </div>
           <div className="bg-red-50 rounded-lg p-4 border border-red-200">
             <div className="text-sm text-red-600 mb-1">Solana Fees</div>
-            <div className="text-xl font-bold text-red-700">{formatCurrency(exchange.breakdown.blockchainCosts || 0)}</div>
+            <div className="text-xl font-bold text-red-700">{formatCurrency(breakdown.blockchainCosts || 0)}</div>
             <div className="text-xs text-red-500">~$0.00025 per transaction</div>
           </div>
           <div className="bg-red-50 rounded-lg p-4 border border-red-200">
             <div className="text-sm text-red-600 mb-1">Liquidity Costs</div>
-            <div className="text-xl font-bold text-red-700">{formatCurrency(exchange.breakdown.liquidityCosts || 0)}</div>
+            <div className="text-xl font-bold text-red-700">{formatCurrency(breakdown.liquidityCosts || 0)}</div>
             <div className="text-xs text-red-500">DEX fees + slippage</div>
           </div>
         </div>
@@ -289,7 +290,7 @@ export function ExchangeSection({ result, parameters }: ExchangeSectionProps) {
           </div>
           <div className="bg-emerald-50 rounded-lg p-4 border border-emerald-200">
             <div className="text-sm text-emerald-600 mb-1">Annual Trading Volume</div>
-            <div className="text-2xl font-bold text-emerald-700">{formatCurrency((Number(exchange.breakdown.totalTradingVolume) || 0) * 12)}</div>
+            <div className="text-2xl font-bold text-emerald-700">{formatCurrency((Number(breakdown.totalTradingVolume) || 0) * 12)}</div>
           </div>
         </div>
       </div>

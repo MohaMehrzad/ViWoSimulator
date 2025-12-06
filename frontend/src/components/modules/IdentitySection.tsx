@@ -3,6 +3,17 @@
 import { SimulationResult, SimulationParameters } from '@/types/simulation';
 import { formatNumber, formatCurrency } from '@/lib/utils';
 
+interface IdentityBreakdown {
+  tierRevenue?: number;
+  transferRevenue?: number;
+  saleRevenue?: number;
+  monthlyTransfers?: number;
+  basicUsers?: number;
+  verifiedUsers?: number;
+  premiumUsers?: number;
+  enterpriseUsers?: number;
+}
+
 interface IdentitySectionProps {
   result: SimulationResult;
   parameters: SimulationParameters;
@@ -10,6 +21,7 @@ interface IdentitySectionProps {
 
 export function IdentitySection({ result, parameters }: IdentitySectionProps) {
   const { identity } = result;
+  const breakdown = (identity.breakdown || {}) as IdentityBreakdown;
   
   const tiers = [
     { 
@@ -109,17 +121,17 @@ export function IdentitySection({ result, parameters }: IdentitySectionProps) {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
           <div className="bg-emerald-50 rounded-lg p-4 border border-emerald-200">
             <div className="text-sm text-emerald-600 mb-1">Tier Subscriptions</div>
-            <div className="text-2xl font-bold text-emerald-700">{formatCurrency(identity.breakdown?.tierRevenue || 0)}</div>
+            <div className="text-2xl font-bold text-emerald-700">{formatCurrency(breakdown.tierRevenue || 0)}</div>
             <div className="text-xs text-emerald-500">monthly recurring revenue</div>
           </div>
           <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
             <div className="text-sm text-blue-600 mb-1">Transfer Fee Revenue</div>
-            <div className="text-2xl font-bold text-blue-700">{formatCurrency(identity.breakdown?.transferRevenue || 0)}</div>
-            <div className="text-xs text-blue-500">{formatNumber(identity.breakdown?.monthlyTransfers || 0)} transfers @ {formatCurrency(parameters.transferFee)}/each</div>
+            <div className="text-2xl font-bold text-blue-700">{formatCurrency(breakdown.transferRevenue || 0)}</div>
+            <div className="text-xs text-blue-500">{formatNumber(breakdown.monthlyTransfers || 0)} transfers @ {formatCurrency(parameters.transferFee)}/each</div>
           </div>
           <div className="bg-purple-50 rounded-lg p-4 border border-purple-200">
             <div className="text-sm text-purple-600 mb-1">Sale Commission Revenue</div>
-            <div className="text-2xl font-bold text-purple-700">{formatCurrency(identity.breakdown?.saleRevenue || 0)}</div>
+            <div className="text-2xl font-bold text-purple-700">{formatCurrency(breakdown.saleRevenue || 0)}</div>
             <div className="text-xs text-purple-500">{formatNumber(parameters.monthlySales)} sales @ {(parameters.saleCommission * 100).toFixed(0)}% commission</div>
           </div>
         </div>
@@ -150,19 +162,19 @@ export function IdentitySection({ result, parameters }: IdentitySectionProps) {
         <h3 className="font-bold text-lg mb-4">👥 User Distribution</h3>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <div className="bg-gray-50 rounded-lg p-4 text-center">
-            <div className="text-2xl font-bold text-gray-700">{formatNumber(identity.breakdown.basicUsers || 0)}</div>
+            <div className="text-2xl font-bold text-gray-700">{formatNumber(breakdown.basicUsers || 0)}</div>
             <div className="text-xs text-gray-500 uppercase font-semibold">Basic (Free)</div>
           </div>
           <div className="bg-blue-50 rounded-lg p-4 text-center">
-            <div className="text-2xl font-bold text-blue-700">{formatNumber(identity.breakdown.verifiedUsers || 0)}</div>
+            <div className="text-2xl font-bold text-blue-700">{formatNumber(breakdown.verifiedUsers || 0)}</div>
             <div className="text-xs text-blue-500 uppercase font-semibold">Verified</div>
           </div>
           <div className="bg-purple-50 rounded-lg p-4 text-center">
-            <div className="text-2xl font-bold text-purple-700">{formatNumber(identity.breakdown.premiumUsers || 0)}</div>
+            <div className="text-2xl font-bold text-purple-700">{formatNumber(breakdown.premiumUsers || 0)}</div>
             <div className="text-xs text-purple-500 uppercase font-semibold">Premium</div>
           </div>
           <div className="bg-amber-50 rounded-lg p-4 text-center">
-            <div className="text-2xl font-bold text-amber-700">{formatNumber(identity.breakdown.enterpriseUsers || 0)}</div>
+            <div className="text-2xl font-bold text-amber-700">{formatNumber(breakdown.enterpriseUsers || 0)}</div>
             <div className="text-xs text-amber-500 uppercase font-semibold">Enterprise</div>
           </div>
         </div>

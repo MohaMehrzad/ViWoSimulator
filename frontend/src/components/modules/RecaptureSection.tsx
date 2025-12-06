@@ -171,9 +171,9 @@ export function RecaptureSection({ result, parameters }: RecaptureSectionProps) 
                   <div className="text-xs bg-gray-200 rounded px-2 py-1 inline-block">
                     {flow.rateLabel}: {(flow.rate * 100).toFixed(1)}%
                   </div>
-                  {'effectiveRate' in flow && flow.effectiveRate !== null && (
+                  {'effectiveRate' in flow && flow.effectiveRate != null && (
                     <div className="text-xs bg-orange-100 text-orange-700 rounded px-2 py-1 inline-block ml-1">
-                      Effective: {(flow.effectiveRate * 100).toFixed(1)}%
+                      Effective: {((flow.effectiveRate ?? 0) * 100).toFixed(1)}%
                     </div>
                   )}
                 </div>

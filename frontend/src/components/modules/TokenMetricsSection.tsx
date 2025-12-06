@@ -559,7 +559,7 @@ export function TokenMetricsSection({ result }: TokenMetricsSectionProps) {
                   .filter(([_, amount]) => amount > 0)
                   .sort(([, a], [, b]) => b - a)
                   .map(([category, amount]) => {
-                    const totalUnlocks = metrics.inflation.totalMonthlyUnlocks || 1;
+                    const totalUnlocks = metrics.inflation?.totalMonthlyUnlocks || 1;
                     const percentage = (amount / totalUnlocks) * 100;
                     const categoryColors: Record<string, string> = {
                       REWARDS: 'bg-emerald-500',

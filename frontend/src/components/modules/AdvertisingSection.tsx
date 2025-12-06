@@ -172,7 +172,7 @@ export function AdvertisingSection({ result, parameters }: AdvertisingSectionPro
           {Object.entries(advertising.breakdown).map(([key, value]) => (
             <div key={key} className="flex items-center justify-between py-2 border-b border-gray-100 last:border-0">
               <span className="text-gray-600 capitalize">{key.replace(/_/g, ' ')}</span>
-              <span className="font-semibold">{formatCurrency(value)}</span>
+              <span className="font-semibold">{formatCurrency(value as number)}</span>
             </div>
           ))}
         </div>

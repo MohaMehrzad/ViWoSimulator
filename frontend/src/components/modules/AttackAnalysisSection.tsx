@@ -59,7 +59,7 @@ export function AttackAnalysisSection({ result }: AttackAnalysisSectionProps) {
   };
 
   // Get unique categories
-  const categories = ['all', ...new Set(attackData.scenarios.map(s => s.category))];
+  const categories = ['all', ...Array.from(new Set(attackData.scenarios.map(s => s.category)))];
   
   // Filter scenarios by category
   const filteredScenarios = selectedCategory === 'all' 

@@ -20,12 +20,12 @@ const TOKEN_ALLOCATIONS = {
 // Calculate unlock for a category at a specific month
 function calculateUnlock(category: typeof TOKEN_ALLOCATIONS[keyof typeof TOKEN_ALLOCATIONS], month: number): number {
   // Governance/Treasury - no automatic unlock
-  if (category.isGovernance) {
+  if ('isGovernance' in category && category.isGovernance) {
     return 0;
   }
   
   // Dynamic rewards (Ecosystem) - starts at TGE (month 0) per viwo-tokenomics tool
-  if (category.isDynamic && category.vesting > 0) {
+  if ('isDynamic' in category && category.isDynamic && category.vesting > 0) {
     // Ecosystem distributes from month 0 to month 59 (60 months total)
     if (month >= 0 && month < category.vesting) {
       return Math.floor(category.tokens / category.vesting);
@@ -257,7 +257,7 @@ export function TokenUnlocksSection({ result, parameters }: TokenUnlocksSectionP
                       </div>
                     )}
                     {/* Vesting */}
-                    {category.vesting > 0 && !category.isGovernance && (
+                    {category.vesting > 0 && !('isGovernance' in category && category.isGovernance) && (
                       <div 
                         className={`${category.color} opacity-60 h-full flex items-center justify-center text-white text-xs`}
                         style={{ width: `${vestingWidth}%` }}
@@ -267,7 +267,7 @@ export function TokenUnlocksSection({ result, parameters }: TokenUnlocksSectionP
                       </div>
                     )}
                     {/* Governance */}
-                    {category.isGovernance && (
+                    {'isGovernance' in category && category.isGovernance && (
                       <div 
                         className="bg-slate-400 h-full flex items-center justify-center text-white text-xs flex-1"
                         title="Governance-controlled"
@@ -317,7 +317,7 @@ export function TokenUnlocksSection({ result, parameters }: TokenUnlocksSectionP
             <tr className="border-b border-slate-200">
               <th className="py-2 px-2 text-left text-slate-600 font-medium">Month</th>
               {Object.entries(TOKEN_ALLOCATIONS)
-                .filter(([_, cat]) => !cat.isGovernance)
+                .filter(([_, cat]) => !('isGovernance' in cat && cat.isGovernance))
                 .map(([key, cat]) => (
                   <th key={key} className="py-2 px-2 text-right text-slate-600 font-medium">
                     <div className="flex items-center justify-end gap-1">
@@ -340,7 +340,7 @@ export function TokenUnlocksSection({ result, parameters }: TokenUnlocksSectionP
                   {month.month === 0 ? 'TGE' : `M${month.month}`}
                 </td>
                 {Object.entries(TOKEN_ALLOCATIONS)
-                  .filter(([_, cat]) => !cat.isGovernance)
+                  .filter(([_, cat]) => !('isGovernance' in cat && cat.isGovernance))
                   .map(([key]) => (
                     <td key={key} className="py-2 px-2 text-right text-slate-600">
                       {month.unlocks[key] > 0 
