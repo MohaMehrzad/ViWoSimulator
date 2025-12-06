@@ -9,6 +9,11 @@ interface GovernanceSectionProps {
 
 export function GovernanceSection({ result }: GovernanceSectionProps) {
   const governance = result.governance;
+  const fiveA = result.fiveA;
+  
+  // 5A Impact
+  const fiveAEnabled = fiveA?.enabled || false;
+  const fiveAGovBoost = fiveA?.governancePowerBoostAvg || 0;
 
   if (!governance) {
     return (
@@ -60,13 +65,24 @@ export function GovernanceSection({ result }: GovernanceSectionProps) {
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2">
-            🗳️ Governance (veVCoin)
-          </h2>
-          <p className="text-sm text-slate-500 mt-1">
-            Vote-escrowed VCoin governance metrics
-          </p>
+        <div className="flex items-center gap-3">
+          <div>
+            <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2">
+              🗳️ Governance (veVCoin)
+            </h2>
+            <p className="text-sm text-slate-500 mt-1">
+              Vote-escrowed VCoin governance metrics
+            </p>
+          </div>
+          {/* 5A Badge */}
+          {fiveAEnabled && fiveAGovBoost > 0 && (
+            <div className="bg-yellow-100 border border-yellow-200 rounded-lg px-3 py-1.5">
+              <div className="flex items-center gap-1.5">
+                <span>⭐</span>
+                <span className="font-semibold text-sm text-yellow-700">+{fiveAGovBoost.toFixed(1)}% Power</span>
+              </div>
+            </div>
+          )}
         </div>
         <div className={`px-4 py-2 rounded-lg ${healthBg}`}>
           <div className={`text-2xl font-bold ${healthColor}`}>

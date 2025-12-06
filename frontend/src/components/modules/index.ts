@@ -25,3 +25,7 @@ export { WhaleAnalysisSection } from './WhaleAnalysisSection';
 export { AttackAnalysisSection } from './AttackAnalysisSection';
 export { LiquidityFarmingSection } from './LiquidityFarmingSection';
 export { GameTheorySection } from './GameTheorySection';
+// Token Vesting (Dec 2025)
+export { TokenUnlocksSection } from './TokenUnlocksSection';
+// 5A Policy Gamification (Dec 2025)
+export { FiveAPolicySection } from './FiveAPolicySection';

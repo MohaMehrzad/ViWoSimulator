@@ -536,6 +536,16 @@ export function OverviewSection({ result, parameters }: OverviewSectionProps) {
       margin: result.staking.margin 
     } : { revenue: 0, costs: 0, profit: 0, margin: 0 }, color: 'indigo', enabled: true },
   ];
+  
+  // 5A Policy impact on platform metrics
+  const fiveAPlatformImpact = result.fiveA ? {
+    retentionBoost: (result.fiveA.retentionBoost || 0) * 100,
+    growthBoost: (result.fiveA.growthBoost || 0) * 100,
+    revenueBoost: (result.fiveA.revenueBoost || 0) * 100,
+    tokenPriceImpact: (result.fiveA.tokenPriceImpact || 0) * 100,
+    engagementScore: result.fiveA.engagementIncentiveScore || 50,
+    avgMultiplier: result.fiveA.avgCompoundMultiplier || 1,
+  } : null;
 
   return (
     <section className="space-y-8">
@@ -1429,6 +1439,68 @@ export function OverviewSection({ result, parameters }: OverviewSectionProps) {
           </div>
         )}
       </div>
+      
+      {/* 5A Policy Platform Impact */}
+      {fiveAPlatformImpact && (
+        <div className="bg-gradient-to-br from-indigo-900 to-purple-900 rounded-xl border border-indigo-600 p-6 text-white">
+          <div className="flex items-center gap-3 mb-4">
+            <span className="text-2xl">⭐</span>
+            <h3 className="font-bold text-lg">5A Policy Platform Impact</h3>
+            <div className="ml-auto flex items-center gap-2">
+              <span className="text-sm text-indigo-200">Avg Multiplier:</span>
+              <span className="px-2 py-1 bg-indigo-700 rounded text-sm font-bold">
+                {fiveAPlatformImpact.avgMultiplier.toFixed(2)}x
+              </span>
+            </div>
+          </div>
+          <p className="text-sm text-indigo-200 mb-4">
+            The 5A Policy (Authenticity, Accuracy, Agility, Activity, Approved) directly impacts platform growth, 
+            user retention, revenue generation, and token price through dynamic reward multipliers.
+          </p>
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+            <div className="bg-indigo-800/50 rounded-lg p-4 text-center">
+              <div className="text-2xl font-bold text-green-400">
+                +{fiveAPlatformImpact.retentionBoost.toFixed(1)}%
+              </div>
+              <div className="text-xs text-indigo-200 uppercase font-semibold">Retention Boost</div>
+              <div className="text-xs text-indigo-400 mt-1">Higher user loyalty</div>
+            </div>
+            <div className="bg-indigo-800/50 rounded-lg p-4 text-center">
+              <div className="text-2xl font-bold text-blue-400">
+                +{fiveAPlatformImpact.growthBoost.toFixed(1)}%
+              </div>
+              <div className="text-xs text-indigo-200 uppercase font-semibold">Growth Boost</div>
+              <div className="text-xs text-indigo-400 mt-1">Faster acquisition</div>
+            </div>
+            <div className="bg-indigo-800/50 rounded-lg p-4 text-center">
+              <div className="text-2xl font-bold text-purple-400">
+                +{fiveAPlatformImpact.revenueBoost.toFixed(1)}%
+              </div>
+              <div className="text-xs text-indigo-200 uppercase font-semibold">Revenue Boost</div>
+              <div className="text-xs text-indigo-400 mt-1">More engagement</div>
+            </div>
+            <div className="bg-indigo-800/50 rounded-lg p-4 text-center">
+              <div className={`text-2xl font-bold ${
+                fiveAPlatformImpact.tokenPriceImpact >= 0 ? 'text-yellow-400' : 'text-red-400'
+              }`}>
+                {fiveAPlatformImpact.tokenPriceImpact >= 0 ? '+' : ''}{fiveAPlatformImpact.tokenPriceImpact.toFixed(2)}%
+              </div>
+              <div className="text-xs text-indigo-200 uppercase font-semibold">Price Impact</div>
+              <div className="text-xs text-indigo-400 mt-1">VCoin value</div>
+            </div>
+            <div className="bg-indigo-800/50 rounded-lg p-4 text-center">
+              <div className={`text-2xl font-bold ${
+                fiveAPlatformImpact.engagementScore >= 70 ? 'text-green-400' :
+                fiveAPlatformImpact.engagementScore >= 50 ? 'text-yellow-400' : 'text-red-400'
+              }`}>
+                {fiveAPlatformImpact.engagementScore.toFixed(0)}
+              </div>
+              <div className="text-xs text-indigo-200 uppercase font-semibold">Engagement Score</div>
+              <div className="text-xs text-indigo-400 mt-1">0-100 health</div>
+            </div>
+          </div>
+        </div>
+      )}
     </section>
   );
 }

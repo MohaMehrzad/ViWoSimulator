@@ -42,6 +42,12 @@ export function ParameterControls({
     marketplace: false,
     businessHub: false,
     crossPlatform: false,
+    // Pre-Launch Modules (Issue #8, #9, #10 Fix)
+    points: false,
+    referral: false,
+    gasless: false,
+    // 5A Policy
+    fiveA: false,
   });
 
   const toggleSection = (section: string) => {
@@ -354,6 +360,125 @@ export function ParameterControls({
           onFomoEventsChange={(v) => onUpdateParameter('enableFomoEvents', v)}
           onUseGrowthScenariosChange={(v) => onUpdateParameter('useGrowthScenarios', v)}
         />
+        {/* Issue #4 Fix: Expose starting waitlist users */}
+        <div className="mt-4 p-3 bg-slate-800/50 rounded-lg border border-slate-700">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <NumberInput
+              label="Starting Waitlist Users"
+              value={parameters.startingWaitlistUsers || 1000}
+              onChange={(v) => onUpdateParameter('startingWaitlistUsers', v)}
+              min={100}
+              max={100000}
+              step={100}
+              icon="📋"
+            />
+            <div className="flex items-center text-xs text-gray-400 p-2 bg-gray-900/50 rounded">
+              Pre-launch waitlist size for Points module simulation
+            </div>
+          </div>
+        </div>
+      </CollapsibleSection>
+
+      {/* 5A Policy Gamification - Always On, Interactive Control */}
+      <CollapsibleSection
+        title="5A Policy Gamification"
+        icon="⭐"
+        isExpanded={expandedSections.fiveA}
+        onToggle={() => toggleSection('fiveA')}
+        badge="always on"
+        badgeColor="purple"
+      >
+        <div className="space-y-4">
+          {/* Linear Scale Info */}
+          <div className="p-3 bg-purple-900/30 border border-purple-700/50 rounded-lg">
+            <div className="text-sm font-medium text-purple-300 mb-1">Linear Earnings Formula</div>
+            <div className="text-xs text-gray-400">
+              <span className="text-red-400">0% stars = 0x</span> (nothing) → 
+              <span className="text-yellow-400"> 50% = 1x</span> (neutral) → 
+              <span className="text-green-400"> 100% = 2x</span> (double)
+            </div>
+          </div>
+          
+          {/* User Segments (90-9-1 Rule) */}
+          <div className="p-3 bg-gray-800/50 border border-gray-700 rounded-lg">
+            <div className="text-sm font-medium text-gray-300 mb-2">👥 User Segments (90-9-1 Rule)</div>
+            <div className="text-xs text-gray-500 mb-3">Based on real social media behavior patterns</div>
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+              <SliderInput
+                label="👻 Inactive %"
+                value={(parameters.fiveA?.segmentInactivePercent || 0.20) * 100}
+                onChange={(v) => onUpdateParameters({ fiveA: { ...parameters.fiveA, segmentInactivePercent: v / 100 } as any })}
+                min={5}
+                max={40}
+              />
+              <SliderInput
+                label="👀 Lurkers %"
+                value={(parameters.fiveA?.segmentLurkersPercent || 0.40) * 100}
+                onChange={(v) => onUpdateParameters({ fiveA: { ...parameters.fiveA, segmentLurkersPercent: v / 100 } as any })}
+                min={20}
+                max={60}
+              />
+              <SliderInput
+                label="📱 Casual %"
+                value={(parameters.fiveA?.segmentCasualPercent || 0.25) * 100}
+                onChange={(v) => onUpdateParameters({ fiveA: { ...parameters.fiveA, segmentCasualPercent: v / 100 } as any })}
+                min={10}
+                max={40}
+              />
+              <SliderInput
+                label="🔥 Active %"
+                value={(parameters.fiveA?.segmentActivePercent || 0.12) * 100}
+                onChange={(v) => onUpdateParameters({ fiveA: { ...parameters.fiveA, segmentActivePercent: v / 100 } as any })}
+                min={5}
+                max={25}
+              />
+              <SliderInput
+                label="⚡ Power %"
+                value={(parameters.fiveA?.segmentPowerPercent || 0.03) * 100}
+                onChange={(v) => onUpdateParameters({ fiveA: { ...parameters.fiveA, segmentPowerPercent: v / 100 } as any })}
+                min={1}
+                max={10}
+              />
+            </div>
+            <div className="text-xs text-gray-600 mt-2">
+              Inactive: ghost (0x) | Lurkers: view only (0.35x) | Casual: weekly (0.95x) | Active: daily (1.4x) | Power: creators (1.74x)
+            </div>
+          </div>
+          
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <SliderInput
+              label="Max Staking APY Bonus"
+              value={(parameters.fiveA?.stakingApyBonusMax || 0.5) * 100}
+              onChange={(v) => onUpdateParameters({ fiveA: { ...parameters.fiveA, stakingApyBonusMax: v / 100 } as any })}
+              min={0}
+              max={100}
+            />
+            <SliderInput
+              label="Max Governance Bonus"
+              value={(parameters.fiveA?.governancePowerBonusMax || 0.5) * 100}
+              onChange={(v) => onUpdateParameters({ fiveA: { ...parameters.fiveA, governancePowerBonusMax: v / 100 } as any })}
+              min={0}
+              max={100}
+            />
+            <SliderInput
+              label="Max Fee Discount"
+              value={(parameters.fiveA?.feeDiscountMax || 0.5) * 100}
+              onChange={(v) => onUpdateParameters({ fiveA: { ...parameters.fiveA, feeDiscountMax: v / 100 } as any })}
+              min={0}
+              max={90}
+            />
+            <SliderInput
+              label="Content Visibility Bonus"
+              value={(parameters.fiveA?.contentVisibilityBonusMax || 0.5) * 100}
+              onChange={(v) => onUpdateParameters({ fiveA: { ...parameters.fiveA, contentVisibilityBonusMax: v / 100 } as any })}
+              min={0}
+              max={100}
+            />
+          </div>
+          <div className="text-xs text-gray-400 p-2 bg-gray-800/50 rounded">
+            💡 5 Stars: Authenticity, Accuracy, Agility, Activity, Approved. Users earn from 0x to 2x based on their weighted average star rating.
+          </div>
+        </div>
       </CollapsibleSection>
 
       {/* ==================== REVENUE MODULES ==================== */}
@@ -793,6 +918,27 @@ export function ParameterControls({
             min={0}
             max={20}
           />
+        </div>
+        {/* Game Theory Parameters (Issue #5, #6 Fix) */}
+        <div className="mt-4 p-3 bg-amber-900/20 border border-amber-700/30 rounded-lg">
+          <div className="text-xs text-amber-300 mb-2 font-medium">🎯 Game Theory Analysis</div>
+          <div className="grid grid-cols-2 md:grid-cols-2 gap-4">
+            <NumberInput
+              label="Lock Period (Months)"
+              value={parameters.lockPeriodMonths || 3}
+              onChange={(v) => onUpdateParameter('lockPeriodMonths', v)}
+              min={1}
+              max={24}
+              step={1}
+            />
+            <SliderInput
+              label="Early Unstake Penalty (%)"
+              value={(parameters.earlyUnstakePenalty || 0.10) * 100}
+              onChange={(v) => onUpdateParameter('earlyUnstakePenalty', v / 100)}
+              min={0}
+              max={50}
+            />
+          </div>
         </div>
       </ModuleSection>
 
@@ -1246,6 +1392,253 @@ export function ParameterControls({
             max={50000}
             step={100}
           />
+        </div>
+      </ModuleSection>
+
+      {/* ==================== PRE-LAUNCH MODULES ==================== */}
+      <div className="mt-6 mb-3">
+        <h4 className="text-gray-400 text-xs font-bold uppercase tracking-wider flex items-center gap-2">
+          <span className="h-px flex-1 bg-gray-700"></span>
+          Pre-Launch Modules
+          <span className="h-px flex-1 bg-gray-700"></span>
+        </h4>
+      </div>
+
+      {/* Points System Module (Issue #8 Fix) */}
+      <ModuleSection
+        title="Points System"
+        icon="🎯"
+        description="Pre-launch engagement & waitlist points"
+        isExpanded={expandedSections.points}
+        onToggle={() => toggleSection('points')}
+        enabled={parameters.points?.enablePoints !== false}
+        onEnableChange={(v) => onUpdateParameters({ points: { ...parameters.points, enablePoints: v } as any })}
+      >
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+          <NumberInput
+            label="Points Pool (Tokens)"
+            value={parameters.points?.pointsPoolTokens || 50000000}
+            onChange={(v) => onUpdateParameters({ points: { ...parameters.points, pointsPoolTokens: v } as any })}
+            min={1000000}
+            max={100000000}
+            step={1000000}
+            icon="🎁"
+          />
+          <SliderInput
+            label="Participation Rate (%)"
+            value={(parameters.points?.participationRate || 0.30) * 100}
+            onChange={(v) => onUpdateParameters({ points: { ...parameters.points, participationRate: v / 100 } as any })}
+            min={10}
+            max={80}
+          />
+          <SliderInput
+            label="Sybil Rejection (%)"
+            value={(parameters.points?.sybilRejectionRate || 0.15) * 100}
+            onChange={(v) => onUpdateParameters({ points: { ...parameters.points, sybilRejectionRate: v / 100 } as any })}
+            min={5}
+            max={40}
+          />
+        </div>
+        <div className="mt-4 p-3 bg-blue-900/20 border border-blue-700/30 rounded-lg">
+          <div className="text-xs text-blue-300 mb-2 font-medium">📊 Points per Action</div>
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+            <NumberInput
+              label="Waitlist Signup"
+              value={parameters.points?.waitlistSignupPoints || 100}
+              onChange={(v) => onUpdateParameters({ points: { ...parameters.points, waitlistSignupPoints: v } as any })}
+              min={10}
+              max={500}
+              step={10}
+            />
+            <NumberInput
+              label="Social Follow"
+              value={parameters.points?.socialFollowPoints || 50}
+              onChange={(v) => onUpdateParameters({ points: { ...parameters.points, socialFollowPoints: v } as any })}
+              min={10}
+              max={200}
+              step={5}
+            />
+            <NumberInput
+              label="Daily Check-in"
+              value={parameters.points?.dailyCheckinPoints || 10}
+              onChange={(v) => onUpdateParameters({ points: { ...parameters.points, dailyCheckinPoints: v } as any })}
+              min={1}
+              max={50}
+              step={1}
+            />
+            <NumberInput
+              label="Invite Join"
+              value={parameters.points?.inviteJoinPoints || 200}
+              onChange={(v) => onUpdateParameters({ points: { ...parameters.points, inviteJoinPoints: v } as any })}
+              min={50}
+              max={500}
+              step={25}
+            />
+            <NumberInput
+              label="Invite Verify"
+              value={parameters.points?.inviteVerifyPoints || 500}
+              onChange={(v) => onUpdateParameters({ points: { ...parameters.points, inviteVerifyPoints: v } as any })}
+              min={100}
+              max={1000}
+              step={50}
+            />
+            <NumberInput
+              label="Beta Testing"
+              value={parameters.points?.betaTestingPoints || 1000}
+              onChange={(v) => onUpdateParameters({ points: { ...parameters.points, betaTestingPoints: v } as any })}
+              min={100}
+              max={5000}
+              step={100}
+            />
+          </div>
+        </div>
+      </ModuleSection>
+
+      {/* Referral Module (Issue #9 Fix) */}
+      <ModuleSection
+        title="Referral Program"
+        icon="🔗"
+        description="User referral incentives & tiers"
+        isExpanded={expandedSections.referral}
+        onToggle={() => toggleSection('referral')}
+        enabled={parameters.referral?.enableReferral !== false}
+        onEnableChange={(v) => onUpdateParameters({ referral: { ...parameters.referral, enableReferral: v } as any })}
+      >
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+          <SliderInput
+            label="Qualification Rate (%)"
+            value={(parameters.referral?.qualificationRate || 0.60) * 100}
+            onChange={(v) => onUpdateParameters({ referral: { ...parameters.referral, qualificationRate: v / 100 } as any })}
+            min={20}
+            max={90}
+          />
+          <SliderInput
+            label="Active Referrer Rate (%)"
+            value={(parameters.referral?.activeReferrerRate || 0.15) * 100}
+            onChange={(v) => onUpdateParameters({ referral: { ...parameters.referral, activeReferrerRate: v / 100 } as any })}
+            min={5}
+            max={40}
+          />
+          <SliderInput
+            label="Sybil Rejection (%)"
+            value={(parameters.referral?.sybilRejectionRate || 0.10) * 100}
+            onChange={(v) => onUpdateParameters({ referral: { ...parameters.referral, sybilRejectionRate: v / 100 } as any })}
+            min={5}
+            max={30}
+          />
+        </div>
+        <div className="mt-4 p-3 bg-purple-900/20 border border-purple-700/30 rounded-lg">
+          <div className="text-xs text-purple-300 mb-2 font-medium">🏆 Tier Bonuses (VCoin)</div>
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+            <NumberInput
+              label="Starter Bonus"
+              value={parameters.referral?.starterBonusVcoin || 100}
+              onChange={(v) => onUpdateParameters({ referral: { ...parameters.referral, starterBonusVcoin: v } as any })}
+              min={10}
+              max={500}
+              step={10}
+            />
+            <NumberInput
+              label="Builder Bonus"
+              value={parameters.referral?.builderBonusVcoin || 500}
+              onChange={(v) => onUpdateParameters({ referral: { ...parameters.referral, builderBonusVcoin: v } as any })}
+              min={100}
+              max={2000}
+              step={50}
+            />
+            <NumberInput
+              label="Ambassador Bonus"
+              value={parameters.referral?.ambassadorBonusVcoin || 2000}
+              onChange={(v) => onUpdateParameters({ referral: { ...parameters.referral, ambassadorBonusVcoin: v } as any })}
+              min={500}
+              max={10000}
+              step={100}
+            />
+            <NumberInput
+              label="Qualification Days"
+              value={parameters.referral?.qualificationDays || 30}
+              onChange={(v) => onUpdateParameters({ referral: { ...parameters.referral, qualificationDays: v } as any })}
+              min={7}
+              max={90}
+              step={7}
+            />
+            <NumberInput
+              label="Min Posts Required"
+              value={parameters.referral?.minPostsRequired || 5}
+              onChange={(v) => onUpdateParameters({ referral: { ...parameters.referral, minPostsRequired: v } as any })}
+              min={1}
+              max={20}
+              step={1}
+            />
+          </div>
+        </div>
+      </ModuleSection>
+
+      {/* Gasless Module (Issue #10 Fix) */}
+      <ModuleSection
+        title="Gasless Onboarding"
+        icon="⛽"
+        description="Sponsored transactions & Solana costs"
+        isExpanded={expandedSections.gasless}
+        onToggle={() => toggleSection('gasless')}
+        enabled={parameters.gasless?.enableGasless !== false}
+        onEnableChange={(v) => onUpdateParameters({ gasless: { ...parameters.gasless, enableGasless: v } as any })}
+      >
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+          <NumberInput
+            label="New User Free Txns"
+            value={parameters.gasless?.newUserFreeTransactions || 50}
+            onChange={(v) => onUpdateParameters({ gasless: { ...parameters.gasless, newUserFreeTransactions: v } as any })}
+            min={10}
+            max={200}
+            step={10}
+          />
+          <NumberInput
+            label="Verified Monthly Txns"
+            value={parameters.gasless?.verifiedUserMonthlyTransactions || 20}
+            onChange={(v) => onUpdateParameters({ gasless: { ...parameters.gasless, verifiedUserMonthlyTransactions: v } as any })}
+            min={5}
+            max={100}
+            step={5}
+          />
+          <NumberInput
+            label="Monthly Budget ($)"
+            value={parameters.gasless?.monthlySponsorshipBudgetUsd || 10000}
+            onChange={(v) => onUpdateParameters({ gasless: { ...parameters.gasless, monthlySponsorshipBudgetUsd: v } as any })}
+            min={1000}
+            max={100000}
+            step={1000}
+            icon="💰"
+          />
+        </div>
+        <div className="mt-4 p-3 bg-green-900/20 border border-green-700/30 rounded-lg">
+          <div className="text-xs text-green-300 mb-2 font-medium">⚡ Solana Network Costs</div>
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+            <NumberInput
+              label="Base Txn Cost ($)"
+              value={parameters.gasless?.baseTransactionCostUsd || 0.00025}
+              onChange={(v) => onUpdateParameters({ gasless: { ...parameters.gasless, baseTransactionCostUsd: v } as any })}
+              min={0.0001}
+              max={0.01}
+              step={0.0001}
+            />
+            <NumberInput
+              label="Priority Fee ($)"
+              value={parameters.gasless?.priorityFeeUsd || 0.0001}
+              onChange={(v) => onUpdateParameters({ gasless: { ...parameters.gasless, priorityFeeUsd: v } as any })}
+              min={0}
+              max={0.001}
+              step={0.00005}
+            />
+            <NumberInput
+              label="Account Creation ($)"
+              value={parameters.gasless?.accountCreationCostUsd || 0.002}
+              onChange={(v) => onUpdateParameters({ gasless: { ...parameters.gasless, accountCreationCostUsd: v } as any })}
+              min={0.001}
+              max={0.01}
+              step={0.0005}
+            />
+          </div>
         </div>
       </ModuleSection>
 

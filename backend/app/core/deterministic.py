@@ -70,6 +70,7 @@ from app.models.results import (
     PointsResult,
     GaslessResult,
     PreLaunchResult,
+    FiveAResult,
 )
 from app.core.modules.identity import calculate_identity
 from app.core.modules.content import calculate_content
@@ -89,6 +90,8 @@ from app.core.modules.cross_platform import calculate_cross_platform
 from app.core.modules.referral import calculate_referral
 from app.core.modules.points import calculate_points
 from app.core.modules.gasless import calculate_gasless
+# 5A Policy Gamification (Dec 2025)
+from app.core.modules.five_a_policy import calculate_five_a
 from app.core.metrics import (
     calculate_token_velocity,
     calculate_real_yield,
@@ -101,7 +104,12 @@ from app.core.whale_analysis import calculate_whale_concentration
 from app.core.attack_scenarios import calculate_attack_scenarios
 from app.core.liquidity_farming import calculate_full_farming_analysis
 from app.core.game_theory import calculate_full_game_theory_analysis
-from app.core.retention import apply_retention_to_snapshot, VCOIN_RETENTION
+from app.core.retention import (
+    apply_retention_to_snapshot, 
+    VCOIN_RETENTION,
+    RetentionModel,
+    RETENTION_CURVES,
+)
 from app.config import config
 
 # MED-07 Fix: Use centralized PLATFORM_FEE_RATE from config
@@ -285,10 +293,23 @@ def run_deterministic_simulation(
     if params.apply_retention and hasattr(params, 'retention'):
         retention_applied = True
         platform_age = params.retention.platform_age_months
+        
+        # Issue #2 Fix: Select retention curve based on retention_model_type parameter
+        # Previously always used VCOIN_RETENTION regardless of user selection
+        retention_curve = VCOIN_RETENTION  # Default fallback
+        if hasattr(params.retention, 'model_type'):
+            model_type = params.retention.model_type
+            # Map parameter enum value to RetentionModel enum
+            if model_type.value in [m.value for m in RetentionModel]:
+                retention_curve = RETENTION_CURVES.get(
+                    RetentionModel(model_type.value),
+                    VCOIN_RETENTION
+                )
+        
         active_users, retention_stats = apply_retention_to_snapshot(
             acquired_users,
             platform_age,
-            VCOIN_RETENTION
+            retention_curve
         )
         # Ensure at least some users remain (minimum 10% of acquired)
         active_users = max(active_users, int(acquired_users * 0.10))
@@ -321,14 +342,36 @@ def run_deterministic_simulation(
         retention_rate=round(retention_rate, 1) if retention_rate is not None else None,
     )
     
-    # Step 2: Calculate each module
-    identity = calculate_identity(params, users)
-    content = calculate_content(params, users)
-    advertising = calculate_advertising(params, users)
-    exchange = calculate_exchange(params, users)
+    # Step 2a: Calculate 5A Policy first (Dec 2025)
+    # 5A affects all other modules, so we calculate it early
+    # We'll provide base values and update them after other calculations
+    five_a_result = calculate_five_a(
+        params=params,
+        users=users,
+        base_reward_pool=0,  # Will be updated after rewards calculation
+        base_fee_revenue=0,  # Will be updated after module calculations
+        staking_apy=params.staking_apy if hasattr(params, 'staking_apy') else 0.10,
+        total_staked=0,  # Will be updated after staking calculation
+        governance_power=0,  # Will be updated after governance calculation
+    )
     
-    # Step 3: Calculate rewards
-    rewards = calculate_rewards(params, users)
+    # Extract 5A multipliers for module integration
+    five_a_enabled = five_a_result.enabled
+    five_a_fee_discount_avg = five_a_result.exchange_fee_discount_avg / 100 if five_a_enabled else 0.0
+    five_a_visibility_boost_avg = five_a_result.content_visibility_boost_avg / 100 if five_a_enabled else 0.0
+    five_a_creator_boost_avg = five_a_visibility_boost_avg  # Same as visibility for ad revenue
+    five_a_apy_boost_avg = five_a_result.staking_apy_boost_avg / 100 if five_a_enabled else 0.0
+    five_a_governance_boost_avg = five_a_result.governance_power_boost_avg / 100 if five_a_enabled else 0.0
+    five_a_reward_multiplier = five_a_result.avg_compound_multiplier if five_a_enabled else 1.0
+    
+    # Step 2b: Calculate each module with 5A integration
+    identity = calculate_identity(params, users, five_a_fee_discount=five_a_fee_discount_avg)
+    content = calculate_content(params, users, five_a_visibility_boost=five_a_visibility_boost_avg)
+    advertising = calculate_advertising(params, users, five_a_creator_boost=five_a_creator_boost_avg)
+    exchange = calculate_exchange(params, users, five_a_fee_discount=five_a_fee_discount_avg)
+    
+    # Step 3: Calculate rewards with 5A reward multiplier
+    rewards = calculate_rewards(params, users, five_a_reward_multiplier=five_a_reward_multiplier)
     
     # Step 3b: Calculate base revenue for buyback calculation
     # Buybacks use USD revenue, so we need to calculate it before recapture
@@ -338,13 +381,35 @@ def run_deterministic_simulation(
         rewards.platform_fee_usd  # Platform fee is primary revenue
     )
     
+    # Step 3c: DYNAMIC CIRCULATING SUPPLY FIX
+    # Calculate circulating supply based on simulation_month to include:
+    # 1. Base vesting unlocks from all token categories at the given month
+    # 2. Dynamic rewards distributed based on user count (capped at max schedule)
+    # Pass users and token_price for dynamic rewards calculation
+    circulating_supply = config.get_circulating_supply_at_month(
+        simulation_month,
+        users=users,
+        token_price=params.token_price
+    )
+    
+    # Also get the monthly unlock breakdown for the inflation dashboard
+    monthly_unlock_breakdown = config.get_monthly_unlock_breakdown(
+        simulation_month,
+        users=users,
+        token_price=params.token_price
+    )
+    
     # Step 4: Calculate recapture (Issue #10: now includes exchange)
     # Nov 2025: Now passes total_revenue_usd for revenue-based buybacks
+    # Dec 2025: Now passes circulating_supply for dynamic supply-based caps
+    # Dec 2025: Now passes 5A engagement boost for velocity multiplier
     recapture = calculate_recapture(
         params, identity, content, advertising, 
         exchange,  # Issue #10: Added exchange module
         rewards, users,
-        total_revenue_usd=base_module_revenue  # NEW: For revenue-based buybacks
+        total_revenue_usd=base_module_revenue,  # For revenue-based buybacks
+        circulating_supply=circulating_supply,  # For dynamic supply-based caps
+        five_a_engagement_boost=five_a_visibility_boost_avg,  # 5A engagement boost
     )
     
     # Step 5: Create platform fees result from rewards data
@@ -355,31 +420,33 @@ def run_deterministic_simulation(
         fee_rate=PLATFORM_FEE_RATE,
     )
     
-    # Step 5b (NEW): Calculate Liquidity metrics
-    circulating_supply = config.SUPPLY.TGE_CIRCULATING
+    # Step 5b (NEW): Calculate Liquidity metrics with 5A LP boost
     liquidity_data = calculate_liquidity(
         params, 
         users, 
         monthly_volume=recapture.total_revenue_source_vcoin,
-        circulating_supply=circulating_supply
+        circulating_supply=circulating_supply,
+        five_a_lp_boost=five_a_visibility_boost_avg,  # 5A increases LP participation
     )
     liquidity_result = LiquidityResult(**liquidity_data)
     
-    # Step 5c (NEW): Calculate Staking metrics
+    # Step 5c (NEW): Calculate Staking metrics with 5A APY boost
     staking_data = calculate_staking(
         params,
         users,
         monthly_emission=rewards.monthly_reward_pool,
-        circulating_supply=circulating_supply
+        circulating_supply=circulating_supply,
+        five_a_apy_boost=five_a_apy_boost_avg,
     )
     staking_result = StakingResult(**staking_data)
     
-    # Step 5d (NEW): Calculate Governance metrics
+    # Step 5d (NEW): Calculate Governance metrics with 5A governance boost
     governance_data = calculate_governance(
         params,
         stakers_count=staking_result.stakers_count,
         total_staked=staking_result.total_staked,
-        circulating_supply=circulating_supply
+        circulating_supply=circulating_supply,
+        five_a_governance_boost=five_a_governance_boost_avg,
     )
     # LOW-05: Use filter_model_fields utility
     governance_result = filter_model_fields(governance_data, GovernanceResult)
@@ -617,6 +684,9 @@ def run_deterministic_simulation(
     if is_deflationary:
         supply_health_score = min(100, supply_health_score + 20)  # Bonus for deflation
     
+    # Calculate total monthly unlocks from breakdown
+    total_monthly_unlocks = sum(monthly_unlock_breakdown.values())
+    
     inflation_result = InflationResult(
         monthly_emission=monthly_emission_vcoin,
         monthly_emission_usd=monthly_emission_usd,
@@ -633,12 +703,18 @@ def run_deterministic_simulation(
         annual_net_inflation_rate=round(annual_net_inflation_rate, 2),
         circulating_supply=circulating_supply,
         total_supply=config.SUPPLY.TOTAL,
+        # Monthly unlock breakdown (December 2025)
+        monthly_unlocks_breakdown=monthly_unlock_breakdown,
+        total_monthly_unlocks=total_monthly_unlocks,
+        tge_circulating=config.SUPPLY.TGE_CIRCULATING,
         is_deflationary=is_deflationary,
         deflation_strength=deflation_strength,
         supply_health_score=round(supply_health_score, 1),
         months_to_max_supply=config.SUPPLY.REWARDS_DURATION_MONTHS,
         projected_year1_inflation=round(annual_net_inflation_rate, 2),
-        projected_year5_supply=circulating_supply + (net_monthly_inflation * 60),
+        # FIX: Year 5 projection should use actual vesting schedule, not linear net inflation
+        # Uses dynamic rewards for projection (with users and token_price)
+        projected_year5_supply=config.get_circulating_supply_at_month(60, users=users, token_price=params.token_price),
     )
     
     # Step 5f-5: Calculate Whale Concentration Analysis
@@ -817,12 +893,14 @@ def run_deterministic_simulation(
     if not whale_balances:
         whale_balances = [100, 50, 30]  # Fallback default
     
+    # Issue #5, #6 Fix: Use proper parameter fields instead of getattr fallback
+    # lock_period_months is an int, early_unstake_penalty is stored as decimal (0.10) but game theory expects percent (10)
     game_theory_data = calculate_full_game_theory_analysis(
         staking_apy=staking_apy,
         expected_price_change=10,  # Assume 10% annual appreciation
         price_volatility=40,  # 40% annual volatility for crypto
-        lock_period_months=getattr(params, 'lock_period_months', 3),
-        early_unstake_penalty=getattr(params, 'early_unstake_penalty', 10),
+        lock_period_months=params.lock_period_months,
+        early_unstake_penalty=params.early_unstake_penalty * 100,  # Convert decimal to percent
         voting_power_distribution=whale_balances[:10],  # Top 10 holders
         proposal_value_usd=100_000,  # Average proposal value
     )
@@ -1075,6 +1153,19 @@ def run_deterministic_simulation(
         margin=round(total_margin, 1),
     )
     
+    # Step 6f (NEW - Dec 2025): Recalculate 5A with actual values
+    # Now we have staking and governance results to provide real values
+    if five_a_enabled:
+        five_a_result = calculate_five_a(
+            params=params,
+            users=users,
+            base_reward_pool=rewards.monthly_reward_pool,
+            base_fee_revenue=total_revenue,
+            staking_apy=params.staking_apy if hasattr(params, 'staking_apy') else 0.10,
+            total_staked=staking_result.total_staked if staking_result else 0,
+            governance_power=governance_result.total_vevcoin_supply if governance_result else 0,
+        )
+    
     return SimulationResult(
         # Starting users summary at the top for easy reference
         starting_users_summary=starting_users_summary,
@@ -1098,4 +1189,6 @@ def run_deterministic_simulation(
         token_metrics=token_metrics_result,
         # NEW: Pre-Launch Modules (Nov 2025)
         prelaunch=prelaunch_result,
+        # NEW: 5A Policy Gamification (Dec 2025)
+        five_a=five_a_result,
     )

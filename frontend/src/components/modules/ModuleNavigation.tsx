@@ -35,6 +35,7 @@ const YEAR1_SECTIONS: SectionConfig[] = [
   { id: 'recapture', label: 'Recapture Flow', icon: '🔄', alwaysShow: true },
   { id: 'liquidity', label: 'Liquidity', icon: '💧', alwaysShow: true },
   { id: 'staking', label: 'Staking', icon: '🔒', alwaysShow: true },
+  { id: 'fiveA', label: '5A Policy', icon: '⭐', alwaysShow: true },
 ];
 
 // 5-Year sections - focused on long-term projections
@@ -42,7 +43,9 @@ const YEAR5_SECTIONS: SectionConfig[] = [
   { id: 'overview', label: 'Overview', icon: '📈', alwaysShow: true },
   { id: 'prelaunch', label: 'Pre-Launch', icon: '🚀', alwaysShow: true },
   { id: 'tokenomics', label: 'Tokenomics', icon: '🪙', alwaysShow: true },
+  { id: 'token-unlocks', label: 'Token Unlocks', icon: '📅', alwaysShow: true },
   { id: 'governance', label: 'Governance', icon: '🗳️', alwaysShow: true },
+  { id: 'fiveA', label: '5A Policy', icon: '⭐', alwaysShow: true },
   { id: 'velocity', label: 'Velocity', icon: '⚡', alwaysShow: true },
   { id: 'token-metrics', label: 'Token Metrics', icon: '📊', alwaysShow: true },
   { id: 'future-modules', label: 'Future Modules', icon: '🔮', alwaysShow: true },

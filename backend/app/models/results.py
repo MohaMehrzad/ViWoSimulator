@@ -434,6 +434,7 @@ class InflationResult(BaseModel):
     - Gross inflation: Total new tokens entering circulation (emission)
     - Net inflation: Emission - Burns - Buybacks
     - Inflation rate: Net inflation as % of circulating supply
+    - Monthly unlock breakdown: Per-category token releases
     """
     # Emission (new tokens entering)
     monthly_emission: float = 0  # VCoin minted this month
@@ -457,6 +458,12 @@ class InflationResult(BaseModel):
     # Supply metrics
     circulating_supply: float = 0
     total_supply: float = 1_000_000_000
+    
+    # === MONTHLY UNLOCK BREAKDOWN (December 2025) ===
+    # Per-category breakdown of tokens unlocking this month
+    monthly_unlocks_breakdown: Dict[str, int] = {}
+    total_monthly_unlocks: int = 0
+    tge_circulating: int = 114_833_333  # TGE circulating supply (includes 1st month ecosystem)
     
     # Health indicators
     is_deflationary: bool = False  # True if net inflation < 0
@@ -960,6 +967,9 @@ class RewardsResult(BaseModel):
     per_user_monthly_usd: float = 0.0  # USD equivalent per user per month
     allocation_capped: bool = False  # Whether per-user cap was applied
     effective_users: int = 0  # User count used for calculation
+    # 5A Policy fields (Dec 2025)
+    five_a_reward_multiplier: float = 1.0  # Average 5A multiplier across population
+    five_a_redistribution_percent: float = 0.0  # Percentage of rewards redistributed by 5A
 
 
 class PlatformFeesResult(BaseModel):
@@ -1144,6 +1154,218 @@ class PreLaunchResult(BaseModel):
     waitlist_conversion_tokens: int = 0
 
 
+# === 5A POLICY GAMIFICATION RESULTS (Dec 2025) ===
+
+class FiveAStarDistribution(BaseModel):
+    """
+    Distribution of a single 5A star pillar across the user population.
+    
+    Each star (Identity, Accuracy, Agility, Activity, Approved) has its own
+    distribution metrics showing how users are spread across tiers.
+    """
+    star_name: str  # 'identity', 'accuracy', 'agility', 'activity', 'approved'
+    display_name: str = ""  # 'Identity (Authority)', 'Accuracy (Honesty)', etc.
+    
+    # Distribution metrics
+    avg_percentage: float = 50.0
+    min_percentage: float = 0.0
+    max_percentage: float = 100.0
+    std_deviation: float = 20.0
+    median_percentage: float = 50.0
+    
+    # Tier counts (how many users in each tier)
+    bronze_count: int = 0  # 0-30%
+    silver_count: int = 0  # 31-60%
+    gold_count: int = 0    # 61-90%
+    diamond_count: int = 0 # 91-100%
+    tier_counts: Dict[str, int] = {}  # {'bronze': n, 'silver': n, ...}
+    
+    # Tier percentages
+    bronze_percent: float = 0.0
+    silver_percent: float = 0.0
+    gold_percent: float = 0.0
+    diamond_percent: float = 0.0
+    
+    # Configuration
+    weight: float = 0.20
+
+
+class FiveAUserProfile(BaseModel):
+    """
+    Representative 5A profile for a user segment.
+    Used for showing typical user profiles at different tiers.
+    """
+    tier: str  # 'bronze', 'silver', 'gold', 'diamond'
+    identity_pct: float = 0.0
+    accuracy_pct: float = 0.0
+    agility_pct: float = 0.0
+    activity_pct: float = 0.0
+    approved_pct: float = 0.0
+    compound_multiplier: float = 1.0
+    user_count: int = 0
+    percent_of_users: float = 0.0
+
+
+class FiveAModuleImpact(BaseModel):
+    """
+    Impact of 5A on a specific module.
+    Shows how 5A affects rewards, staking, governance, etc.
+    """
+    module_name: str
+    base_value: float = 0.0  # Value without 5A
+    adjusted_value: float = 0.0  # Value with 5A
+    boost_amount: float = 0.0  # Positive = boost, negative = reduction
+    boost_percent: float = 0.0  # Percentage change
+    description: str = ""
+
+
+class FiveAResult(BaseModel):
+    """
+    Complete 5A Policy analysis result.
+    
+    Tracks the distribution of all 5 stars across the user population,
+    compound multipliers, and economic impact on all platform modules.
+    """
+    enabled: bool = True
+    
+    # Star distributions
+    identity_star: FiveAStarDistribution = FiveAStarDistribution(star_name="identity", display_name="Identity (Authority)")
+    accuracy_star: FiveAStarDistribution = FiveAStarDistribution(star_name="accuracy", display_name="Accuracy (Honesty)")
+    agility_star: FiveAStarDistribution = FiveAStarDistribution(star_name="agility", display_name="Agility")
+    activity_star: FiveAStarDistribution = FiveAStarDistribution(star_name="activity", display_name="Activity")
+    approved_star: FiveAStarDistribution = FiveAStarDistribution(star_name="approved", display_name="Approved (Liability)")
+    
+    # Population star averages
+    population_avg_identity: float = 50.0
+    population_avg_accuracy: float = 50.0
+    population_avg_agility: float = 50.0
+    population_avg_activity: float = 50.0
+    population_avg_approved: float = 50.0
+    population_avg_overall: float = 50.0  # Weighted average
+    
+    # Compound multiplier metrics
+    avg_compound_multiplier: float = 1.0
+    median_compound_multiplier: float = 1.0
+    min_compound_multiplier: float = 0.1
+    max_compound_multiplier: float = 3.0
+    std_compound_multiplier: float = 0.5
+    
+    # Multiplier tier distribution
+    multiplier_tier_counts: Dict[str, int] = {}  # {'penalized': n, 'neutral': n, 'boosted': n, 'elite': n}
+    penalized_users_count: int = 0  # multiplier < 0.8
+    neutral_users_count: int = 0    # 0.8 <= multiplier < 1.2
+    boosted_users_count: int = 0    # 1.2 <= multiplier < 2.0
+    elite_users_count: int = 0      # multiplier >= 2.0
+    
+    # Top and bottom performers
+    top_10_percent_multiplier: float = 2.0
+    top_25_percent_multiplier: float = 1.5
+    bottom_10_percent_multiplier: float = 0.3
+    bottom_25_percent_multiplier: float = 0.5
+    
+    # Representative user profiles
+    typical_bronze_user: Optional[FiveAUserProfile] = None
+    typical_silver_user: Optional[FiveAUserProfile] = None
+    typical_gold_user: Optional[FiveAUserProfile] = None
+    typical_diamond_user: Optional[FiveAUserProfile] = None
+    
+    # Economic impact on rewards
+    base_reward_pool_vcoin: float = 0.0
+    adjusted_reward_pool_vcoin: float = 0.0
+    reward_boost_total_vcoin: float = 0.0  # Extra rewards for high performers
+    reward_reduction_total_vcoin: float = 0.0  # Reduced rewards for low performers
+    net_reward_adjustment_vcoin: float = 0.0  # Should be ~0 if balanced
+    reward_redistribution_percent: float = 0.0  # % of rewards redistributed
+    
+    # Economic impact on fees
+    base_fee_revenue_usd: float = 0.0
+    adjusted_fee_revenue_usd: float = 0.0
+    fee_discount_total_usd: float = 0.0  # Revenue lost to discounts
+    fee_discount_percent: float = 0.0
+    
+    # Module-specific impacts
+    staking_apy_boost_avg: float = 0.0  # Average APY boost across stakers
+    staking_apy_boost_max: float = 0.0  # Max APY boost (for top performers)
+    governance_power_boost_avg: float = 0.0
+    governance_power_boost_max: float = 0.0
+    content_visibility_boost_avg: float = 0.0
+    content_visibility_boost_max: float = 0.0
+    exchange_fee_discount_avg: float = 0.0
+    exchange_fee_discount_max: float = 0.0
+    
+    # Module impact details
+    module_impacts: List[FiveAModuleImpact] = []
+    
+    # Health and fairness metrics
+    gini_coefficient: float = 0.0  # 0 = equal distribution, 1 = one person has all
+    fairness_score: float = 100.0  # 0-100, higher = more fair distribution
+    engagement_incentive_score: float = 50.0  # How well the system incentivizes engagement
+    
+    # Users affected
+    total_users: int = 0
+    users_with_boost: int = 0
+    users_with_penalty: int = 0
+    users_neutral: int = 0
+    
+    # Platform-wide multipliers (for use by other modules)
+    # These represent how 5A policy affects overall platform metrics
+    retention_boost: float = 0.0  # % boost to retention (e.g., 0.05 = +5%)
+    growth_boost: float = 0.0  # % boost to user growth (e.g., 0.03 = +3%)
+    revenue_boost: float = 0.0  # % boost to total revenue (e.g., 0.02 = +2%)
+    token_price_impact: float = 0.0  # % impact on token price (e.g., 0.01 = +1%)
+    
+    # Segment-based user distribution (90-9-1 rule)
+    # Based on real social media behavior patterns
+    use_segments: bool = True
+    segment_breakdown: Dict[str, dict] = {}  # Per-segment statistics
+    
+    # Segment counts and percentages
+    # INACTIVE: Ghost accounts that never returned - earn ZERO VCoin
+    inactive_count: int = 0
+    inactive_percent: float = 20.0  # 20% are ghost accounts
+    inactive_avg_multiplier: float = 0.03  # Effectively 0 (1.5% average stars)
+    
+    lurkers_count: int = 0
+    lurkers_percent: float = 40.0
+    lurkers_avg_multiplier: float = 0.23  # ~11.5% average stars
+    
+    casual_count: int = 0
+    casual_percent: float = 25.0
+    casual_avg_multiplier: float = 0.95
+    
+    active_count: int = 0
+    active_percent: float = 12.0
+    active_avg_multiplier: float = 1.40
+    
+    power_users_count: int = 0
+    power_users_percent: float = 3.0
+    power_users_avg_multiplier: float = 1.74
+    
+    # Special metrics for ZERO earners
+    zero_earners_count: int = 0  # Users with multiplier < 0.1 (essentially zero)
+    zero_earners_percent: float = 0.0  # Percentage of users earning nothing
+    
+    # Dynamic Evolution Tracking (60-month progression)
+    # These fields track how segments and metrics evolve over time
+    segment_evolution_history: List[Dict[str, int]] = []  # Per-month segment counts
+    total_churned_users: int = 0  # Total users churned due to low 5A over simulation
+    total_improved_users: int = 0  # Users who moved up a segment
+    total_decayed_users: int = 0  # Users who moved down a segment
+    avg_improvement_rate: float = 0.0  # Average monthly % of users who improved
+    avg_decay_rate: float = 0.0  # Average monthly % of users who decayed
+    
+    # Cumulative impact tracking over 60 months
+    cumulative_retention_boost: float = 0.0  # Total retention impact
+    cumulative_growth_boost: float = 0.0  # Total growth impact
+    cumulative_price_impact: float = 0.0  # Total token price impact (%)
+    
+    # Evolution summary (start vs end of simulation)
+    month1_avg_multiplier: float = 0.6  # Starting average multiplier
+    month60_avg_multiplier: float = 0.95  # Projected ending average (improves over time)
+    month1_active_percent: float = 15.0  # Starting active + power %
+    month60_active_percent: float = 35.0  # Projected ending active + power %
+
+
 class StartingUsersSummary(BaseModel):
     """
     Summary of starting/initial user counts for easy reference.
@@ -1205,6 +1427,8 @@ class SimulationResult(BaseModel):
     prelaunch: Optional[PreLaunchResult] = None
     # NEW: Sensitivity Analysis (Nov 2025)
     sensitivity: Optional[SensitivityResult] = None
+    # NEW: 5A Policy Gamification (Dec 2025)
+    five_a: Optional[FiveAResult] = None
 
 
 class PercentileResults(BaseModel):

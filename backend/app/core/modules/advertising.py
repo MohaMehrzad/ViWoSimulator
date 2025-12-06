@@ -4,13 +4,19 @@ Advertising Module calculations.
 Updated for Issues #7, #9:
 - Issue #7: CPM rates adjusted for platform maturity
 - Issue #9: Linear cost scaling
+- Dec 2025: Added 5A Policy integration for creator ad revenue share
 """
 
+from typing import Optional
 from app.config import config
 from app.models import SimulationParameters, ModuleResult
 
 
-def calculate_advertising(params: SimulationParameters, users: int) -> ModuleResult:
+def calculate_advertising(
+    params: SimulationParameters,
+    users: int,
+    five_a_creator_boost: float = 0.0,
+) -> ModuleResult:
     """
     Calculate Advertising module revenue, costs, and profit.
     
@@ -18,6 +24,11 @@ def calculate_advertising(params: SimulationParameters, users: int) -> ModuleRes
     - Launch: $0.25 banner, $1.00 video, 10% fill
     - Growing: $2.00 banner, $6.00 video, 30% fill  
     - Established: $8.00 banner, $25.00 video, 70% fill
+    
+    5A Integration (Dec 2025):
+    - High 5A creators get better ad revenue share
+    - five_a_creator_boost is average boost across population (0.0-0.5)
+    - This increases effective CPM for high-performing creators
     """
     if not params.enable_advertising:
         return ModuleResult(
@@ -55,7 +66,7 @@ def calculate_advertising(params: SimulationParameters, users: int) -> ModuleRes
     if hasattr(params, 'get_effective_ad_fill_rate'):
         effective_fill_rate = params.get_effective_ad_fill_rate()
     else:
-        effective_fill_rate = params.ad_cpm_multiplier
+        effective_fill_rate = params.ad_fill_rate  # Fixed: was ad_cpm_multiplier
     
     # Ad impressions: Users see 30 ads per month on average (reduced from 50)
     ads_per_user = config.ACTIVITY_RATES.get('ADS_PER_USER', 30)
@@ -100,8 +111,14 @@ def calculate_advertising(params: SimulationParameters, users: int) -> ModuleRes
     analytics_subscribers = round(advertisers * analytics_rate)
     analytics_revenue = analytics_subscribers * params.ad_analytics_fee
     
-    # Total revenue
-    revenue = banner_revenue + video_revenue + promoted_revenue + campaign_revenue + analytics_revenue
+    # Total base revenue
+    base_revenue = banner_revenue + video_revenue + promoted_revenue + campaign_revenue + analytics_revenue
+    
+    # 5A Integration: High 5A creators get better ad revenue share
+    # This manifests as slightly higher effective CPM for quality content
+    # The boost reflects better advertiser confidence in quality creators
+    five_a_revenue_boost = base_revenue * five_a_creator_boost * 0.1  # Up to +5% revenue boost
+    revenue = base_revenue + five_a_revenue_boost
     
     # Issue #9: Linear cost scaling
     costs = config.get_linear_cost('ADVERTISING', users)
@@ -131,5 +148,9 @@ def calculate_advertising(params: SimulationParameters, users: int) -> ModuleRes
             'effective_banner_cpm': round(effective_banner_cpm, 2),
             'effective_video_cpm': round(effective_video_cpm, 2),
             'total_posts_for_promotion': total_posts,
+            # 5A Integration
+            'five_a_creator_boost': round(five_a_creator_boost * 100, 2),
+            'five_a_revenue_boost': round(five_a_revenue_boost, 2),
+            'base_revenue': round(base_revenue, 2),
         }
     )

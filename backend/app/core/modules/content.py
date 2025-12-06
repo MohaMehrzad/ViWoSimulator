@@ -31,6 +31,7 @@ Bot Deterrence Formula:
 Result: Revenue ≈ Costs (break-even)
 """
 
+from typing import Optional
 from app.config import config
 from app.models import SimulationParameters, ModuleResult
 
@@ -38,9 +39,9 @@ from app.models import SimulationParameters, ModuleResult
 def calculate_dynamic_boost_fee(
     users: int,
     token_price: float,
-    target_usd: float = 0.15,
-    min_usd: float = 0.05,
-    max_usd: float = 0.50,
+    target_usd: float = 3.00,   # WhitePaper v1.4: $3.00 target
+    min_usd: float = 1.00,      # WhitePaper v1.4: $1.00 minimum
+    max_usd: float = 5.00,      # WhitePaper v1.4: $5.00 maximum
     scale_users: int = 100000,
 ) -> dict:
     """
@@ -77,7 +78,11 @@ def calculate_dynamic_boost_fee(
     }
 
 
-def calculate_content(params: SimulationParameters, users: int) -> ModuleResult:
+def calculate_content(
+    params: SimulationParameters,
+    users: int,
+    five_a_visibility_boost: float = 0.0,
+) -> ModuleResult:
     """
     Calculate Content module with BREAK-EVEN anti-bot model.
     
@@ -89,6 +94,11 @@ def calculate_content(params: SimulationParameters, users: int) -> ModuleResult:
     5. Real engagement refunds any fees paid
     
     The platform makes money from 5% Reward Fee, NOT from content fees.
+    
+    5A Integration (Dec 2025):
+    - High 5A creators get boosted content visibility
+    - five_a_visibility_boost is average boost across population (0.0-0.5)
+    - This increases engagement and premium feature adoption
     """
     # Check if module is enabled
     if not getattr(params, 'enable_content', True):
@@ -113,10 +123,14 @@ def calculate_content(params: SimulationParameters, users: int) -> ModuleResult:
     # === USER SEGMENTATION ===
     
     # Creator percentage (10-18% of users create content)
-    creator_percentage = getattr(
-        params, 'creator_percentage', 
-        config.ACTIVITY_RATES.get('CREATOR_PERCENTAGE', 0.10)
-    )
+    # Issue #7 Fix: Use maturity-adjusted creator percentage
+    if hasattr(params, 'get_effective_creator_percentage'):
+        creator_percentage = params.get_effective_creator_percentage()
+    else:
+        creator_percentage = getattr(
+            params, 'creator_percentage', 
+            config.ACTIVITY_RATES.get('CREATOR_PERCENTAGE', 0.10)
+        )
     posts_per_creator = getattr(
         params, 'posts_per_creator',
         config.ACTIVITY_RATES.get('POSTS_PER_CREATOR', 6)
@@ -158,7 +172,11 @@ def calculate_content(params: SimulationParameters, users: int) -> ModuleResult:
     video_posts = round(total_posts * dist['VIDEO'])    # 4.9%
     
     # NFT mints (if enabled)
-    nft_percentage = getattr(params, 'nft_mint_percentage', dist.get('NFT', 0.005))
+    # Issue #7 Fix: Use maturity-adjusted NFT percentage
+    if hasattr(params, 'get_effective_nft_percentage'):
+        nft_percentage = params.get_effective_nft_percentage()
+    else:
+        nft_percentage = getattr(params, 'nft_mint_percentage', dist.get('NFT', 0.005))
     if getattr(params, 'enable_nft', False):
         nft_mints = max(1, round(total_posts * nft_percentage))
         nft_mints = max(nft_mints, max(1, int(creators * 0.01)))
@@ -197,34 +215,35 @@ def calculate_content(params: SimulationParameters, users: int) -> ModuleResult:
     engagement_refund_rate = getattr(params, 'engagement_refund_rate', 0.80)
     effective_anti_bot_revenue = anti_bot_fees_usd * (1 - engagement_refund_rate)
     
-    # === NFT MINTING (Covers Processing Cost Only) ===
-    # NFT fee covers Solana transaction + storage costs, no profit margin
-    # Solana NFT costs: ~0.01 SOL ($0.50) for mint + metadata
-    nft_processing_cost_usd = 0.50
-    # Calculate fee in VCoin; use default token price ($0.03) for consistent fallback
-    default_token_price = 0.03
-    effective_token_price = params.token_price if params.token_price > 0 else default_token_price
-    nft_mint_fee_vcoin = nft_processing_cost_usd / effective_token_price
+    # === NFT MINTING ===
+    # NFT fee uses WhitePaper-specified value (50 VCN default)
+    # Fee set in params.nft_mint_fee_vcoin
+    nft_mint_fee_vcoin = getattr(params, 'nft_mint_fee_vcoin', 50)
     nft_fees_vcoin = nft_mints * nft_mint_fee_vcoin
-    nft_fees_usd = nft_mints * nft_processing_cost_usd  # Break-even
+    nft_fees_usd = nft_fees_vcoin * params.token_price
     
     # === OPTIONAL PREMIUM FEATURES (User Choice, Not Required) ===
     
     # Boost posts - DYNAMIC FEE based on users and token price
     # Fee scales down as platform grows (more affordable for larger platforms)
+    # WhitePaper v1.4: $3.00 target, $1.00 min, $5.00 max
     boost_fee_data = calculate_dynamic_boost_fee(
         users=users,
         token_price=params.token_price,
-        target_usd=getattr(params, 'boost_post_target_usd', 0.15),
-        min_usd=getattr(params, 'boost_post_min_usd', 0.05),
-        max_usd=getattr(params, 'boost_post_max_usd', 0.50),
+        target_usd=getattr(params, 'boost_post_target_usd', 3.00),
+        min_usd=getattr(params, 'boost_post_min_usd', 1.00),
+        max_usd=getattr(params, 'boost_post_max_usd', 5.00),
         scale_users=getattr(params, 'boost_post_scale_users', 100000),
     )
     boost_post_fee_vcoin = boost_fee_data['fee_vcoin']
     boost_post_fee_usd = boost_fee_data['fee_usd']
     
+    # 5A Integration: Content visibility boost increases engagement and premium adoption
+    # High 5A creators see better results, encouraging more boost purchases
     boost_rate = config.ACTIVITY_RATES.get('BOOSTED_POSTS', 0.05)
-    boosted_posts = int(total_posts * boost_rate)
+    # Visibility boost encourages more creators to use premium features
+    five_a_adoption_boost = 1.0 + (five_a_visibility_boost * 0.3)  # Up to +15% more adoption
+    boosted_posts = int(total_posts * boost_rate * five_a_adoption_boost)
     boost_fees_vcoin = boosted_posts * boost_post_fee_vcoin
     boost_fees_usd = boosted_posts * boost_post_fee_usd
     
@@ -344,8 +363,8 @@ def calculate_content(params: SimulationParameters, users: int) -> ModuleResult:
             'engagement_refund_rate': round(engagement_refund_rate * 100, 1),
             'effective_anti_bot_revenue': round(effective_anti_bot_revenue, 2),
             
-            # NFT metrics (break-even)
-            'nft_processing_cost_usd': nft_processing_cost_usd,
+            # NFT metrics
+            'nft_mint_fee_vcoin': nft_mint_fee_vcoin,
             'nft_fees_vcoin': round(nft_fees_vcoin, 2),
             'nft_fees_usd': round(nft_fees_usd, 2),
             
@@ -391,5 +410,9 @@ def calculate_content(params: SimulationParameters, users: int) -> ModuleResult:
             'premium_volume_vcoin': round(premium_volume_adjusted, 2),
             'content_sale_volume_vcoin': params.content_sale_volume_vcoin,
             'creator_economy_vcoin': round(boost_fees_vcoin + premium_dm_vcoin + premium_reaction_vcoin, 2),
+            
+            # 5A Integration
+            'five_a_visibility_boost': round(five_a_visibility_boost * 100, 2),
+            'five_a_adoption_boost': round((five_a_adoption_boost - 1) * 100, 2),
         }
     )

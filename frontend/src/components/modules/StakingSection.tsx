@@ -11,6 +11,11 @@ interface StakingSectionProps {
 export function StakingSection({ result, parameters }: StakingSectionProps) {
   // Get staking data from result (new backend module) or calculate fallback
   const staking = result.staking;
+  const fiveA = result.fiveA;
+  
+  // 5A Impact
+  const fiveAEnabled = fiveA?.enabled || false;
+  const fiveAApyBoost = fiveA?.stakingApyBoostAvg || 0;
   
   // Fallback values if staking module not available
   const stakingApy = staking?.stakingApy || (parameters.stakingApy || 0.10) * 100;
@@ -115,6 +120,15 @@ export function StakingSection({ result, parameters }: StakingSectionProps) {
                 <span className="font-semibold text-sm">Solana</span>
               </div>
             </div>
+            {/* 5A Badge */}
+            {fiveAEnabled && fiveAApyBoost > 0 && (
+              <div className="bg-yellow-400/20 backdrop-blur-sm rounded-lg px-3 py-1">
+                <div className="flex items-center gap-2">
+                  <span className="text-lg">⭐</span>
+                  <span className="font-semibold text-sm">+{fiveAApyBoost.toFixed(1)}% APY Boost</span>
+                </div>
+              </div>
+            )}
           </div>
           <div className="text-right">
             <div className="text-4xl font-bold">{stakingApy.toFixed(1)}%</div>

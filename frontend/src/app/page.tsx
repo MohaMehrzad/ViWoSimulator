@@ -25,7 +25,9 @@ import {
   TokenMetricsSection,
   FutureModulesSection,
   SummarySection,
-  PreLaunchSection
+  PreLaunchSection,
+  TokenUnlocksSection,
+  FiveAPolicySection,
 } from '@/components/modules';
 import { calculate5YearProjections } from '@/components/modules/Year5Overview';
 import { formatNumber, formatCurrency } from '@/lib/utils';
@@ -301,6 +303,9 @@ export default function Home() {
                 {activeSection === 'staking' && simulation.activeResult && (
                   <StakingSection result={simulation.activeResult} parameters={simulation.parameters} />
                 )}
+                {activeSection === 'fiveA' && simulation.activeResult && (
+                  <FiveAPolicySection result={simulation.activeResult} parameters={simulation.parameters} />
+                )}
               </>
             )}
 
@@ -316,6 +321,9 @@ export default function Home() {
                 {activeSection === 'tokenomics' && (
                   <TokenomicsSection parameters={simulation.parameters} />
                 )}
+                {activeSection === 'token-unlocks' && simulation.activeResult && (
+                  <TokenUnlocksSection result={simulation.activeResult} parameters={simulation.parameters} />
+                )}
                 {activeSection === 'governance' && simulation.activeResult && (
                   <GovernanceSection result={simulation.activeResult} />
                 )}
@@ -330,6 +338,9 @@ export default function Home() {
                 )}
                 {activeSection === 'summary' && simulation.activeResult && (
                   <SummarySection result={simulation.activeResult} parameters={simulation.parameters} />
+                )}
+                {activeSection === 'fiveA' && simulation.activeResult && (
+                  <FiveAPolicySection result={simulation.activeResult} parameters={simulation.parameters} />
                 )}
               </>
             )}

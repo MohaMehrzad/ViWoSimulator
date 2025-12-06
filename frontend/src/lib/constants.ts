@@ -63,9 +63,10 @@ export const DEFAULT_PARAMETERS: SimulationParameters = {
   // Growth Scenario Settings (NEW - Nov 2025)
   // Note: Starting users are calculated from marketing budget, not a separate input
   growthScenario: 'base',
-  marketCondition: 'bull',
+  marketCondition: 'neutral',
   enableFomoEvents: true,
   useGrowthScenarios: true,
+  startingWaitlistUsers: 1000,     // Issue #4 Fix: Waitlist users for pre-launch simulation
   
   // Token Allocation / Vesting (NEW - Nov 2025)
   trackVestingSchedule: true,         // Track full 60-month vesting
@@ -81,16 +82,16 @@ export const DEFAULT_PARAMETERS: SimulationParameters = {
   globalLowIncomeBudgetPercent: 0.65,
   cacNorthAmericaConsumer: 75,      // Was $50, now $75
   cacGlobalLowIncomeConsumer: 25,   // Was $12, now $25
-  highQualityCreatorCAC: 8000,      // Was $3000, now $8000
-  midLevelCreatorCAC: 1500,         // Was $250, now $1500
-  highQualityCreatorsNeeded: 3,     // Reduced from 5
-  midLevelCreatorsNeeded: 15,       // Reduced from 30
+  highQualityCreatorCAC: 3000,      // High-quality creator CAC
+  midLevelCreatorCAC: 500,          // Mid-level creator CAC
+  highQualityCreatorsNeeded: 5,     // Number of HQ creators
+  midLevelCreatorsNeeded: 15,       // Number of mid-level creators
   
   // Economic parameters (Updated Nov 2025)
-  burnRate: 0.05,                   // Updated: 3% -> 5% for better recapture
-  buybackPercent: 0.03,             // Updated: 2% -> 3% for better recapture
+  burnRate: 0.10,                   // 10% burn rate for recapture
+  buybackPercent: 0.10,             // 10% buyback for recapture
   verificationRate: 0.02,           // Updated: 1.5% -> 2% (better product)
-  postsPerUser: 0.6,                // Was 3, now 0.6 (Issue #8)
+  postsPerUser: 9.7,                // Posts per user per month
   creatorPercentage: 0.15,          // Updated: 10% -> 15% (creator-focused)
   postsPerCreator: 6,               // NEW: 6 posts per creator (Issue #8)
   adFillRate: 0.20,                 // MED-FE-001 FIX: Renamed from adCPMMultiplier (20% fill rate for launch)
@@ -99,7 +100,7 @@ export const DEFAULT_PARAMETERS: SimulationParameters = {
   // Dynamic Reward Allocation (NEW - Nov 2025)
   enableDynamicAllocation: true,    // Enable by default for realistic scaling
   initialUsersForAllocation: 1000,  // Starting point for allocation scaling
-  targetUsersForMaxAllocation: 1000000, // User count for 90% allocation
+  targetUsersForMaxAllocation: 100000000, // User count for max allocation (100M)
   maxPerUserMonthlyUsd: 50.0,       // $50 max per-user reward (inflation guard)
   minPerUserMonthlyUsd: 0.10,       // $0.10 min per-user reward
   
@@ -134,14 +135,18 @@ export const DEFAULT_PARAMETERS: SimulationParameters = {
   // - Lower APY (<10%) reduces staking attractiveness, reducing the ratio
   //
   stakingApy: 0.10,                 // 10% APY
-  stakingParticipationRate: 0.15,   // 15% of users stake (NEW-MED-003 FIX)
-  avgStakeAmount: 500,              // Average 500 VCoin per staker
-  stakerFeeDiscount: 0.30,          // 30% fee discount
-  minStakeAmount: 100,              // 100 VCoin minimum
-  stakeLockDays: 30,                // 30 day lock
+  stakingParticipationRate: 0.10,   // 10% of users stake
+  avgStakeAmount: 20000,            // Average 20,000 VCoin per staker
+  stakerFeeDiscount: 0.10,          // 10% fee discount
+  minStakeAmount: 1000,             // 1,000 VCoin minimum
+  stakeLockDays: 180,               // 180 day lock (6 months)
+  
+  // Game Theory Parameters (Issue #5, #6 Fix)
+  lockPeriodMonths: 3,              // Lock period for staking (3 months)
+  earlyUnstakePenalty: 0.10,        // 10% penalty for early unstaking
   
   // Module toggles
-  enableAdvertising: false,
+  enableAdvertising: true,          // Advertising enabled by default
   enableExchange: true,
   enableNft: true,                  // NFT enabled by default
   
@@ -166,7 +171,7 @@ export const DEFAULT_PARAMETERS: SimulationParameters = {
   nftMintPercentage: 0.005,         // Updated: 0.5% (was 0.1%, increased for visible revenue)
   premiumContentVolumeVcoin: 1000,  // Increased for better revenue
   contentSaleVolumeVcoin: 500,      // Increased for better revenue
-  contentSaleCommission: 0.10,
+  // NOTE: contentSaleCommission removed - Content module is break-even by design
   
   // Advertising Module pricing (USD) - Updated Nov 2025
   bannerCPM: 0.50,                  // Updated: $0.50 (viable launch)
@@ -380,38 +385,38 @@ import type { TokenAllocationCategoryConfig } from '@/types/simulation';
 export const TOKEN_ALLOCATION: Record<string, TokenAllocationCategoryConfig> = {
   SEED: {
     name: 'Seed Round',
-    percent: 0.02,
-    tokens: 20_000_000,
+    percent: 0.04,
+    tokens: 40_000_000,
     tge_percent: 0.0,
     cliff_months: 12,
     vesting_months: 24,
-    price_usd: 0.01,
+    price_usd: 0.005,
     description: 'Early-stage investors (highest risk, lowest price)',
   },
   PRIVATE: {
     name: 'Private Round',
-    percent: 0.03,
-    tokens: 30_000_000,
+    percent: 0.04,
+    tokens: 40_000_000,
     tge_percent: 0.10,
     cliff_months: 6,
     vesting_months: 18,
-    price_usd: 0.015,
+    price_usd: 0.007,
     description: 'Strategic investors and VCs',
   },
   PUBLIC: {
     name: 'Public Sale',
-    percent: 0.05,
-    tokens: 50_000_000,
+    percent: 0.08,
+    tokens: 80_000_000,
     tge_percent: 0.50,
     cliff_months: 0,
     vesting_months: 3,
-    price_usd: 0.02,
+    price_usd: 0.010,
     description: 'Community token sale (IDO/ICO)',
   },
   TEAM: {
     name: 'Team',
-    percent: 0.10,
-    tokens: 100_000_000,
+    percent: 0.15,
+    tokens: 150_000_000,
     tge_percent: 0.0,
     cliff_months: 12,
     vesting_months: 36,
@@ -420,8 +425,8 @@ export const TOKEN_ALLOCATION: Record<string, TokenAllocationCategoryConfig> = {
   },
   ADVISORS: {
     name: 'Advisors',
-    percent: 0.05,
-    tokens: 50_000_000,
+    percent: 0.03,
+    tokens: 30_000_000,
     tge_percent: 0.0,
     cliff_months: 6,
     vesting_months: 18,
@@ -447,25 +452,15 @@ export const TOKEN_ALLOCATION: Record<string, TokenAllocationCategoryConfig> = {
   },
   LIQUIDITY: {
     name: 'Liquidity',
-    percent: 0.10,
-    tokens: 100_000_000,
+    percent: 0.05,
+    tokens: 50_000_000,
     tge_percent: 1.0,
-    description: 'DEX/CEX liquidity pools',
-  },
-  FOUNDATION: {
-    name: 'Foundation',
-    percent: 0.02,
-    tokens: 20_000_000,
-    tge_percent: 0.25,
-    cliff_months: 3,
-    vesting_months: 24,
-    price_usd: 0.03,
-    description: 'Foundation operations and reserve',
+    description: 'DEX/CEX liquidity pools (locked 12 months)',
   },
   MARKETING: {
     name: 'Marketing & Growth',
-    percent: 0.08,
-    tokens: 80_000_000,
+    percent: 0.06,
+    tokens: 60_000_000,
     tge_percent: 0.25,
     cliff_months: 3,
     vesting_months: 18,
@@ -474,32 +469,30 @@ export const TOKEN_ALLOCATION: Record<string, TokenAllocationCategoryConfig> = {
   },
 };
 
-// TGE Circulating Supply Breakdown
-// FIX: CRIT-01/HIGH-01 - Rewards should NOT be included at TGE
-// TGE only includes allocation unlocks, rewards emission starts Month 1
+// TGE Circulating Supply Breakdown (December 2025 - WhitePaper v1.4)
+// TGE includes first month ecosystem distribution per tokenomics tool
 export const TGE_BREAKDOWN = {
-  SEED: 0,                 // 0% TGE
-  PRIVATE: 3_000_000,      // 10% of 30M
-  PUBLIC: 25_000_000,      // 50% of 50M
-  TEAM: 0,                 // 0% TGE
-  ADVISORS: 0,             // 0% TGE
-  TREASURY: 0,             // Programmatic
-  REWARDS: 0,              // FIX: Was 5_833_333 - rewards start M1, NOT TGE
-  LIQUIDITY: 100_000_000,  // 100% at TGE
-  FOUNDATION: 5_000_000,   // 25% of 20M
-  MARKETING: 20_000_000,   // 25% of 80M
-  TOTAL: 153_000_000,      // FIX: Was 158_833_333 - now correct without rewards
+  SEED: 0,                 // 0% TGE (4% allocation, 40M tokens)
+  PRIVATE: 4_000_000,      // 10% of 40M
+  PUBLIC: 40_000_000,      // 50% of 80M
+  TEAM: 0,                 // 0% TGE (15% allocation, 150M tokens)
+  ADVISORS: 0,             // 0% TGE (3% allocation, 30M tokens)
+  TREASURY: 0,             // Governance-controlled (20% allocation, 200M tokens)
+  REWARDS: 5_833_333,      // 1st month ecosystem (350M / 60 months)
+  LIQUIDITY: 50_000_000,   // 100% at TGE (5% allocation, 50M tokens, locked 12mo)
+  MARKETING: 15_000_000,   // 25% of 60M
+  TOTAL: 114_833_333,      // 4M + 40M + 50M + 15M + 5.83M = 114.83M (11.48%)
 };
 
-// Configuration constants
+// Configuration constants (December 2025 - WhitePaper v1.4)
 export const CONFIG = {
   SUPPLY: {
     TOTAL: 1_000_000_000,
-    TGE_CIRCULATING: 153_000_000,  // FIX: Was 158_833_333 - now correct without rewards at TGE
-    LIQUIDITY: 100_000_000,
-    REWARDS_ALLOCATION: 350_000_000,  // Updated: 35% (was 70%)
-    REWARDS_DURATION_MONTHS: 60,  // Updated: 60 months (was 120)
-    TREASURY_ALLOCATION: 200_000_000,  // NEW: 20%
+    TGE_CIRCULATING: 114_833_333,  // Includes 1st month ecosystem distribution
+    LIQUIDITY: 50_000_000,  // 5% allocation (50M tokens), locked 12 months
+    REWARDS_ALLOCATION: 350_000_000,  // 35% - dynamic allocation capped at max schedule
+    REWARDS_DURATION_MONTHS: 60,  // 5 years
+    TREASURY_ALLOCATION: 200_000_000,  // 20% - governance-controlled
   },
   
   // Monthly emission from rewards pool (350M / 60 months)
@@ -831,7 +824,7 @@ export const MARKET_CONDITIONS: Record<MarketCondition, MarketConditionConfig> =
  */
 export const DEFAULT_GROWTH_SCENARIO_PARAMS = {
   growthScenario: 'base' as GrowthScenario,
-  marketCondition: 'bull' as MarketCondition,
+  marketCondition: 'neutral' as MarketCondition,
   enableFomoEvents: true,
   useGrowthScenarios: true,
 };

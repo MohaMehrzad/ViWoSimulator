@@ -65,3 +65,10 @@ export function RecaptureChart({ recapture, monthlyEmission }: RecaptureChartPro
 
 
 
+
+
+
+
+
+
+

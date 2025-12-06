@@ -499,6 +499,10 @@ export interface InflationResult {
   // Supply
   circulatingSupply: number;
   totalSupply: number;
+  // Monthly unlock breakdown (December 2025)
+  monthlyUnlocksBreakdown?: Record<string, number>;  // Per-category unlock amounts
+  totalMonthlyUnlocks?: number;  // Sum of all category unlocks
+  tgeCirculating?: number;  // TGE circulating supply (109M)
   // Health
   isDeflationary: boolean;
   deflationStrength: string;
@@ -846,6 +850,7 @@ export interface SimulationParameters {
   marketCondition?: MarketCondition;
   enableFomoEvents?: boolean;
   useGrowthScenarios?: boolean;
+  startingWaitlistUsers?: number;  // Issue #4 Fix: Expose waitlist users for pre-launch simulation
   
   // Token Allocation / Vesting (NEW - Nov 2025)
   trackVestingSchedule?: boolean;
@@ -904,6 +909,10 @@ export interface SimulationParameters {
   stakeLockDays?: number;
   stakingProtocolFee?: number;
   
+  // Game Theory Parameters (Issue #5, #6 Fix - Dec 2025)
+  lockPeriodMonths?: number;       // Lock period for staking (months)
+  earlyUnstakePenalty?: number;    // Penalty for early unstaking (%)
+  
   // Governance Parameters (NEW - Nov 2025)
   governanceProposalFee?: number;
   governanceBadgePrice?: number;
@@ -955,6 +964,9 @@ export interface SimulationParameters {
   points?: PointsParameters;
   gasless?: GaslessParameters;
   
+  // 5A Policy Gamification (Dec 2025)
+  fiveA?: FiveAPolicyParameters;
+  
   // Identity Module pricing (USD) - Issue #11
   basicPrice: number;
   verifiedPrice: number;
@@ -970,7 +982,7 @@ export interface SimulationParameters {
   nftMintPercentage?: number;      // NEW - Issue #12
   premiumContentVolumeVcoin: number;
   contentSaleVolumeVcoin: number;
-  contentSaleCommission: number;
+  // NOTE: contentSaleCommission removed - Content module is break-even by design (creators keep 100%)
   
   // Advertising Module pricing (USD) - Issue #7
   bannerCPM: number;
@@ -1374,6 +1386,231 @@ export interface PreLaunchResult {
   waitlistConversionTokens: number;
 }
 
+// === 5A POLICY GAMIFICATION (Dec 2025) ===
+
+export interface FiveAStarDistribution {
+  starName: string;
+  displayName: string;
+  avgPercentage: number;
+  minPercentage: number;
+  maxPercentage: number;
+  stdDeviation: number;
+  medianPercentage: number;
+  bronzeCount: number;
+  silverCount: number;
+  goldCount: number;
+  diamondCount: number;
+  tierCounts: Record<string, number>;
+  bronzePercent: number;
+  silverPercent: number;
+  goldPercent: number;
+  diamondPercent: number;
+  weight: number;
+}
+
+export interface FiveAUserProfile {
+  tier: string;
+  identityPct: number;
+  accuracyPct: number;
+  agilityPct: number;
+  activityPct: number;
+  approvedPct: number;
+  compoundMultiplier: number;
+  userCount: number;
+  percentOfUsers: number;
+}
+
+export interface FiveAModuleImpact {
+  moduleName: string;
+  baseValue: number;
+  adjustedValue: number;
+  boostAmount: number;
+  boostPercent: number;
+  description: string;
+}
+
+export interface FiveAResult {
+  enabled: boolean;
+  
+  // Star distributions
+  identityStar: FiveAStarDistribution;
+  accuracyStar: FiveAStarDistribution;
+  agilityStar: FiveAStarDistribution;
+  activityStar: FiveAStarDistribution;
+  approvedStar: FiveAStarDistribution;
+  
+  // Population averages
+  populationAvgIdentity: number;
+  populationAvgAccuracy: number;
+  populationAvgAgility: number;
+  populationAvgActivity: number;
+  populationAvgApproved: number;
+  populationAvgOverall: number;
+  
+  // Compound multiplier metrics
+  avgCompoundMultiplier: number;
+  medianCompoundMultiplier: number;
+  minCompoundMultiplier: number;
+  maxCompoundMultiplier: number;
+  stdCompoundMultiplier: number;
+  
+  // Multiplier tier distribution
+  multiplierTierCounts: Record<string, number>;
+  penalizedUsersCount: number;
+  neutralUsersCount: number;
+  boostedUsersCount: number;
+  eliteUsersCount: number;
+  
+  // Percentiles
+  top10PercentMultiplier: number;
+  top25PercentMultiplier: number;
+  bottom10PercentMultiplier: number;
+  bottom25PercentMultiplier: number;
+  
+  // Typical user profiles
+  typicalBronzeUser?: FiveAUserProfile;
+  typicalSilverUser?: FiveAUserProfile;
+  typicalGoldUser?: FiveAUserProfile;
+  typicalDiamondUser?: FiveAUserProfile;
+  
+  // Economic impact - rewards
+  baseRewardPoolVcoin: number;
+  adjustedRewardPoolVcoin: number;
+  rewardBoostTotalVcoin: number;
+  rewardReductionTotalVcoin: number;
+  netRewardAdjustmentVcoin: number;
+  rewardRedistributionPercent: number;
+  
+  // Economic impact - fees
+  baseFeeRevenueUsd: number;
+  adjustedFeeRevenueUsd: number;
+  feeDiscountTotalUsd: number;
+  feeDiscountPercent: number;
+  
+  // Module boosts
+  stakingApyBoostAvg: number;
+  stakingApyBoostMax: number;
+  governancePowerBoostAvg: number;
+  governancePowerBoostMax: number;
+  contentVisibilityBoostAvg: number;
+  contentVisibilityBoostMax: number;
+  exchangeFeeDiscountAvg: number;
+  exchangeFeeDiscountMax: number;
+  
+  // Module impacts
+  moduleImpacts: FiveAModuleImpact[];
+  
+  // Fairness metrics
+  giniCoefficient: number;
+  fairnessScore: number;
+  engagementIncentiveScore: number;
+  
+  // User counts
+  totalUsers: number;
+  usersWithBoost: number;
+  usersWithPenalty: number;
+  usersNeutral: number;
+  
+  // Platform-wide impact multipliers
+  retentionBoost: number;  // % boost to retention
+  growthBoost: number;  // % boost to user growth
+  revenueBoost: number;  // % boost to total revenue
+  tokenPriceImpact: number;  // % impact on token price
+  
+  // Segment-based distribution (90-9-1 rule)
+  useSegments: boolean;
+  segmentBreakdown: Record<string, {
+    name: string;
+    description: string;
+    count: number;
+    percent: number;
+    avgMultiplier: number;
+    minMultiplier: number;
+    maxMultiplier: number;
+  }>;
+  
+  // Segment counts and statistics
+  // INACTIVE: Ghost accounts that never returned
+  inactiveCount: number;
+  inactivePercent: number;
+  inactiveAvgMultiplier: number;
+  
+  lurkersCount: number;
+  lurkersPercent: number;
+  lurkersAvgMultiplier: number;
+  
+  casualCount: number;
+  casualPercent: number;
+  casualAvgMultiplier: number;
+  
+  activeCount: number;
+  activePercent: number;
+  activeAvgMultiplier: number;
+  
+  powerUsersCount: number;
+  powerUsersPercent: number;
+  powerUsersAvgMultiplier: number;
+  
+  // Zero earners (multiplier < 0.1)
+  zeroEarnersCount: number;
+  zeroEarnersPercent: number;
+  
+  // Dynamic Evolution Tracking (60-month progression)
+  segmentEvolutionHistory?: Array<Record<string, number>>;
+  totalChurnedUsers: number;
+  totalImprovedUsers: number;
+  totalDecayedUsers: number;
+  avgImprovementRate: number;
+  avgDecayRate: number;
+  
+  // Cumulative impact tracking
+  cumulativeRetentionBoost: number;
+  cumulativeGrowthBoost: number;
+  cumulativePriceImpact: number;
+  
+  // Evolution summary (Month 1 vs Month 60)
+  month1AvgMultiplier: number;
+  month60AvgMultiplier: number;
+  month1ActivePercent: number;
+  month60ActivePercent: number;
+}
+
+// 5A Policy Parameters
+export interface FiveAStarConfig {
+  weight: number;
+  tierThresholds: number[];
+  avgPercentage: number;
+  stdDeviation: number;
+  minPercentage: number;
+  maxPercentage: number;
+}
+
+export interface FiveAPolicyParameters {
+  enableFiveA: boolean;
+  identityStar: FiveAStarConfig;
+  accuracyStar: FiveAStarConfig;
+  agilityStar: FiveAStarConfig;
+  activityStar: FiveAStarConfig;
+  approvedStar: FiveAStarConfig;
+  compoundBase: number;
+  compoundExponent: number;
+  minMultiplier: number;
+  maxMultiplier: number;
+  rewardImpactWeight: number;
+  stakingApyBonusMax: number;
+  governancePowerBonusMax: number;
+  feeDiscountMax: number;
+  contentVisibilityBonusMax: number;
+  monthlyImprovementRate: number;
+  inactivityDecayRate: number;
+  // User segment percentages (Issue #3 Fix)
+  segmentInactivePercent?: number;  // Ghost accounts (default 20%)
+  segmentLurkersPercent?: number;   // View-only users (default 40%)
+  segmentCasualPercent?: number;    // Weekly users (default 25%)
+  segmentActivePercent?: number;    // Daily users (default 12%)
+  segmentPowerPercent?: number;     // Power users/creators (default 3%)
+}
+
 // Pre-Launch Parameters
 export interface ReferralParameters {
   enableReferral: boolean;
@@ -1458,6 +1695,8 @@ export interface SimulationResult {
   tokenMetrics?: TokenMetricsResult;
   // Pre-Launch Modules (Nov 2025)
   prelaunch?: PreLaunchResult;
+  // 5A Policy Gamification (Dec 2025)
+  fiveA?: FiveAResult;
 }
 
 // Monte Carlo Results

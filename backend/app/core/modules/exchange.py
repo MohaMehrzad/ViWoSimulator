@@ -32,6 +32,7 @@ Token Standards:
 - Token-2022: Extended features (transfer fees, confidential transfers)
 """
 
+from typing import Optional
 from app.models import SimulationParameters, ModuleResult
 from app.config import config
 
@@ -57,7 +58,11 @@ DEFAULT_AVG_SWAP_SIZE_USD = 30.0
 DEFAULT_SLIPPAGE_RATE = 0.002  # 0.2%
 
 
-def calculate_exchange(params: SimulationParameters, users: int) -> ModuleResult:
+def calculate_exchange(
+    params: SimulationParameters,
+    users: int,
+    five_a_fee_discount: float = 0.0,
+) -> ModuleResult:
     """
     Calculate Exchange/Wallet module revenue from crypto trading and transfer fees.
     
@@ -79,6 +84,11 @@ def calculate_exchange(params: SimulationParameters, users: int) -> ModuleResult
     - Withdrawals: 1.5 -> 0.5 (most users HODL)
     
     Issue #9: Uses linear cost scaling for realistic infrastructure costs
+    
+    5A Integration (Dec 2025):
+    - High 5A users get fee discounts on swap fees
+    - five_a_fee_discount is average discount across population (0.0-0.5)
+    - Reduces effective swap fee revenue
     """
     if not params.enable_exchange:
         return ModuleResult(
@@ -129,7 +139,11 @@ def calculate_exchange(params: SimulationParameters, users: int) -> ModuleResult
     # - Cross-selling to Identity Premium, Staking, and Governance modules
     # - Reduced CAC through organic user acquisition
     # =======================================================================
-    swap_fee_revenue = total_trading_volume * params.exchange_swap_fee_percent
+    base_swap_fee_revenue = total_trading_volume * params.exchange_swap_fee_percent
+    
+    # 5A Integration: High 5A users get fee discounts on swaps
+    five_a_swap_discount = base_swap_fee_revenue * five_a_fee_discount
+    swap_fee_revenue = base_swap_fee_revenue - five_a_swap_discount
     
     # MED-04 Fix: Use configurable avg swap size instead of hardcoded value
     # LOW-002 Fix: Use documented constant as default
@@ -256,5 +270,10 @@ def calculate_exchange(params: SimulationParameters, users: int) -> ModuleResult
                 "and cross-selling to profitable modules. Profitability comes from withdrawal fees "
                 "($1.50 vs $0.00025 cost) and premium feature conversion."
             ) if margin < 10 else "Exchange operating at sustainable margin.",
+            
+            # 5A Integration
+            'five_a_fee_discount': round(five_a_fee_discount * 100, 2),
+            'five_a_swap_discount': round(five_a_swap_discount, 2),
+            'base_swap_fee_revenue': round(base_swap_fee_revenue, 2),
         }
     )

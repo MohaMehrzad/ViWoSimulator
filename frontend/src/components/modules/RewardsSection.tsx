@@ -9,7 +9,12 @@ interface RewardsSectionProps {
 }
 
 export function RewardsSection({ result, parameters }: RewardsSectionProps) {
-  const { rewards } = result;
+  const { rewards, fiveA } = result;
+  
+  // 5A Impact indicator
+  const fiveAEnabled = fiveA?.enabled || false;
+  const fiveAMultiplier = fiveA?.avgCompoundMultiplier || 1.0;
+  const fiveARedistribution = fiveA?.rewardRedistributionPercent || 0;
 
   const rewardCategories = [
     {
@@ -58,6 +63,14 @@ export function RewardsSection({ result, parameters }: RewardsSectionProps) {
             <h2 className="text-2xl font-bold">Rewards Module</h2>
             <p className="text-amber-200">Token emission and reward distribution</p>
           </div>
+          {fiveAEnabled && (
+            <div className="text-right bg-yellow-400/20 px-3 py-2 rounded-lg">
+              <div className="text-lg font-bold text-yellow-200">⭐ 5A Active</div>
+              <div className="text-xs text-yellow-300">
+                {fiveARedistribution.toFixed(1)}% redistributed | Avg {fiveAMultiplier.toFixed(2)}x
+              </div>
+            </div>
+          )}
           <div className="bg-white/20 backdrop-blur-sm rounded-full px-4 py-2 flex items-center gap-2">
             <span className="text-lg">💰</span>
             <span className="text-sm font-semibold">5% Platform Fee</span>

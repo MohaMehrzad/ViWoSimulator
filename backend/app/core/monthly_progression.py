@@ -53,6 +53,10 @@ from app.core.growth_scenarios import (
     get_fomo_event_for_month,
     get_cycle_multipliers,
     MARKET_CYCLE_2025_2030,
+    # 5A Integration (Dec 2025)
+    calculate_five_a_retention_boost,
+    calculate_five_a_growth_boost,
+    calculate_monthly_growth_with_five_a,
 )
 from app.core.modules import (
     calculate_governance,
@@ -61,6 +65,13 @@ from app.core.modules import (
     calculate_business_hub,
     calculate_cross_platform,
 )
+from app.core.modules.five_a_policy import (
+    evolve_user_segments,
+    calculate_platform_maturity,
+    USER_SEGMENTS,
+    SEGMENT_ORDER,
+)
+from app.core.modules.liquidity import calculate_five_a_price_impact
 from app.config import config
 
 
@@ -481,6 +492,29 @@ class MonthlyMetrics:
     # Treasury tracking (NEW - Nov 2025)
     treasury_revenue_usd: float = 0.0  # Revenue going to treasury this month
     treasury_accumulated_usd: float = 0.0  # Cumulative treasury balance
+    
+    # 5A Policy fields (NEW - Dec 2025)
+    five_a_enabled: bool = False
+    five_a_avg_multiplier: float = 1.0  # Average compound multiplier
+    five_a_reward_redistribution: float = 0.0  # Percentage redistributed
+    five_a_fee_discount_total: float = 0.0  # Total fee discounts in USD
+    five_a_staking_apy_boost: float = 0.0  # Average staking APY boost
+    five_a_governance_boost: float = 0.0  # Average governance power boost
+    five_a_avg_identity_pct: float = 50.0  # Average identity star percentage
+    five_a_avg_activity_pct: float = 50.0  # Average activity star percentage
+    
+    # 5A Dynamic Evolution fields (NEW - Dec 2025)
+    five_a_segment_inactive: int = 0  # Users in inactive segment
+    five_a_segment_lurkers: int = 0   # Users in lurkers segment
+    five_a_segment_casual: int = 0    # Users in casual segment
+    five_a_segment_active: int = 0    # Users in active segment
+    five_a_segment_power: int = 0     # Users in power_users segment
+    five_a_retention_boost: float = 1.0  # Retention multiplier from 5A
+    five_a_growth_boost: float = 1.0     # Growth multiplier from 5A
+    five_a_price_impact: float = 0.0     # Price impact percentage
+    five_a_churned_users: int = 0        # Users churned due to 5A evolution
+    five_a_improved_users: int = 0       # Users who improved segments
+    five_a_decayed_users: int = 0        # Users who decayed segments
 
 
 @dataclass
@@ -659,6 +693,20 @@ def run_monthly_progression_simulation(
     # Base monthly marketing budget
     base_monthly_marketing = params.marketing_budget / 12
     
+    # 5A Segment Evolution (Dec 2025)
+    # Initialize segment counts based on USER_SEGMENTS defaults
+    five_a_enabled = params.five_a is not None and params.five_a.enable_five_a
+    segment_counts = {
+        'inactive': 0,
+        'lurkers': 0,
+        'casual': 0,
+        'active': 0,
+        'power_users': 0,
+    }
+    cumulative_churned_5a = 0
+    cumulative_improved = 0
+    cumulative_decayed = 0
+    
     # HIGH-03: Track current calendar year/month for market cycle
     current_calendar_year = start_year
     current_calendar_month = start_month
@@ -747,6 +795,90 @@ def run_monthly_progression_simulation(
         prev_active = monthly_data[-1].active_users if monthly_data else 0
         users_churned = max(0, prev_active + total_acquired_this_month - active_users)
         
+        # === 5A SEGMENT EVOLUTION (Dec 2025) ===
+        # Evolve user segments monthly and calculate 5A impacts
+        five_a_retention_boost_val = 1.0
+        five_a_growth_boost_val = 1.0
+        five_a_price_impact_val = 0.0
+        five_a_churned_from_evolution = 0
+        five_a_improved = 0
+        five_a_decayed = 0
+        
+        if five_a_enabled and active_users > 0:
+            # Calculate platform maturity (increases improvement rates)
+            platform_maturity = calculate_platform_maturity(month, duration_months)
+            
+            # Evolve existing segments and add new users
+            evolution_result = evolve_user_segments(
+                current_counts=segment_counts,
+                month=month,
+                platform_maturity=platform_maturity,
+                new_users=total_acquired_this_month,
+            )
+            
+            # Update segment counts
+            segment_counts = evolution_result['counts']
+            five_a_churned_from_evolution = evolution_result['churned']
+            five_a_improved = evolution_result['improved']
+            five_a_decayed = evolution_result['decayed']
+            
+            # Track cumulative evolution stats
+            cumulative_churned_5a += five_a_churned_from_evolution
+            cumulative_improved += five_a_improved
+            cumulative_decayed += five_a_decayed
+            
+            # Calculate segment distribution as percentages
+            total_in_segments = sum(segment_counts.values())
+            if total_in_segments > 0:
+                segment_distribution = {
+                    seg: count / total_in_segments 
+                    for seg, count in segment_counts.items()
+                }
+            else:
+                # Default distribution for empty segments
+                segment_distribution = {
+                    'inactive': 0.20, 'lurkers': 0.40, 'casual': 0.25,
+                    'active': 0.12, 'power_users': 0.03
+                }
+            
+            # Calculate 5A retention boost
+            five_a_retention_boost_val = calculate_five_a_retention_boost(segment_distribution)
+            
+            # Calculate 5A growth boost
+            active_percent = (
+                segment_distribution.get('active', 0.12) +
+                segment_distribution.get('power_users', 0.03)
+            )
+            avg_5a_mult = 0.6  # Will be updated after sim runs
+            five_a_growth_boost_val = calculate_five_a_growth_boost(avg_5a_mult, active_percent)
+            
+            # Calculate 5A price impact
+            # Get burns from previous month (or estimate for first month)
+            prev_burns = total_tokens_recaptured * 0.1  # Estimate ~10% of recapture is burns
+            circulating = params.initial_liquidity_vcoin * 2 if hasattr(params, 'initial_liquidity_vcoin') else 100_000_000
+            price_impact_result = calculate_five_a_price_impact(
+                avg_multiplier=avg_5a_mult,
+                active_percent=active_percent,
+                monthly_burns=prev_burns,
+                circulating_supply=circulating,
+                segment_distribution=segment_distribution,
+            )
+            five_a_price_impact_val = (price_impact_result.get('total_multiplier', 1.0) - 1.0) * 100  # As percentage
+        else:
+            # Initialize segment counts for first month if not using 5A
+            if month == 1 and active_users > 0:
+                segment_counts = {
+                    'inactive': int(active_users * 0.20),
+                    'lurkers': int(active_users * 0.40),
+                    'casual': int(active_users * 0.25),
+                    'active': int(active_users * 0.12),
+                    'power_users': int(active_users * 0.03),
+                }
+            segment_distribution = {
+                'inactive': 0.20, 'lurkers': 0.40, 'casual': 0.25,
+                'active': 0.12, 'power_users': 0.03
+            }
+        
         # Run deterministic simulation for this month's active users
         # Create a modified params with current active users
         month_params = params.model_copy()
@@ -798,6 +930,10 @@ def run_monthly_progression_simulation(
         # Get retention stats
         retention_stats = tracker.get_retention_stats(month)
         
+        # Extract 5A metrics if available
+        five_a = sim_result.five_a
+        five_a_enabled = five_a.enabled if five_a else False
+        
         # Create monthly metrics
         metrics = MonthlyMetrics(
             month=month,
@@ -831,6 +967,27 @@ def run_monthly_progression_simulation(
             per_user_monthly_vcoin=round(sim_result.rewards.per_user_monthly_vcoin, 2),
             per_user_monthly_usd=round(sim_result.rewards.per_user_monthly_usd, 4),
             allocation_capped=sim_result.rewards.allocation_capped,
+            # 5A Policy fields (Dec 2025)
+            five_a_enabled=five_a.enabled if five_a else False,
+            five_a_avg_multiplier=round(five_a.avg_compound_multiplier, 3) if five_a else 1.0,
+            five_a_reward_redistribution=round(five_a.reward_redistribution_percent, 2) if five_a else 0.0,
+            five_a_fee_discount_total=round(five_a.fee_discount_total_usd, 2) if five_a else 0.0,
+            five_a_staking_apy_boost=round(five_a.staking_apy_boost_avg, 2) if five_a else 0.0,
+            five_a_governance_boost=round(five_a.governance_power_boost_avg, 2) if five_a else 0.0,
+            five_a_avg_identity_pct=round(five_a.population_avg_identity, 1) if five_a else 50.0,
+            five_a_avg_activity_pct=round(five_a.population_avg_activity, 1) if five_a else 50.0,
+            # 5A Dynamic Evolution fields (Dec 2025)
+            five_a_segment_inactive=segment_counts.get('inactive', 0),
+            five_a_segment_lurkers=segment_counts.get('lurkers', 0),
+            five_a_segment_casual=segment_counts.get('casual', 0),
+            five_a_segment_active=segment_counts.get('active', 0),
+            five_a_segment_power=segment_counts.get('power_users', 0),
+            five_a_retention_boost=round(five_a_retention_boost_val, 3),
+            five_a_growth_boost=round(five_a_growth_boost_val, 3),
+            five_a_price_impact=round(five_a_price_impact_val, 2),
+            five_a_churned_users=five_a_churned_from_evolution,
+            five_a_improved_users=five_a_improved,
+            five_a_decayed_users=five_a_decayed,
         )
         
         monthly_data.append(metrics)
@@ -1065,11 +1222,54 @@ def run_growth_scenario_simulation(
     
     current_users = month1_users
     
+    # Initialize segment tracking for growth scenario simulation
+    segment_counts_gs = {
+        'inactive': 0, 'lurkers': 0, 'casual': 0,
+        'active': 0, 'power_users': 0
+    }
+    
     for month in range(1, duration_months + 1):
-        # Calculate token price for this month
+        # Calculate base token price for this month
         token_price = calculate_token_price(
             month, scenario_config, market_condition, base_token_price
         )
+        
+        # Apply 5A price impact if enabled
+        five_a_enabled = params.five_a is not None and params.five_a.enable_five_a if hasattr(params, 'five_a') and params.five_a else False
+        if five_a_enabled and current_users > 0:
+            # Calculate platform maturity
+            platform_maturity = calculate_platform_maturity(month, duration_months)
+            
+            # Evolve segments for growth scenario
+            evolution_result = evolve_user_segments(
+                current_counts=segment_counts_gs,
+                month=month,
+                platform_maturity=platform_maturity,
+                new_users=monthly_acquired[-1] if monthly_acquired else 0,
+            )
+            segment_counts_gs = evolution_result['counts']
+            
+            # Calculate segment distribution
+            total_in_segs = sum(segment_counts_gs.values())
+            if total_in_segs > 0:
+                seg_dist = {seg: c / total_in_segs for seg, c in segment_counts_gs.items()}
+            else:
+                seg_dist = {'inactive': 0.20, 'lurkers': 0.40, 'casual': 0.25, 'active': 0.12, 'power_users': 0.03}
+            
+            # Calculate active percent and price impact
+            active_pct = seg_dist.get('active', 0.12) + seg_dist.get('power_users', 0.03)
+            burns_estimate = total_tokens_recaptured * 0.1 if total_tokens_recaptured > 0 else 0
+            circulating_estimate = 100_000_000  # Approximate circulating supply
+            
+            price_impact = calculate_five_a_price_impact(
+                avg_multiplier=0.6 + (platform_maturity * 0.4),  # Improves with maturity
+                active_percent=active_pct,
+                monthly_burns=burns_estimate,
+                circulating_supply=circulating_estimate,
+                segment_distribution=seg_dist,
+            )
+            token_price *= price_impact.get('total_multiplier', 1.0)
+        
         token_price_curve.append(token_price)
         
         # Calculate growth for this month
@@ -1148,6 +1348,10 @@ def run_growth_scenario_simulation(
         if months_to_profitability is None and cumulative_profit > 0:
             months_to_profitability = month
         
+        # Extract 5A metrics if available
+        five_a = sim_result.five_a
+        five_a_enabled = five_a.enabled if five_a else False
+        
         # Create monthly metrics with growth scenario data
         metrics = MonthlyMetrics(
             month=month,
@@ -1189,6 +1393,15 @@ def run_growth_scenario_simulation(
             per_user_monthly_vcoin=round(sim_result.rewards.per_user_monthly_vcoin, 2),
             per_user_monthly_usd=round(sim_result.rewards.per_user_monthly_usd, 4),
             allocation_capped=sim_result.rewards.allocation_capped,
+            # 5A Policy fields (Dec 2025)
+            five_a_enabled=five_a_enabled,
+            five_a_avg_multiplier=round(five_a.avg_compound_multiplier, 3) if five_a_enabled else 1.0,
+            five_a_reward_redistribution=round(five_a.reward_redistribution_percent, 2) if five_a_enabled else 0.0,
+            five_a_fee_discount_total=round(five_a.fee_discount_total_usd, 2) if five_a_enabled else 0.0,
+            five_a_staking_apy_boost=round(five_a.staking_apy_boost_avg, 2) if five_a_enabled else 0.0,
+            five_a_governance_boost=round(five_a.governance_power_boost_avg, 2) if five_a_enabled else 0.0,
+            five_a_avg_identity_pct=round(five_a.population_avg_identity, 1) if five_a_enabled else 50.0,
+            five_a_avg_activity_pct=round(five_a.population_avg_activity, 1) if five_a_enabled else 50.0,
         )
         
         monthly_data.append(metrics)

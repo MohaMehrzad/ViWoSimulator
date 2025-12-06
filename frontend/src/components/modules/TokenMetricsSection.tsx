@@ -546,6 +546,64 @@ export function TokenMetricsSection({ result }: TokenMetricsSectionProps) {
               </div>
             </div>
           </div>
+
+          {/* Monthly Unlock Breakdown */}
+          {metrics.inflation.monthlyUnlocksBreakdown && Object.keys(metrics.inflation.monthlyUnlocksBreakdown).length > 0 && (
+            <div className="bg-white/60 rounded-xl p-4 mt-4">
+              <h4 className="font-semibold text-slate-800 mb-3 flex items-center gap-2">
+                <span className="text-lg">📊</span>
+                Monthly Token Unlocks
+              </h4>
+              <div className="space-y-2">
+                {Object.entries(metrics.inflation.monthlyUnlocksBreakdown)
+                  .filter(([_, amount]) => amount > 0)
+                  .sort(([, a], [, b]) => b - a)
+                  .map(([category, amount]) => {
+                    const totalUnlocks = metrics.inflation.totalMonthlyUnlocks || 1;
+                    const percentage = (amount / totalUnlocks) * 100;
+                    const categoryColors: Record<string, string> = {
+                      REWARDS: 'bg-emerald-500',
+                      PUBLIC: 'bg-blue-500',
+                      PRIVATE: 'bg-purple-500',
+                      SEED: 'bg-amber-500',
+                      TEAM: 'bg-rose-500',
+                      ADVISORS: 'bg-cyan-500',
+                      MARKETING: 'bg-pink-500',
+                      LIQUIDITY: 'bg-indigo-500',
+                      TREASURY: 'bg-slate-500',
+                      FOUNDATION: 'bg-orange-500',
+                    };
+                    const color = categoryColors[category] || 'bg-slate-400';
+                    
+                    return (
+                      <div key={category} className="flex items-center gap-3">
+                        <div className="w-24 text-xs font-medium text-slate-600 capitalize">
+                          {category.toLowerCase().replace('_', ' ')}
+                        </div>
+                        <div className="flex-1 h-4 bg-slate-200 rounded-full overflow-hidden">
+                          <div 
+                            className={`h-full ${color} rounded-full transition-all`}
+                            style={{ width: `${Math.min(100, percentage)}%` }}
+                          />
+                        </div>
+                        <div className="w-20 text-right text-xs font-medium text-slate-700">
+                          {(amount / 1_000_000).toFixed(2)}M
+                        </div>
+                        <div className="w-12 text-right text-xs text-slate-500">
+                          {percentage.toFixed(0)}%
+                        </div>
+                      </div>
+                    );
+                  })}
+                <div className="pt-2 mt-2 border-t border-slate-200 flex justify-between text-sm">
+                  <span className="font-medium text-slate-700">Total Monthly Unlocks</span>
+                  <span className="font-bold text-violet-600">
+                    {((metrics.inflation.totalMonthlyUnlocks ?? 0) / 1_000_000).toFixed(2)}M
+                  </span>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
 

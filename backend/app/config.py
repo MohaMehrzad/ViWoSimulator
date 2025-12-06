@@ -104,77 +104,81 @@ class TokenAllocationCategory:
 @dataclass(frozen=True)
 class TokenAllocationConfig:
     """
-    Official VCoin Token Allocation (November 2025)
+    Official ViWO Token Allocation (December 2025)
     
-    Total Supply: 1,000,000,000 VCoin (1 Billion)
+    Total Supply: 1,000,000,000 VIWO (1 Billion)
     
-    Allocation Breakdown:
-    - Seed Round:        2% (20M)  - Early investors, highest risk
-    - Private Round:     3% (30M)  - Strategic investors and VCs
-    - Public Sale:       5% (50M)  - Community token sale (IDO/ICO)
-    - Team:             10% (100M) - Core team members and employees
-    - Advisors:          5% (50M)  - Strategic advisors and consultants
+    Allocation Breakdown (from viwo-tokenomics-2025-12-03.json):
+    - Seed Round:        4% (40M)  - Early investors, highest risk
+    - Private Round:     4% (40M)  - Strategic investors and VCs
+    - Public Sale:       8% (80M)  - Community token sale (IDO/ICO)
+    - Team:             15% (150M) - Core team members and employees
+    - Advisors:          3% (30M)  - Strategic advisors and consultants
     - Treasury/DAO:     20% (200M) - Protocol treasury and governance
     - Ecosystem/Rewards: 35% (350M) - User incentives, staking rewards, grants
-    - Liquidity:        10% (100M) - DEX/CEX liquidity pools
-    - Foundation:        2% (20M)  - Foundation operations and reserve
-    - Marketing/Growth:  8% (80M)  - Marketing campaigns and partnerships
+    - Liquidity:         5% (50M)  - DEX/CEX liquidity pools
+    - Foundation:        0% (0M)   - Not used
+    - Marketing/Growth:  6% (60M)  - Marketing campaigns and partnerships
     
     TOTAL: 100% (1,000,000,000)
+    
+    TGE Circulating: 109M
+    - Private: 4M (10% of 40M)
+    - Public: 40M (50% of 80M)
+    - Liquidity: 50M (100% of 50M)
+    - Marketing: 15M (25% of 60M)
     """
     
     SEED: TokenAllocationCategory = field(default_factory=lambda: TokenAllocationCategory(
         name="Seed Round",
-        percent=0.02,
-        tokens=20_000_000,
+        percent=0.04,
+        tokens=40_000_000,
         tge_percent=0.0,
         cliff_months=12,
         vesting_months=24,
-        price_usd=0.01,
+        price_usd=0.005,
         description="Early-stage investors (highest risk, lowest price)"
     ))
     
     PRIVATE: TokenAllocationCategory = field(default_factory=lambda: TokenAllocationCategory(
         name="Private Round",
-        percent=0.03,
-        tokens=30_000_000,
+        percent=0.04,
+        tokens=40_000_000,
         tge_percent=0.10,
         cliff_months=6,
         vesting_months=18,
-        price_usd=0.015,
+        price_usd=0.007,
         description="Strategic investors and VCs"
     ))
     
     PUBLIC: TokenAllocationCategory = field(default_factory=lambda: TokenAllocationCategory(
         name="Public Sale",
-        percent=0.05,
-        tokens=50_000_000,
+        percent=0.08,
+        tokens=80_000_000,
         tge_percent=0.50,
         cliff_months=0,
         vesting_months=3,
-        price_usd=0.02,
+        price_usd=0.01,
         description="Community token sale (IDO/ICO)"
     ))
     
     TEAM: TokenAllocationCategory = field(default_factory=lambda: TokenAllocationCategory(
         name="Team",
-        percent=0.10,
-        tokens=100_000_000,
+        percent=0.15,
+        tokens=150_000_000,
         tge_percent=0.0,
         cliff_months=12,
         vesting_months=36,
-        price_usd=0.03,
         description="Core team members and employees"
     ))
     
     ADVISORS: TokenAllocationCategory = field(default_factory=lambda: TokenAllocationCategory(
         name="Advisors",
-        percent=0.05,
-        tokens=50_000_000,
+        percent=0.03,
+        tokens=30_000_000,
         tge_percent=0.0,
         cliff_months=6,
         vesting_months=18,
-        price_usd=0.03,
         description="Strategic advisors and consultants"
     ))
     
@@ -184,7 +188,7 @@ class TokenAllocationConfig:
         tokens=200_000_000,
         tge_percent=0.0,
         is_programmatic=True,
-        description="Protocol treasury and governance"
+        description="Protocol treasury and governance (governance-controlled release)"
     ))
     
     REWARDS: TokenAllocationCategory = field(default_factory=lambda: TokenAllocationCategory(
@@ -194,36 +198,34 @@ class TokenAllocationConfig:
         tge_percent=0.0,
         is_programmatic=True,
         emission_months=60,
-        description="User incentives, staking rewards, grants"
+        description="User incentives, staking rewards - dynamic allocation capped at max schedule"
     ))
     
     LIQUIDITY: TokenAllocationCategory = field(default_factory=lambda: TokenAllocationCategory(
         name="Liquidity",
-        percent=0.10,
-        tokens=100_000_000,
+        percent=0.05,
+        tokens=50_000_000,
         tge_percent=1.0,
-        description="DEX/CEX liquidity pools"
+        description="DEX/CEX liquidity pools (locked 12 months)"
     ))
     
     FOUNDATION: TokenAllocationCategory = field(default_factory=lambda: TokenAllocationCategory(
         name="Foundation",
-        percent=0.02,
-        tokens=20_000_000,
-        tge_percent=0.25,
-        cliff_months=3,
-        vesting_months=24,
-        price_usd=0.03,
-        description="Foundation operations and reserve"
+        percent=0.0,
+        tokens=0,
+        tge_percent=0.0,
+        cliff_months=0,
+        vesting_months=0,
+        description="Not used in current tokenomics"
     ))
     
     MARKETING: TokenAllocationCategory = field(default_factory=lambda: TokenAllocationCategory(
         name="Marketing & Growth",
-        percent=0.08,
-        tokens=80_000_000,
+        percent=0.06,
+        tokens=60_000_000,
         tge_percent=0.25,
         cliff_months=3,
         vesting_months=18,
-        price_usd=0.03,
         description="Marketing campaigns and partnerships"
     ))
     
@@ -262,23 +264,25 @@ class TokenAllocationConfig:
     
     def get_tge_circulating(self) -> int:
         """
-        Calculate total tokens circulating at TGE.
+        Calculate total tokens circulating at TGE (Month 0).
         
-        HIGH-01 Fix: TGE (Token Generation Event) only includes allocation unlocks,
-        not rewards emission. Rewards emission starts at month 1, not TGE.
+        Per viwo-tokenomics tool: TGE includes first month ecosystem distribution.
         
         Returns:
-            Total TGE circulating: 153,000,000 VCoin
-            - PRIVATE: 3,000,000 (10% of 30M)
-            - PUBLIC: 25,000,000 (50% of 50M)
-            - LIQUIDITY: 100,000,000 (100% of 100M)
-            - FOUNDATION: 5,000,000 (25% of 20M)
-            - MARKETING: 20,000,000 (25% of 80M)
+            Total TGE circulating: ~114,833,333 VIWO
+            - PRIVATE: 4,000,000 (10% of 40M)
+            - PUBLIC: 40,000,000 (50% of 80M)
+            - LIQUIDITY: 50,000,000 (100% of 50M)
+            - MARKETING: 15,000,000 (25% of 60M)
+            - ECOSYSTEM: 5,833,333 (1st month of 350M/60mo)
         """
         total = 0
-        for cat in self.get_all_categories().values():
-            total += int(cat.tokens * cat.tge_percent)
-        # HIGH-01 Fix: Removed rewards emission - it starts month 1, not TGE
+        for key, cat in self.get_all_categories().items():
+            if key == 'REWARDS' and cat.emission_months > 0:
+                # Include first month ecosystem distribution at TGE
+                total += cat.tokens // cat.emission_months
+            else:
+                total += int(cat.tokens * cat.tge_percent)
         return total
     
     def get_monthly_unlock(self, category_key: str, month: int) -> int:
@@ -291,6 +295,10 @@ class TokenAllocationConfig:
         
         Returns:
             Number of tokens unlocking in that month
+            
+        Note:
+            REWARDS/Ecosystem starts distributing at TGE (Month 0) per viwo-tokenomics tool.
+            This matches the CSV: TGE includes first month ecosystem distribution.
         """
         categories = self.get_all_categories()
         if category_key not in categories:
@@ -298,16 +306,18 @@ class TokenAllocationConfig:
         
         cat = categories[category_key]
         
-        # TGE unlock
-        if month == 0:
-            return int(cat.tokens * cat.tge_percent)
-        
         # Programmatic releases (Treasury, Rewards)
+        # FIXED: Rewards start at TGE (month 0), not month 1
         if cat.is_programmatic:
             if category_key == 'REWARDS' and cat.emission_months > 0:
-                if month <= cat.emission_months:
+                # Ecosystem distributes from month 0 to month (emission_months - 1)
+                if month >= 0 and month < cat.emission_months:
                     return cat.tokens // cat.emission_months
             return 0
+        
+        # TGE unlock (for non-programmatic categories)
+        if month == 0:
+            return int(cat.tokens * cat.tge_percent)
         
         # Vesting unlock
         # NOTE: vesting_months = actual duration of vesting (NOT including cliff)
@@ -439,21 +449,23 @@ class SolanaStakingConfig:
 @dataclass(frozen=True)
 class SupplyConfig:
     """
-    Token supply configuration matching official tokenomics.
+    Token supply configuration matching official ViWO tokenomics.
     
-    Updated November 2025:
+    Updated December 2025 (from viwo-tokenomics-2025-12-03.csv):
     - Total Supply: 1,000,000,000 (unchanged)
-    - Rewards Allocation: 350,000,000 (35%, was 70%)
-    - Rewards Duration: 60 months (5 years, was 10 years)
-    - TGE Circulating: 153,000,000 (HIGH-01 Fix: was 158,833,333 - incorrectly included rewards)
-    - Treasury Allocation: 200,000,000 (20%, NEW)
+    - Rewards Allocation: 350,000,000 (35%)
+    - Rewards Duration: 60 months (5 years)
+    - TGE Circulating: 114,833,333 (includes 1st month ecosystem per tokenomics tool)
+      - Private: 4M + Public: 40M + Liquidity: 50M + Marketing: 15M + Ecosystem: 5.83M
+    - Treasury Allocation: 200,000,000 (20%)
+    - Liquidity: 50,000,000 (5%, locked 12 months)
     """
     TOTAL: int = 1_000_000_000
-    TGE_CIRCULATING: int = 153_000_000  # HIGH-01 Fix: Removed rewards (only allocation unlocks)
-    LIQUIDITY: int = 100_000_000
-    REWARDS_ALLOCATION: int = 350_000_000  # 35% - Updated from 700M
-    REWARDS_DURATION_MONTHS: int = 60  # 5 years - Updated from 120
-    TREASURY_ALLOCATION: int = 200_000_000  # 20% - NEW
+    TGE_CIRCULATING: int = 114_833_333  # Includes 1st month ecosystem distribution
+    LIQUIDITY: int = 50_000_000  # 5% - locked 12 months
+    REWARDS_ALLOCATION: int = 350_000_000  # 35%
+    REWARDS_DURATION_MONTHS: int = 60  # 5 years
+    TREASURY_ALLOCATION: int = 200_000_000  # 20%
 
 
 @dataclass(frozen=True)
@@ -583,7 +595,7 @@ class DynamicRewardConfig:
     
     # User thresholds for scaling
     INITIAL_USERS: int = 1000  # Starting point (growth_factor = 0)
-    TARGET_USERS: int = 1_000_000  # Maximum allocation point (growth_factor = 1)
+    TARGET_USERS: int = 100_000_000  # Maximum allocation point (growth_factor = 1) - matches WhitePaper
     
     # Safety mechanisms
     MAX_PER_USER_MONTHLY_USD: float = 50.0  # Cap per-user reward in USD equivalent
@@ -860,25 +872,143 @@ class Config:
         return round(value, decimals)
     
     @classmethod
-    def get_circulating_supply_at_month(cls, month: int) -> int:
+    def get_dynamic_rewards_for_month(
+        cls, 
+        users: int, 
+        token_price: float,
+        month: int = 0
+    ) -> int:
+        """
+        Calculate dynamic rewards emission for a single month, capped at max schedule.
+        
+        Uses logarithmic scaling based on user count:
+        - Low users = lower rewards (sustainable)
+        - High users = capped at max schedule (5.83M/month)
+        
+        Args:
+            users: Number of active users
+            token_price: Current token price in USD
+            month: Month number (0 = TGE, emission starts at month 0)
+        
+        Returns:
+            Dynamic rewards emission capped at max monthly schedule
+            
+        Note:
+            Ecosystem rewards start at TGE (month 0) per viwo-tokenomics tool.
+        """
+        import math
+        
+        # Max emission per schedule
+        max_monthly = cls.SUPPLY.REWARDS_ALLOCATION // cls.SUPPLY.REWARDS_DURATION_MONTHS
+        
+        # Emission runs from month 0 to month 59 (60 months total)
+        if month < 0 or month >= cls.SUPPLY.REWARDS_DURATION_MONTHS:
+            return 0
+        
+        # Dynamic allocation parameters
+        initial_users = cls.DYNAMIC_REWARD.INITIAL_USERS
+        target_users = cls.DYNAMIC_REWARD.TARGET_USERS
+        min_allocation = cls.DYNAMIC_REWARD.MIN_ALLOCATION
+        max_allocation = cls.DYNAMIC_REWARD.MAX_ALLOCATION
+        max_per_user_usd = cls.DYNAMIC_REWARD.MAX_PER_USER_MONTHLY_USD
+        
+        users = max(1, users)
+        
+        # Calculate growth factor using logarithmic scaling
+        if users <= initial_users:
+            growth_factor = 0.0
+        elif users >= target_users:
+            growth_factor = 1.0
+        else:
+            log_ratio = math.log(users / initial_users)
+            log_max = math.log(target_users / initial_users)
+            growth_factor = min(1.0, max(0.0, log_ratio / log_max))
+        
+        # Base allocation percentage
+        allocation_pct = min_allocation + (max_allocation - min_allocation) * growth_factor
+        
+        # Calculate dynamic emission
+        dynamic_emission = int(max_monthly * allocation_pct)
+        
+        # Apply per-user cap for inflation protection
+        platform_fee = cls.PLATFORM_FEE_RATE
+        net_emission = dynamic_emission * (1 - platform_fee)
+        per_user_vcoin = net_emission / users if users > 0 else 0
+        per_user_usd = per_user_vcoin * token_price
+        
+        if per_user_usd > max_per_user_usd and users > 0:
+            # Reduce emission to meet per-user cap
+            required_net = (max_per_user_usd / token_price) * users
+            required_gross = required_net / (1 - platform_fee)
+            dynamic_emission = int(min(dynamic_emission, required_gross))
+        
+        # Cap at max schedule - never exceed static vesting amount
+        return min(dynamic_emission, max_monthly)
+    
+    @classmethod
+    def get_circulating_supply_at_month(
+        cls, 
+        month: int, 
+        users: int = None, 
+        token_price: float = None
+    ) -> int:
         """
         Calculate total circulating supply at a given month.
         
         Args:
             month: Month number (0 = TGE, 1 = first month after TGE, etc.)
+            users: Optional - if provided, use dynamic rewards allocation
+            token_price: Optional - required if users is provided
         
         Returns:
-            Total circulating supply in VCoin
+            Total circulating supply in VIWO
+        
+        Note:
+            - If users/token_price provided: Uses dynamic rewards (capped at max schedule)
+            - If not provided: Uses max schedule (static 5.83M/month)
         """
         total = 0
         allocation = cls.TOKEN_ALLOCATION
+        use_dynamic = users is not None and token_price is not None
         
         for key in ['SEED', 'PRIVATE', 'PUBLIC', 'TEAM', 'ADVISORS', 
                     'TREASURY', 'REWARDS', 'LIQUIDITY', 'FOUNDATION', 'MARKETING']:
             for m in range(month + 1):
-                total += allocation.get_monthly_unlock(key, m)
+                if key == 'REWARDS' and use_dynamic:
+                    # Use dynamic rewards starting from month 0 (TGE)
+                    total += cls.get_dynamic_rewards_for_month(users, token_price, m)
+                else:
+                    # Use static vesting schedule
+                    total += allocation.get_monthly_unlock(key, m)
         
         return total
+    
+    @classmethod
+    def get_monthly_unlock_breakdown(cls, month: int, users: int = None, token_price: float = None) -> Dict[str, int]:
+        """
+        Get breakdown of unlocks for each category at a specific month.
+        
+        Args:
+            month: Month number (0 = TGE)
+            users: Optional - for dynamic rewards calculation
+            token_price: Optional - for dynamic rewards calculation
+        
+        Returns:
+            Dictionary mapping category names to unlock amounts
+        """
+        allocation = cls.TOKEN_ALLOCATION
+        use_dynamic = users is not None and token_price is not None
+        
+        breakdown = {}
+        for key in ['SEED', 'PRIVATE', 'PUBLIC', 'TEAM', 'ADVISORS', 
+                    'TREASURY', 'REWARDS', 'LIQUIDITY', 'FOUNDATION', 'MARKETING']:
+            if key == 'REWARDS' and use_dynamic:
+                # Dynamic rewards starting from month 0 (TGE)
+                breakdown[key] = cls.get_dynamic_rewards_for_month(users, token_price, month)
+            else:
+                breakdown[key] = allocation.get_monthly_unlock(key, month)
+        
+        return breakdown
 
 
 # Global config instance

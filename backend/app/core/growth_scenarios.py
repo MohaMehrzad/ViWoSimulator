@@ -901,3 +901,199 @@ def get_all_scenario_comparison(
         for scenario in GrowthScenario
     }
 
+
+# =============================================================================
+# 5A POLICY INTEGRATION (Dynamic 5A - December 2025)
+# =============================================================================
+# These functions integrate the 5A gamification system with growth scenarios,
+# affecting retention, growth rates, and overall platform dynamics.
+
+# Segment retention multipliers (how segment affects base retention)
+FIVE_A_SEGMENT_RETENTION_MULTIPLIERS = {
+    'inactive': 0.3,      # 70% higher churn than baseline
+    'lurkers': 0.7,       # 30% higher churn
+    'casual': 1.0,        # Baseline retention
+    'active': 1.3,        # 30% better retention
+    'power_users': 1.8,   # 80% better retention
+}
+
+
+def calculate_five_a_retention_boost(
+    segment_distribution: Dict[str, float],
+) -> float:
+    """
+    Calculate retention multiplier based on 5A segment distribution.
+    
+    Args:
+        segment_distribution: Dict with segment percentages
+            e.g., {'inactive': 0.20, 'lurkers': 0.40, 'casual': 0.25, 'active': 0.12, 'power_users': 0.03}
+    
+    Returns:
+        Retention multiplier (0.3 to 1.8), applied to base retention rate.
+        Higher values = better retention.
+    """
+    if not segment_distribution:
+        return 1.0
+    
+    total_weight = sum(segment_distribution.values())
+    if total_weight == 0:
+        return 1.0
+    
+    weighted_sum = 0.0
+    for segment, percent in segment_distribution.items():
+        multiplier = FIVE_A_SEGMENT_RETENTION_MULTIPLIERS.get(segment, 1.0)
+        weighted_sum += percent * multiplier
+    
+    return weighted_sum / total_weight
+
+
+def calculate_five_a_growth_boost(
+    avg_multiplier: float,
+    active_percent: float,
+) -> float:
+    """
+    Calculate growth rate boost based on 5A metrics.
+    
+    Higher 5A scores indicate more engaged users who are more likely to:
+    - Refer friends (viral growth)
+    - Create content that attracts new users
+    - Provide positive reviews and word-of-mouth
+    
+    Args:
+        avg_multiplier: Average 5A multiplier across users (0.0 to 2.0)
+            - 0.6 = typical realistic distribution
+            - 1.0 = neutral (50% stars)
+            - 1.5+ = highly engaged platform
+        active_percent: Percentage of users in active + power_users segments (0.0 to 1.0)
+            - 0.15 = baseline (12% active + 3% power)
+            - 0.30 = highly engaged platform
+    
+    Returns:
+        Growth rate multiplier (0.8 to 1.3)
+        - 0.8 = low engagement, viral growth suffers
+        - 1.0 = neutral
+        - 1.3 = high engagement, amplified viral growth
+    """
+    # Factor 1: Average multiplier impact
+    # Below 0.5x avg = penalty, above 1.0x = bonus
+    base_boost = (avg_multiplier - 0.5) * 0.4  # Range: -0.2 to +0.6
+    
+    # Factor 2: Active user percentage impact
+    # Baseline is 15% (12% active + 3% power), higher = more viral
+    engagement_boost = (active_percent - 0.15) * 0.5  # Range: -0.075 to +0.075
+    
+    # Combine and clamp
+    total_boost = 1.0 + base_boost + engagement_boost
+    return max(0.8, min(1.3, total_boost))
+
+
+def calculate_monthly_growth_with_five_a(
+    month: int,
+    current_users: int,
+    scenario: GrowthScenarioConfig,
+    market_condition: MarketCondition,
+    token_price: float,
+    segment_distribution: Optional[Dict[str, float]] = None,
+    avg_five_a_multiplier: float = 1.0,
+) -> Tuple[int, int, float, Dict[str, float]]:
+    """
+    Calculate monthly growth with 5A policy integration.
+    
+    This extends calculate_monthly_growth to incorporate:
+    - 5A-weighted retention (high 5A = better retention)
+    - 5A growth boost (engaged users = viral growth)
+    
+    Args:
+        month: Month number (1-60)
+        current_users: Current active user count
+        scenario: Selected growth scenario
+        market_condition: Current market condition
+        token_price: Current token price
+        segment_distribution: 5A segment percentages
+        avg_five_a_multiplier: Average 5A multiplier across users
+    
+    Returns:
+        Tuple of (new_users, churned_users, growth_rate, five_a_impacts)
+        five_a_impacts contains:
+        - retention_boost: Applied retention multiplier
+        - growth_boost: Applied growth multiplier
+    """
+    if month < 1:
+        return 0, 0, 0.0, {'retention_boost': 1.0, 'growth_boost': 1.0}
+    
+    market_config = MARKET_CONDITIONS[market_condition]
+    
+    # Calculate base growth rate (same logic as calculate_monthly_growth)
+    if month > 12:
+        equivalent_month = ((month - 1) % 12) + 1
+        base_growth_rate = scenario.monthly_growth_rates[equivalent_month - 1]
+        years_elapsed = (month - 1) // 12
+        decay_factors = [1.0, 0.80, 0.65, 0.55, 0.50]
+        decay_factor = decay_factors[min(years_elapsed, len(decay_factors) - 1)]
+        year = 2025 + years_elapsed
+        if year in MARKET_CYCLE_2025_2030:
+            cycle_config = MARKET_CYCLE_2025_2030[year]
+            base_growth_rate = base_growth_rate * decay_factor * cycle_config.growth_multiplier
+        else:
+            base_growth_rate = base_growth_rate * decay_factor
+    else:
+        base_growth_rate = scenario.monthly_growth_rates[month - 1]
+    
+    # Apply market condition
+    adjusted_growth_rate = base_growth_rate * market_config.growth_multiplier
+    
+    # Calculate 5A growth boost
+    active_percent = 0.15  # Default baseline
+    if segment_distribution:
+        active_percent = (
+            segment_distribution.get('active', 0.12) +
+            segment_distribution.get('power_users', 0.03)
+        )
+    
+    five_a_growth_boost = calculate_five_a_growth_boost(avg_five_a_multiplier, active_percent)
+    adjusted_growth_rate *= five_a_growth_boost
+    
+    # Apply FOMO event boost
+    fomo_event = get_fomo_event_for_month(month, scenario)
+    if fomo_event:
+        fomo_boost = (fomo_event.impact_multiplier - 1) * market_config.fomo_multiplier
+        adjusted_growth_rate += fomo_boost * 0.3
+    
+    # Calculate viral + organic growth
+    viral_new_users = int(current_users * scenario.viral_coefficient * 0.1 * five_a_growth_boost)
+    organic_growth = int(current_users * adjusted_growth_rate)
+    new_users = max(0, organic_growth + viral_new_users)
+    
+    # Calculate retention with 5A boost
+    if month <= 1:
+        retention_rate = scenario.month1_retention
+    elif month <= 3:
+        retention_rate = scenario.month3_retention
+    elif month <= 6:
+        retention_rate = scenario.month6_retention
+    else:
+        retention_rate = scenario.month12_retention
+    
+    # Apply market condition
+    adjusted_retention = retention_rate * market_config.retention_multiplier
+    
+    # Apply 5A retention boost
+    five_a_retention_boost = 1.0
+    if segment_distribution:
+        five_a_retention_boost = calculate_five_a_retention_boost(segment_distribution)
+    
+    adjusted_retention *= five_a_retention_boost
+    adjusted_retention = min(adjusted_retention, 0.95)  # Cap at 95% retention
+    
+    # Calculate churn
+    churn_rate = 1 - adjusted_retention
+    churned_users = int(current_users * churn_rate * MONTHLY_CHURN_DAMPENING_FACTOR)
+    
+    five_a_impacts = {
+        'retention_boost': round(five_a_retention_boost, 3),
+        'growth_boost': round(five_a_growth_boost, 3),
+        'adjusted_retention_rate': round(adjusted_retention, 4),
+        'adjusted_growth_rate': round(adjusted_growth_rate, 4),
+    }
+    
+    return new_users, churned_users, adjusted_growth_rate, five_a_impacts

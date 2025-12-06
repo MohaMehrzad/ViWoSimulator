@@ -68,7 +68,7 @@ MATURITY_ADJUSTMENTS = {
         'avg_profile_price': 20,        # Low prices
         'nft_percentage': 0.001,        # 0.1% NFT mints
         'creator_percentage': 0.12,     # 12% are creators
-        'staking_participation': 0.08,  # 8% stake tokens
+        'staking_participation': 0.10,  # 10% stake tokens (WhitePaper)
     },
     PlatformMaturity.GROWING: {
         'cac_multiplier': 1.15,         # 15% higher CAC
@@ -80,7 +80,7 @@ MATURITY_ADJUSTMENTS = {
         'avg_profile_price': 60,        # Growing prices
         'nft_percentage': 0.005,        # 0.5% NFT mints
         'creator_percentage': 0.15,     # 15% are creators
-        'staking_participation': 0.12,  # 12% stake tokens
+        'staking_participation': 0.10,  # 10% stake tokens (WhitePaper)
     },
     PlatformMaturity.ESTABLISHED: {
         'cac_multiplier': 1.0,          # Base CAC
@@ -92,7 +92,7 @@ MATURITY_ADJUSTMENTS = {
         'avg_profile_price': 100,       # Established prices
         'nft_percentage': 0.01,         # 1% NFT mints
         'creator_percentage': 0.18,     # 18% are creators
-        'staking_participation': 0.20,  # 20% stake tokens
+        'staking_participation': 0.10,  # 10% stake tokens (WhitePaper)
     },
 }
 
@@ -877,6 +877,175 @@ class PointsParameters(BaseModel):
     )
 
 
+class FiveAStarConfig(BaseModel):
+    """
+    Configuration for a single 5A star pillar.
+    
+    Each star (Identity, Accuracy, Agility, Activity, Approved) can be configured
+    with its own weight, tier thresholds, and behavior factors.
+    """
+    weight: float = Field(
+        default=0.20, ge=0.0, le=1.0,
+        description="Weight of this star in compound calculations (0.0-1.0)"
+    )
+    tier_thresholds: list = Field(
+        default=[30, 60, 90],
+        description="Thresholds for Bronze(<30)/Silver(<60)/Gold(<90)/Diamond(90+)"
+    )
+    avg_percentage: float = Field(
+        default=50.0, ge=0.0, le=100.0,
+        description="Average percentage for this star across user population"
+    )
+    std_deviation: float = Field(
+        default=20.0, ge=0.0, le=50.0,
+        description="Standard deviation for star distribution"
+    )
+    min_percentage: float = Field(
+        default=0.0, ge=0.0, le=100.0,
+        description="Minimum percentage a user can have for this star (0% = can earn nothing)"
+    )
+    max_percentage: float = Field(
+        default=100.0, ge=0.0, le=100.0,
+        description="Maximum percentage a user can have for this star"
+    )
+
+
+class FiveAPolicyParameters(BaseModel):
+    """
+    5A Policy gamification configuration.
+    
+    The 5A Policy evaluates users on 5 pillars:
+    1. Identity (Authenticity/Authority) - KYC level, profile completeness, verification status
+    2. Accuracy (Honesty) - Content quality, factual accuracy, report accuracy
+    3. Agility - Response time, engagement speed, adaptability
+    4. Activity - Daily actions, posting frequency, platform engagement
+    5. Approved (Liability) - Reputation score, community standing, trust level
+    
+    LINEAR FORMULA (December 2025):
+    - multiplier = (average_stars / 100) * 2.0
+    - 0% average = 0x multiplier (earn nothing)
+    - 50% average = 1x multiplier (neutral baseline)
+    - 100% average = 2x multiplier (earn double)
+    
+    REALISTIC DISTRIBUTION (Based on 90-9-1 Rule):
+    - Lurkers (60%): Low activity, minimal engagement
+    - Casual (25%): Weekly activity, some engagement
+    - Active (12%): Daily activity, regular posting
+    - Power Users (3%): High creators, verified, engaged
+    """
+    enable_five_a: bool = Field(
+        default=True,
+        description="Enable 5A Policy gamification system"
+    )
+    
+    # Use segment-based distribution for realistic simulation
+    use_segments: bool = Field(
+        default=True,
+        description="Use 4-segment user model (Lurkers/Casual/Active/Power) instead of uniform distribution"
+    )
+    
+    # Segment percentages (must sum to 100%)
+    segment_lurkers_percent: float = Field(
+        default=0.60, ge=0.0, le=1.0,
+        description="Percentage of users who are lurkers (view only, minimal interaction)"
+    )
+    segment_casual_percent: float = Field(
+        default=0.25, ge=0.0, le=1.0,
+        description="Percentage of users who are casual (weekly activity)"
+    )
+    segment_active_percent: float = Field(
+        default=0.12, ge=0.0, le=1.0,
+        description="Percentage of users who are active (daily activity)"
+    )
+    segment_power_percent: float = Field(
+        default=0.03, ge=0.0, le=1.0,
+        description="Percentage of users who are power users (top creators)"
+    )
+    
+    # Per-star configuration - REALISTIC DEFAULTS based on research
+    # These represent population-weighted averages across all segments
+    identity_star: FiveAStarConfig = Field(
+        default_factory=lambda: FiveAStarConfig(
+            weight=0.25, avg_percentage=38.0, std_deviation=25.0
+        ),
+        description="Identity (Authority) - Most users don't complete KYC fully"
+    )
+    accuracy_star: FiveAStarConfig = Field(
+        default_factory=lambda: FiveAStarConfig(
+            weight=0.20, avg_percentage=52.0, std_deviation=20.0
+        ),
+        description="Accuracy (Honesty) - Content quality varies widely"
+    )
+    agility_star: FiveAStarConfig = Field(
+        default_factory=lambda: FiveAStarConfig(
+            weight=0.15, avg_percentage=35.0, std_deviation=22.0
+        ),
+        description="Agility - Response time skewed by lurkers"
+    )
+    activity_star: FiveAStarConfig = Field(
+        default_factory=lambda: FiveAStarConfig(
+            weight=0.25, avg_percentage=28.0, std_deviation=28.0
+        ),
+        description="Activity - 60% lurkers drag down average significantly"
+    )
+    approved_star: FiveAStarConfig = Field(
+        default_factory=lambda: FiveAStarConfig(
+            weight=0.15, avg_percentage=58.0, std_deviation=18.0
+        ),
+        description="Approved (Liability) - Most users maintain basic standing"
+    )
+    
+    # Linear multiplier settings (0x to 2x scale)
+    compound_base: float = Field(
+        default=1.0, ge=0.1, le=2.0,
+        description="(Legacy) Base multiplier - ignored in linear formula"
+    )
+    compound_exponent: float = Field(
+        default=1.5, ge=0.5, le=3.0,
+        description="(Legacy) Exponent - ignored in linear formula"
+    )
+    min_multiplier: float = Field(
+        default=0.0, ge=0.0, le=1.0,
+        description="Minimum multiplier at 0% stars (0x = earn nothing)"
+    )
+    max_multiplier: float = Field(
+        default=2.0, ge=1.0, le=10.0,
+        description="Maximum multiplier at 100% stars (2x = earn double)"
+    )
+    
+    # Module impact settings
+    reward_impact_weight: float = Field(
+        default=1.0, ge=0.0, le=2.0,
+        description="How strongly 5A affects reward distribution (0=none, 1=full, 2=double)"
+    )
+    staking_apy_bonus_max: float = Field(
+        default=0.50, ge=0.0, le=1.0,
+        description="Maximum staking APY bonus for top performers (0.50 = +50%)"
+    )
+    governance_power_bonus_max: float = Field(
+        default=0.50, ge=0.0, le=1.0,
+        description="Maximum governance power bonus for top performers"
+    )
+    fee_discount_max: float = Field(
+        default=0.50, ge=0.0, le=0.90,
+        description="Maximum fee discount for high 5A users (0.50 = 50% off)"
+    )
+    content_visibility_bonus_max: float = Field(
+        default=0.50, ge=0.0, le=2.0,
+        description="Maximum content visibility boost for high 5A creators"
+    )
+    
+    # Evolution settings (for monthly progression)
+    monthly_improvement_rate: float = Field(
+        default=0.02, ge=0.0, le=0.10,
+        description="Average monthly improvement in star ratings for active users"
+    )
+    inactivity_decay_rate: float = Field(
+        default=0.05, ge=0.0, le=0.20,
+        description="Monthly decay rate for inactive users' star ratings"
+    )
+
+
 class GaslessParameters(BaseModel):
     """
     Gasless onboarding configuration (2025 Standards).
@@ -1033,13 +1202,19 @@ class SimulationParameters(BaseModel):
         description="Gasless onboarding parameters"
     )
     
+    # === 5A POLICY GAMIFICATION (Dec 2025) ===
+    five_a: Optional[FiveAPolicyParameters] = Field(
+        default_factory=FiveAPolicyParameters,
+        description="5A Policy gamification parameters (Identity, Accuracy, Agility, Activity, Approved)"
+    )
+    
     # === GROWTH SCENARIO SETTINGS (NEW - Nov 2025) ===
     growth_scenario: GrowthScenarioType = Field(
         default=GrowthScenarioType.BASE,
         description="Growth scenario for user projections (conservative, base, bullish)"
     )
     market_condition: MarketConditionType = Field(
-        default=MarketConditionType.BULL,
+        default=MarketConditionType.NEUTRAL,
         description="Macro market condition affecting growth (bear, neutral, bull)"
     )
     starting_waitlist_users: int = Field(
@@ -1099,15 +1274,15 @@ class SimulationParameters(BaseModel):
         description="CAC for global active consumer (not just install)"
     )
     high_quality_creator_cac: float = Field(
-        default=8000, ge=1000, le=50000,  # Was $3000, now $8000
+        default=3000, ge=1000, le=50000,
         description="CAC for HQ creators (100K+ followers)"
     )
     mid_level_creator_cac: float = Field(
-        default=1500, ge=200, le=10000,  # Was $250, now $1500
+        default=500, ge=200, le=10000,
         description="CAC for mid-level creators (10K+ followers)"
     )
     high_quality_creators_needed: int = Field(
-        default=3, ge=0, le=50,  # Reduced from 5
+        default=5, ge=0, le=50,
         description="Number of HQ creators to acquire"
     )
     mid_level_creators_needed: int = Field(
@@ -1118,11 +1293,11 @@ class SimulationParameters(BaseModel):
     # === ECONOMIC PARAMETERS ===
     # Issue #5 - Sustainable token economics (Updated Nov 2025)
     burn_rate: float = Field(
-        default=0.05, ge=0, le=0.25,  # Updated: max 25% for aggressive deflation
+        default=0.10, ge=0, le=0.25,  # 10% burn rate for recapture
         description="Burn rate (0-25%, % of collected fees burned)"
     )
     buyback_percent: float = Field(
-        default=0.03, ge=0, le=0.25,  # Updated: max 25% for aggressive buybacks
+        default=0.10, ge=0, le=0.25,  # 10% buyback for recapture
         description="% of USD revenue used to buyback VCoin from market (0-25%)"
     )
     # Issue #3 - Realistic conversion rates
@@ -1132,7 +1307,7 @@ class SimulationParameters(BaseModel):
     )
     # Issue #8 - Realistic posting rates
     posts_per_user: float = Field(
-        default=0.6, ge=0.1, le=30.0,  # Allow up to 30 posts/month (1 post/day average)
+        default=9.7, ge=0.1, le=30.0,  # Posts per user per month
         description="Average posts per user per month (all users)"
     )
     creator_percentage: float = Field(
@@ -1169,7 +1344,7 @@ class SimulationParameters(BaseModel):
         description="Starting user count for allocation scaling (growth_factor = 0)"
     )
     target_users_for_max_allocation: int = Field(
-        default=1_000_000, ge=10000, le=100_000_000,
+        default=100_000_000, ge=10000, le=100_000_000,
         description="User count at which maximum allocation (90%) is reached"
     )
     max_per_user_monthly_usd: float = Field(
@@ -1225,28 +1400,39 @@ class SimulationParameters(BaseModel):
         description="Annual staking APY (10% default)"
     )
     staking_participation_rate: float = Field(
-        default=0.15, ge=0.0, le=0.50,
-        description="% of users who stake tokens (15% default, affects Value Accrual)"
+        default=0.10, ge=0.0, le=0.50,
+        description="% of users who stake tokens (10% default, affects Value Accrual)"
     )
     avg_stake_amount: float = Field(
-        default=2000, ge=100, le=100000,
+        default=20000, ge=100, le=100000,
         description="Average stake amount per staker in VCoin"
     )
     staker_fee_discount: float = Field(
-        default=0.30, ge=0.0, le=0.50,
-        description="Fee discount for stakers (30% default)"
+        default=0.10, ge=0.0, le=0.50,
+        description="Fee discount for stakers (10% default)"
     )
     min_stake_amount: float = Field(
-        default=100, ge=0,
+        default=1000, ge=0,
         description="Minimum stake amount in VCoin"
     )
     stake_lock_days: int = Field(
-        default=30, ge=0, le=365,
-        description="Minimum stake lock period in days"
+        default=180, ge=0, le=365,
+        description="Minimum stake lock period in days (6 months)"
     )
     staking_protocol_fee: float = Field(
         default=0.05, ge=0.0, le=0.20,
         description="Protocol fee on staking rewards (5% default)"
+    )
+    
+    # === GAME THEORY PARAMETERS (Issue #5, #6 Fix - Dec 2025) ===
+    # Used in game theory analysis for staking equilibrium calculations
+    lock_period_months: int = Field(
+        default=3, ge=1, le=24,
+        description="Lock period for staking in months (affects game theory analysis)"
+    )
+    early_unstake_penalty: float = Field(
+        default=0.10, ge=0.0, le=0.50,
+        description="Penalty for early unstaking as percentage (10% default)"
     )
     
     # === GOVERNANCE PARAMETERS (NEW - Nov 2025) ===
@@ -1296,15 +1482,15 @@ class SimulationParameters(BaseModel):
     # === CREATOR ECONOMY PARAMETERS (NEW - Nov 2025) ===
     # Dynamic Boost Post Fee - scales based on users and token price
     boost_post_target_usd: float = Field(
-        default=0.15, ge=0.01, le=5.0,
+        default=3.0, ge=0.01, le=10.0,
         description="Target USD value for boost post fee"
     )
     boost_post_min_usd: float = Field(
-        default=0.05, ge=0.01, le=1.0,
+        default=1.0, ge=0.01, le=5.0,
         description="Minimum boost post fee in USD"
     )
     boost_post_max_usd: float = Field(
-        default=0.50, ge=0.05, le=10.0,
+        default=5.0, ge=0.05, le=10.0,
         description="Maximum boost post fee in USD"
     )
     boost_post_scale_users: int = Field(
@@ -1330,7 +1516,7 @@ class SimulationParameters(BaseModel):
     enable_liquidity: bool = Field(default=True, description="Enable Liquidity tracking module")
     enable_governance: bool = Field(default=True, description="Enable Governance module")
     # Optional modules
-    enable_advertising: bool = Field(default=False, description="Enable advertising module")
+    enable_advertising: bool = Field(default=True, description="Enable advertising module")
     enable_exchange: bool = Field(default=True, description="Enable exchange/wallet module")
     enable_nft: bool = Field(default=True, description="Enable NFT features (enabled by default)")
     
@@ -1363,7 +1549,7 @@ class SimulationParameters(BaseModel):
     )
     premium_content_volume_vcoin: float = Field(default=1000, ge=0, description="Monthly premium content volume")
     content_sale_volume_vcoin: float = Field(default=500, ge=0, description="Monthly content sale volume")
-    content_sale_commission: float = Field(default=0.10, ge=0, le=0.5, description="Content sale commission")
+    # NOTE: content_sale_commission was removed - Content module is break-even by design (creators keep 100%)
     
     # === ADVERTISING MODULE PRICING (USD) - Updated Nov 2025 ===
     banner_cpm: float = Field(
@@ -1481,6 +1667,40 @@ class SimulationParameters(BaseModel):
             adjustments.get('banner_cpm', self.banner_cpm),
             adjustments.get('video_cpm', self.video_cpm)
         )
+    
+    # Issue #7 Fix: Add maturity-adjusted profile marketplace getters
+    def get_effective_monthly_sales(self) -> int:
+        """Get monthly profile sales adjusted for platform maturity"""
+        if not self.auto_adjust_for_maturity:
+            return self.monthly_sales
+        
+        adjustments = self.get_maturity_adjustments()
+        return adjustments.get('profile_sales_monthly', self.monthly_sales)
+    
+    def get_effective_avg_profile_price(self) -> float:
+        """Get average profile price adjusted for platform maturity"""
+        if not self.auto_adjust_for_maturity:
+            return self.avg_profile_price
+        
+        adjustments = self.get_maturity_adjustments()
+        return adjustments.get('avg_profile_price', self.avg_profile_price)
+    
+    def get_effective_nft_percentage(self) -> float:
+        """Get NFT minting percentage adjusted for platform maturity"""
+        if not self.auto_adjust_for_maturity:
+            return self.nft_mint_percentage
+        
+        adjustments = self.get_maturity_adjustments()
+        return adjustments.get('nft_percentage', self.nft_mint_percentage)
+    
+    def get_effective_creator_percentage(self) -> float:
+        """Get creator percentage adjusted for platform maturity"""
+        creator_pct = getattr(self, 'creator_percentage', 0.10)
+        if not self.auto_adjust_for_maturity:
+            return creator_pct
+        
+        adjustments = self.get_maturity_adjustments()
+        return adjustments.get('creator_percentage', creator_pct)
     
     def get_effective_staking_participation(self) -> float:
         """

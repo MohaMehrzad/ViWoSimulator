@@ -69,11 +69,11 @@ class StakingTier:
     nft_boost_eligible: bool = False  # Can boost with NFT staking
 
 
-# Default staking tiers (optimized for Solana economics)
+# Default staking tiers (WhitePaper v1.4 - Section 5.4)
 STAKING_TIERS = [
     StakingTier(
         name="Bronze", 
-        min_stake=100, 
+        min_stake=1000,      # WhitePaper: 1,000 VCN minimum
         fee_discount=0.10, 
         voting_power=1.0, 
         apy_bonus=0,
@@ -82,7 +82,7 @@ STAKING_TIERS = [
     ),
     StakingTier(
         name="Silver", 
-        min_stake=1000, 
+        min_stake=5000,      # WhitePaper: 5,000 VCN minimum
         fee_discount=0.20, 
         voting_power=2.0, 
         apy_bonus=0.01,
@@ -91,7 +91,7 @@ STAKING_TIERS = [
     ),
     StakingTier(
         name="Gold", 
-        min_stake=10000, 
+        min_stake=20000,     # WhitePaper: 20,000 VCN minimum
         fee_discount=0.30, 
         voting_power=5.0, 
         apy_bonus=0.02,
@@ -100,7 +100,7 @@ STAKING_TIERS = [
     ),
     StakingTier(
         name="Platinum", 
-        min_stake=100000, 
+        min_stake=100000,    # WhitePaper: 100,000 VCN minimum
         fee_discount=0.50, 
         voting_power=10.0, 
         apy_bonus=0.03,
@@ -224,7 +224,8 @@ def calculate_staking(
     params: SimulationParameters,
     users: int,
     monthly_emission: float,
-    circulating_supply: float = 100_000_000
+    circulating_supply: float = 100_000_000,
+    five_a_apy_boost: float = 0.0,
 ) -> dict:
     """
     Calculate complete staking metrics for Solana-based staking program.
@@ -242,6 +243,12 @@ def calculate_staking(
         users: Total active users
         monthly_emission: Monthly token emission
         circulating_supply: Current circulating supply
+        five_a_apy_boost: Average 5A APY boost across population (0.0-0.5)
+    
+    5A Integration (Dec 2025):
+    - High 5A stakers get bonus APY (up to +50%)
+    - five_a_apy_boost is average boost across staking population
+    - Increases effective APY and staking attractiveness
     
     Returns:
         Dict with all staking metrics and Solana-specific data
@@ -288,7 +295,12 @@ def calculate_staking(
         }
     
     # Get parameters
-    staking_apy = params.staking_apy
+    base_staking_apy = params.staking_apy
+    # 5A Integration: Apply APY boost from 5A policy
+    # High 5A stakers get bonus APY (e.g., avg_boost of 0.05 = +5% effective APY)
+    effective_five_a_apy_boost = base_staking_apy * five_a_apy_boost  # e.g., 10% * 0.5 = +5%
+    staking_apy = base_staking_apy + effective_five_a_apy_boost
+    
     # HIGH-04 Fix: Use maturity-adjusted staking participation rate
     if hasattr(params, 'get_effective_staking_participation'):
         staking_participation_rate = params.get_effective_staking_participation()
@@ -562,5 +574,10 @@ def calculate_staking(
             "WARNING: Staking rewards exceed platform staking revenue. "
             "Difference is subsidized from emission allocation or treasury."
         ) if staking_revenue_usd < (total_monthly_rewards * token_price) else None,
+        
+        # 5A Integration
+        'five_a_apy_boost': round(five_a_apy_boost * 100, 2),
+        'five_a_effective_apy_boost': round(effective_five_a_apy_boost * 100, 2),
+        'base_staking_apy': round(base_staking_apy * 100, 1),
     }
 

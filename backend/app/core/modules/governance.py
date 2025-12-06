@@ -426,7 +426,8 @@ def calculate_governance(
     params: SimulationParameters,
     stakers_count: int,
     total_staked: float,
-    circulating_supply: float = 100_000_000
+    circulating_supply: float = 100_000_000,
+    five_a_governance_boost: float = 0.0,
 ) -> Dict:
     """
     Calculate complete governance metrics for veVCoin system.
@@ -436,6 +437,12 @@ def calculate_governance(
         stakers_count: Number of stakers
         total_staked: Total staked VCoin
         circulating_supply: Current circulating supply
+        five_a_governance_boost: Average 5A governance power boost (0.0-0.5)
+    
+    5A Integration (Dec 2025):
+    - High 5A users get boosted voting power
+    - five_a_governance_boost is average boost across voting population
+    - Increases effective governance influence for high performers
     
     Returns:
         Dict with all governance metrics
@@ -501,6 +508,11 @@ def calculate_governance(
     
     # veVCoin as percentage of circulating supply
     vevcoin_of_circulating = (total_vevcoin / circulating_supply * 100) if circulating_supply > 0 else 0
+    
+    # 5A Integration: Apply governance power boost to voting power
+    # High 5A users get boosted voting influence
+    effective_five_a_voting_boost = participation['active_voting_power'] * five_a_governance_boost
+    boosted_voting_power = participation['active_voting_power'] + effective_five_a_voting_boost
     
     # Governance health score (0-100) - now includes effective participation
     health_factors = [
@@ -572,5 +584,10 @@ def calculate_governance(
         'platform': 'solana_realms',
         'snapshot_voting': True,
         'on_chain_execution': True,
+        
+        # 5A Integration
+        'five_a_governance_boost': round(five_a_governance_boost * 100, 2),
+        'five_a_voting_power_boost': round(effective_five_a_voting_boost, 2),
+        'boosted_voting_power': round(boosted_voting_power, 2),
     }
 

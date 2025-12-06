@@ -19,6 +19,9 @@ from .referral import calculate_referral, ReferralResult
 from .points import calculate_points, PointsResult
 from .gasless import calculate_gasless, GaslessResult
 
+# 5A Policy Gamification (Dec 2025)
+from .five_a_policy import calculate_five_a, get_user_multiplier_adjustment
+
 __all__ = [
     'calculate_identity',
     'calculate_content',
@@ -40,4 +43,7 @@ __all__ = [
     'ReferralResult',
     'PointsResult',
     'GaslessResult',
+    # 5A Policy
+    'calculate_five_a',
+    'get_user_multiplier_adjustment',
 ]

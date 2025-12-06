@@ -306,7 +306,8 @@ def calculate_liquidity(
     params: SimulationParameters,
     users: int,
     monthly_volume: float = 0,
-    circulating_supply: float = 100_000_000
+    circulating_supply: float = 100_000_000,
+    five_a_lp_boost: float = 0.0,
 ) -> dict:
     """
     Calculate complete liquidity metrics for Solana DEXs.
@@ -320,11 +321,16 @@ def calculate_liquidity(
     
     Jupiter aggregates all pools for best execution.
     
+    5A Integration (Dec 2025):
+    - High 5A users are more likely to provide liquidity
+    - five_a_lp_boost increases effective LP participation
+    
     Args:
         params: Simulation parameters
         users: Total active users
         monthly_volume: Estimated monthly trading volume in VCoin
         circulating_supply: Current circulating token supply
+        five_a_lp_boost: Average 5A LP participation boost (0.0-0.5)
     
     Returns:
         Dict with all liquidity metrics, health score, and Solana-specific data
@@ -515,8 +521,11 @@ def calculate_liquidity(
     health_status = get_health_status(health_score)
     
     # Calculate pool breakdown
+    # 5A Integration: High 5A users more likely to provide liquidity
+    # This increases community LP participation by up to 20%
+    five_a_lp_multiplier = 1.0 + (five_a_lp_boost * 0.4)  # Up to +20% more community LPs
     protocol_owned_usd = initial_liquidity * pol_percent
-    community_lp_usd = initial_liquidity * (1 - pol_percent)
+    community_lp_usd = initial_liquidity * (1 - pol_percent) * five_a_lp_multiplier
     
     # Issue #3 fix: Use actual monthly_volume from simulation when provided
     # instead of synthetic user-based estimate
@@ -648,3 +657,118 @@ def calculate_liquidity(
         'mev_protection': True,  # Priority fees prevent sandwich attacks
     }
 
+
+# =============================================================================
+# 5A POLICY PRICE IMPACT (Dynamic 5A - December 2025)
+# =============================================================================
+# 5A affects token price through multiple mechanisms:
+# 1. Direct engagement impact (sentiment)
+# 2. Transaction volume (active users trade more)
+# 3. Burn rate (active users spend/burn more tokens)
+
+def calculate_five_a_price_impact(
+    avg_multiplier: float,
+    active_percent: float,
+    monthly_burns: float,
+    circulating_supply: float,
+    segment_distribution: Optional[Dict[str, float]] = None,
+) -> Dict[str, float]:
+    """
+    Calculate token price impact multiplier based on 5A metrics.
+    
+    This combines three factors that affect token price:
+    
+    1. Direct 5A Impact (Sentiment):
+       - Higher avg 5A score = more engaged community = positive sentiment
+       - Engaged users are less likely to dump tokens
+       - Range: -5% to +5%
+    
+    2. Engagement Volume (Transaction Activity):
+       - More active users = more on-chain transactions
+       - Higher volume supports price through trading fees
+       - Range: -3% to +8%
+    
+    3. Burn Rate (Deflationary Pressure):
+       - Active users spend more tokens (burns via fees)
+       - Higher burn rate = lower supply = higher price
+       - Range: 0% to +8%
+    
+    Args:
+        avg_multiplier: Average 5A multiplier (0.0 to 2.0)
+            - 0.6 = realistic distribution
+            - 1.0 = neutral (50% stars)
+        active_percent: % of users in active + power_users (0.0 to 1.0)
+            - 0.15 = baseline
+        monthly_burns: VCoin burned this month
+        circulating_supply: Current circulating supply
+        segment_distribution: Optional detailed segment breakdown
+    
+    Returns:
+        Dict with:
+        - 'total_multiplier': Combined price multiplier (0.9 to 1.2)
+        - 'direct_impact': From 5A score
+        - 'volume_impact': From trading activity
+        - 'burn_impact': From deflationary burns
+        - 'interpretation': Human-readable explanation
+    """
+    # Factor 1: Direct 5A score impact (sentiment)
+    # Below 1.0x avg = negative sentiment, above = positive
+    direct_impact = (avg_multiplier - 1.0) * 0.05  # Range: -0.05 to +0.05
+    
+    # Factor 2: Engagement-driven volume
+    # Active users trade more frequently
+    # Baseline is 15% active+power, higher = more volume
+    volume_impact = (active_percent - 0.15) * 0.3  # Range: -0.045 to +0.045
+    
+    # Factor 3: Burn rate (deflationary pressure)
+    if circulating_supply > 0:
+        burn_rate = monthly_burns / circulating_supply
+        # 1% monthly burn = 2% price impact, capped at 8%
+        burn_impact = min(burn_rate * 2.0, 0.08)
+    else:
+        burn_impact = 0.0
+    
+    # Combine all factors
+    total_impact = 1.0 + direct_impact + volume_impact + burn_impact
+    total_impact = max(0.9, min(1.2, total_impact))  # Clamp to 0.9x - 1.2x
+    
+    # Generate interpretation
+    if total_impact >= 1.10:
+        interpretation = "Strong positive price pressure from high engagement and burns"
+    elif total_impact >= 1.03:
+        interpretation = "Moderate positive price pressure from active community"
+    elif total_impact >= 0.97:
+        interpretation = "Neutral - balanced engagement and tokenomics"
+    elif total_impact >= 0.93:
+        interpretation = "Slight negative pressure - low engagement affecting volume"
+    else:
+        interpretation = "Negative pressure - disengaged community reducing token utility"
+    
+    return {
+        'total_multiplier': round(total_impact, 4),
+        'direct_impact': round(direct_impact * 100, 2),  # As percentage
+        'volume_impact': round(volume_impact * 100, 2),
+        'burn_impact': round(burn_impact * 100, 2),
+        'interpretation': interpretation,
+        'avg_multiplier_used': round(avg_multiplier, 3),
+        'active_percent_used': round(active_percent * 100, 1),
+        'burn_rate_used': round((monthly_burns / circulating_supply * 100) if circulating_supply > 0 else 0, 3),
+    }
+
+
+def apply_five_a_price_adjustment(
+    base_price: float,
+    five_a_price_impact: Dict[str, float],
+) -> float:
+    """
+    Apply 5A price impact to base token price.
+    
+    Args:
+        base_price: Current token price (e.g., 0.03 USD)
+        five_a_price_impact: Result from calculate_five_a_price_impact()
+    
+    Returns:
+        Adjusted token price
+    """
+    multiplier = five_a_price_impact.get('total_multiplier', 1.0)
+    return base_price * multiplier

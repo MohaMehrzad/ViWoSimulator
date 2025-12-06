@@ -22,6 +22,7 @@ Key distinction:
 - Buybacks create buy pressure using protocol profits (USD flow)
 """
 
+from typing import Optional
 from app.config import config
 from app.models import (
     SimulationParameters, 
@@ -36,7 +37,8 @@ def apply_safety_caps(
     cap_type: str, 
     monthly_emission: float,
     total_revenue_usd: float = 0,
-    token_price: float = 0.03
+    token_price: float = 0.03,
+    circulating_supply: float = None
 ) -> float:
     """
     Apply absolute safety caps to prevent impossible recapture amounts.
@@ -47,12 +49,15 @@ def apply_safety_caps(
         monthly_emission: Monthly token emission for emission-based caps
         total_revenue_usd: Total platform revenue in USD (for revenue-based buyback caps)
         token_price: Current token price (for revenue-based buyback caps)
+        circulating_supply: Current circulating supply (dynamic based on simulation month)
     
     Returns:
         Capped amount in VCoin
     """
     caps = config.ABSOLUTE_CAPS
-    circulating_supply = config.SUPPLY.TGE_CIRCULATING
+    # Use provided circulating_supply or fall back to TGE value for backward compatibility
+    if circulating_supply is None:
+        circulating_supply = config.SUPPLY.TGE_CIRCULATING
     
     # Cap 1: Never exceed emission for token-flow based recapture
     # (burns, treasury, staking come from token circulation)
@@ -179,7 +184,9 @@ def calculate_recapture(
     exchange: ModuleResult,
     rewards: RewardsResult,
     users: int,
-    total_revenue_usd: float = 0
+    total_revenue_usd: float = 0,
+    circulating_supply: float = None,
+    five_a_engagement_boost: float = 0.0,
 ) -> RecaptureResult:
     """
     Calculate total token recapture based on token velocity model.
@@ -190,13 +197,26 @@ def calculate_recapture(
     - BURN: Applied to collected VCoin fees (token flow)
     - BUYBACK: Uses % of USD revenue to buy tokens from market
     
+    5A Integration (Dec 2025):
+    - High 5A engagement increases token velocity (more in-platform spending)
+    - five_a_engagement_boost affects the recapture rate positively
+    
     Args:
         total_revenue_usd: Total platform revenue in USD for buyback calculation
+        circulating_supply: Current circulating supply (dynamic based on simulation month)
+        five_a_engagement_boost: Average 5A engagement boost (0.0-0.5)
     """
+    # Use provided circulating_supply or fall back to TGE value for backward compatibility
+    if circulating_supply is None:
+        circulating_supply = config.SUPPLY.TGE_CIRCULATING
     monthly_emission = rewards.monthly_reward_pool
     
     # Calculate token velocity
     velocity = calculate_token_velocity(params, users, monthly_emission)
+    
+    # 5A Integration: High engagement increases in-platform spending
+    # This boosts the effective velocity by up to 20%
+    five_a_velocity_multiplier = 1.0 + (five_a_engagement_boost * 0.4)  # Up to +20% velocity
     
     # === DIRECT VCOIN TRANSACTIONS ===
     # These are explicit VCoin spends that contribute to recapture
@@ -252,7 +272,9 @@ def calculate_recapture(
     velocity_cap = monthly_emission * 0.40
     direct_cap = monthly_emission * 0.40
     
-    capped_velocity_tokens = min(velocity['tokens_spent'], velocity_cap)
+    # Apply 5A velocity multiplier to in-platform spending
+    boosted_velocity_tokens = velocity['tokens_spent'] * five_a_velocity_multiplier
+    capped_velocity_tokens = min(boosted_velocity_tokens, velocity_cap)
     capped_direct_tokens = min(direct_vcoin_spent, direct_cap)
     
     total_tokens_flowing = capped_velocity_tokens + capped_direct_tokens
@@ -306,15 +328,16 @@ def calculate_recapture(
     raw_staking += staked_creators * 50  # Staked creators lock tokens
     
     # === APPLY SAFETY CAPS ===
-    burn_vcoin = apply_safety_caps(raw_burn, 'burn', monthly_emission)
+    burn_vcoin = apply_safety_caps(raw_burn, 'burn', monthly_emission, circulating_supply=circulating_supply)
     # Buyback uses revenue-based cap instead of emission-based cap
     buyback_vcoin = apply_safety_caps(
         raw_buyback, 'buyback', monthly_emission,
         total_revenue_usd=total_revenue_usd,
-        token_price=params.token_price
+        token_price=params.token_price,
+        circulating_supply=circulating_supply
     )
-    treasury_vcoin = apply_safety_caps(raw_treasury, 'treasury', monthly_emission)
-    staking_vcoin = apply_safety_caps(raw_staking, 'staking', monthly_emission)
+    treasury_vcoin = apply_safety_caps(raw_treasury, 'treasury', monthly_emission, circulating_supply=circulating_supply)
+    staking_vcoin = apply_safety_caps(raw_staking, 'staking', monthly_emission, circulating_supply=circulating_supply)
     
     # Total recaptured
     total_recaptured = burn_vcoin + buyback_vcoin + treasury_vcoin + staking_vcoin

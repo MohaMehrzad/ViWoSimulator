@@ -218,11 +218,21 @@ def calculate_daily_platform_fee(
 # MAIN REWARDS CALCULATION
 # ============================================================================
 
-def calculate_rewards(params: SimulationParameters, users: int) -> RewardsResult:
+def calculate_rewards(
+    params: SimulationParameters,
+    users: int,
+    five_a_reward_multiplier: float = 1.0,
+) -> RewardsResult:
     """
     Calculate Rewards module emission and platform fee.
     
     === CRITICAL: 5% PLATFORM FEE ===
+    
+    5A Integration (Dec 2025):
+    - five_a_reward_multiplier is the average multiplier across population
+    - This affects how rewards are redistributed (not total pool size)
+    - High 5A users earn more, low 5A users earn less
+    - Total rewards distributed remain the same
     
     The platform fee is calculated and taken BEFORE any distribution:
     
@@ -359,6 +369,11 @@ def calculate_rewards(params: SimulationParameters, users: int) -> RewardsResult
     per_user_daily_vcoin = per_user_monthly_vcoin / DAYS_PER_MONTH if users > 0 else 0
     per_user_daily_usd = per_user_daily_vcoin * params.token_price
     
+    # 5A Integration: Calculate redistribution effect
+    # The multiplier shows how much variance there is in distribution
+    # 1.0 = equal distribution, >1.0 = high performers get more
+    five_a_redistribution_pct = abs(five_a_reward_multiplier - 1.0) * 100
+    
     return RewardsResult(
         # Net emission (what users receive after 5% fee)
         monthly_emission=round(net_monthly_emission, 2),
@@ -392,4 +407,8 @@ def calculate_rewards(params: SimulationParameters, users: int) -> RewardsResult
         per_user_monthly_usd=round(per_user_monthly_usd, 4),
         allocation_capped=allocation_capped,
         effective_users=effective_users,
+        
+        # 5A Policy fields
+        five_a_reward_multiplier=round(five_a_reward_multiplier, 4),
+        five_a_redistribution_percent=round(five_a_redistribution_pct, 2),
     )
