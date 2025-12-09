@@ -5,10 +5,10 @@ These values ensure consistency between frontend and backend calculations.
 Updated with 2024-2025 industry benchmarks and sources.
 Addresses Issues #9 (cost scaling), #17 (documented activity rates).
 
-=== TOKEN ALLOCATION (November 2025) ===
+=== TOKEN ALLOCATION (December 2025) ===
 Official VCoin tokenomics with 10 allocation categories:
 - Total Supply: 1,000,000,000 VCoin
-- TGE Circulating: 153,000,000 VCoin (HIGH-01 Fix)
+- TGE Circulating: 114,833,333 VCoin
 - 60-month vesting schedule for most categories
 - 5-year reward emission (350M tokens)
 

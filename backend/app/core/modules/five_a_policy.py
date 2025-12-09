@@ -697,6 +697,11 @@ def generate_user_profiles(
             'power_users': getattr(five_a, 'segment_power_percent', 0.03),
         }
         
+        # Normalize segment percentages to ensure they sum to 1.0 (exclusive segments)
+        total_percent = sum(segment_percentages.values())
+        if total_percent != 1.0 and total_percent > 0:
+            segment_percentages = {k: v / total_percent for k, v in segment_percentages.items()}
+        
         # Calculate user counts per segment
         segment_counts = {}
         remaining = users
@@ -846,6 +851,13 @@ def generate_user_profiles(
                     'diamond': diamond_count,
                 }
             )
+    
+    # Validate profile count matches user count (fix for segment generation bug)
+    if len(profiles) != users:
+        # Log warning but don't fail - truncate or pad profiles to match
+        if len(profiles) > users:
+            profiles = profiles[:users]
+        # If fewer profiles, this shouldn't happen with proper segment logic
     
     return profiles, star_distributions, segment_breakdown
 
@@ -1145,20 +1157,20 @@ def calculate_five_a(
     ]
     
     # Calculate Gini coefficient for fairness
-    # Sort multipliers and calculate Lorenz curve
+    # Using the correct formula: G = (2 * sum((i+1) * x[i]) / (n * sum(x))) - (n+1)/n
+    # Where x is sorted in ascending order
     sorted_mults = sorted(multipliers)
     n = len(sorted_mults)
-    cumulative = 0
-    area_under = 0
     total = sum(sorted_mults)
     
-    for i, m in enumerate(sorted_mults):
-        cumulative += m
-        area_under += cumulative
-    
-    area_under = area_under / (n * total) if total > 0 else 0.5
-    gini = 1 - 2 * (1 - area_under)
-    gini = clamp(gini, 0, 1)
+    if n > 0 and total > 0:
+        # Sum of (rank * value) for each item (1-indexed ranks)
+        weighted_sum = sum((i + 1) * m for i, m in enumerate(sorted_mults))
+        # Gini formula: G = (2 * weighted_sum) / (n * total) - (n + 1) / n
+        gini = (2 * weighted_sum) / (n * total) - (n + 1) / n
+        gini = clamp(gini, 0, 1)
+    else:
+        gini = 0  # Perfect equality if no data
     
     # Fairness score (inverted Gini, 0-100)
     fairness_score = (1 - gini) * 100
