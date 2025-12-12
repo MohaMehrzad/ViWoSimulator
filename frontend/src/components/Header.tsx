@@ -8,6 +8,13 @@ interface HeaderProps {
 }
 
 export function Header({ activeTab, onTabChange }: HeaderProps) {
+  // #region agent log
+  const handleTabChange = (tab: PageTab) => {
+    fetch('http://127.0.0.1:7242/ingest/63e31cbd-d385-4178-b960-6e5c3301028f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Header.tsx:handleTabChange',message:'User clicked tab',data:{fromTab:activeTab,toTab:tab},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'C'})}).catch(()=>{});
+    onTabChange(tab);
+  };
+  // #endregion
+  
   return (
     <header className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white sticky top-0 z-50 shadow-xl">
       <div className="container mx-auto px-4 max-w-7xl">
@@ -29,14 +36,14 @@ export function Header({ activeTab, onTabChange }: HeaderProps) {
           <nav className="flex items-center gap-1 bg-white/10 backdrop-blur-sm rounded-xl p-1">
             <TabButton
               active={activeTab === 'year1'}
-              onClick={() => onTabChange('year1')}
+              onClick={() => handleTabChange('year1')}
               icon="📅"
               label="Year 1"
               description="First 12 months"
             />
             <TabButton
               active={activeTab === 'year5'}
-              onClick={() => onTabChange('year5')}
+              onClick={() => handleTabChange('year5')}
               icon="📈"
               label="5-Year"
               description="Long-term projection"

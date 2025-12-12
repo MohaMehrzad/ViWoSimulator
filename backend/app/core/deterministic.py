@@ -48,6 +48,7 @@ from app.models.results import (
     InflationResult,
     WhaleAnalysisResult,
     TopHoldersGroup,
+    OrganicGrowthResult,
     WhaleInfo,
     DumpScenarioResult,
     AttackAnalysisResult,
@@ -92,6 +93,8 @@ from app.core.modules.points import calculate_points
 from app.core.modules.gasless import calculate_gasless
 # 5A Policy Gamification (Dec 2025)
 from app.core.modules.five_a_policy import calculate_five_a
+# Organic User Growth (Dec 2025)
+from app.core.modules.organic_growth import calculate_organic_growth
 from app.core.metrics import (
     calculate_token_velocity,
     calculate_real_yield,
@@ -107,8 +110,11 @@ from app.core.game_theory import calculate_full_game_theory_analysis
 from app.core.retention import (
     apply_retention_to_snapshot, 
     VCOIN_RETENTION,
+    WAITLIST_USER_RETENTION,
     RetentionModel,
+    RetentionCurve,
     RETENTION_CURVES,
+    CohortTracker,
 )
 from app.config import config
 
@@ -125,7 +131,7 @@ STAKING_RATIO_CAP = 0.60          # Maximum staking ratio for value accrual (60%
 
 
 # LOW-05 Fix: Utility function to filter dict keys to match Pydantic model fields
-from typing import Type, Dict, Any, TypeVar
+from typing import Type, Dict, Any, TypeVar, Tuple
 T = TypeVar('T', bound=BaseModel)
 
 def filter_model_fields(data: Dict[str, Any], model_class: Type[T]) -> T:
@@ -148,15 +154,153 @@ def filter_model_fields(data: Dict[str, Any], model_class: Type[T]) -> T:
     return model_class(**filtered)
 
 
-def calculate_customer_acquisition(params: SimulationParameters) -> CustomerAcquisitionMetrics:
+def calculate_distributed_acquisition_with_retention(
+    params: SimulationParameters,
+    platform_age_months: int,
+    retention_curve: RetentionCurve,
+    is_waitlist: bool = False
+) -> Tuple[int, int]:
+    """
+    Calculate total acquired and active users from distributed budget with cohort retention.
+    
+    Simulates month-by-month acquisition and applies cohort-based retention.
+    
+    Args:
+        params: Simulation parameters
+        platform_age_months: Current platform age in months
+        retention_curve: Retention curve to apply
+        is_waitlist: If True, only returns waitlist users (acquired at month 0)
+    
+    Returns:
+        Tuple of (total_acquired, total_active)
+    """
+    if is_waitlist:
+        # Waitlist users are acquired at month 0 (before platform launch)
+        waitlist_count = getattr(params, 'starting_waitlist_users', 0)
+        if waitlist_count == 0:
+            return 0, 0
+        
+        # Apply retention based on platform age
+        active, _ = apply_retention_to_snapshot(
+            waitlist_count,
+            platform_age_months,
+            retention_curve
+        )
+        return waitlist_count, max(active, int(waitlist_count * 0.20))
+    
+    # For CAC users, simulate month-by-month acquisition
+    if not getattr(params, 'use_distributed_marketing_budget', False):
+        # Legacy: All budget spent at once
+        return 0, 0  # Handled by old logic
+    
+    # Use cohort tracker for realistic simulation
+    tracker = CohortTracker(retention_curve)
+    
+    # Get monthly budgets and acquire users each month
+    total_acquired = 0
+    
+    for month in range(1, min(platform_age_months + 1, 13)):
+        # Get budget for this month
+        if getattr(params, 'marketing_budget_distribution_months', None):
+            if month <= len(params.marketing_budget_distribution_months):
+                monthly_budget = params.marketing_budget_distribution_months[month - 1]
+            else:
+                monthly_budget = 0
+        else:
+            # Default distribution
+            total_budget = params.marketing_budget
+            distribution = {
+                1: 0.2333, 2: 0.1667, 3: 0.1000,
+                4: 0.0667, 5: 0.0667, 6: 0.0667,
+                7: 0.0556, 8: 0.0556, 9: 0.0556,
+                10: 0.0444, 11: 0.0444, 12: 0.0444,
+            }
+            monthly_budget = total_budget * distribution.get(month, 0)
+        
+        # Calculate users acquired this month (excluding creators - they're handled separately)
+        # Subtract creator costs from monthly budget
+        monthly_creator_cost = (
+            (params.high_quality_creators_needed / 12) * params.high_quality_creator_cac +
+            (params.mid_level_creators_needed / 12) * params.mid_level_creator_cac
+        )
+        consumer_budget = max(0, monthly_budget - monthly_creator_cost)
+        
+        # Calculate CAC (blended)
+        na_percent = params.north_america_budget_percent / (params.north_america_budget_percent + params.global_low_income_budget_percent)
+        global_percent = 1 - na_percent
+        blended_cac = (
+            params.cac_north_america_consumer * na_percent +
+            params.cac_global_low_income_consumer * global_percent
+        )
+        
+        users_acquired = int(consumer_budget / blended_cac) if blended_cac > 0 else 0
+        
+        # Add to tracker
+        tracker.add_cohort(month, users_acquired)
+        total_acquired += users_acquired
+    
+    # Calculate active users at platform_age_months
+    active_users = tracker.get_active_users_at_month(platform_age_months)
+    
+    return total_acquired, active_users
+
+
+def get_marketing_budget_for_snapshot(params: SimulationParameters, platform_age_months: int = 6) -> float:
+    """
+    Calculate cumulative marketing budget spent up to platform_age_months.
+    
+    Dec 2025: Supports distributed marketing budget.
+    
+    Args:
+        params: Simulation parameters
+        platform_age_months: Platform age in months (determines how much budget was spent)
+    
+    Returns:
+        Total budget spent up to this month
+    """
+    if not getattr(params, 'use_distributed_marketing_budget', False):
+        # Legacy behavior: assume budget is annual, use proportional amount
+        return params.marketing_budget * (platform_age_months / 12)
+    
+    # Use distributed budget
+    if getattr(params, 'marketing_budget_distribution_months', None):
+        # Custom distribution provided
+        monthly_budgets = params.marketing_budget_distribution_months[:platform_age_months]
+        return sum(monthly_budgets)
+    else:
+        # Default distribution (50% in first 3 months)
+        total_budget = params.marketing_budget
+        distribution = {
+            1: 0.2333, 2: 0.1667, 3: 0.1000,
+            4: 0.0667, 5: 0.0667, 6: 0.0667,
+            7: 0.0556, 8: 0.0556, 9: 0.0556,
+            10: 0.0444, 11: 0.0444, 12: 0.0444,
+        }
+        cumulative = 0
+        for month in range(1, min(platform_age_months + 1, 13)):
+            cumulative += total_budget * distribution.get(month, 0)
+        return cumulative
+
+
+def calculate_customer_acquisition(params: SimulationParameters, platform_age_months: int = 6) -> Tuple[CustomerAcquisitionMetrics, int, int]:
     """
     Calculate customer acquisition breakdown from marketing budget.
     Uses segmented acquisition model: creators + consumers across regions.
     
     Issue #2 fix: Uses updated realistic CAC values.
     Issue #6 fix: Scales down creators when budget is insufficient.
+    Dec 2025 fix: Supports distributed marketing budget based on platform age.
+    Dec 2025 v2: Returns active user count when distributed budget is enabled.
+    
+    Args:
+        params: Simulation parameters
+        platform_age_months: Platform age in months (determines cumulative budget spent)
+    
+    Returns:
+        Tuple of (CustomerAcquisitionMetrics, total_acquired_cac_users, active_cac_users_after_retention)
     """
-    total_budget = params.marketing_budget
+    # Get cumulative budget spent up to this month
+    total_budget = get_marketing_budget_for_snapshot(params, platform_age_months)
     
     # Creator costs (using updated realistic CAC from Issue #2)
     high_creator_cost_requested = params.high_quality_creators_needed * params.high_quality_creator_cac
@@ -200,25 +344,73 @@ def calculate_customer_acquisition(params: SimulationParameters) -> CustomerAcqu
     
     # Total users includes actual creators (not requested)
     total_creators = high_creators_actual + mid_creators_actual
-    total_users = total_creators + na_users + global_users
+    total_users_acquired = total_creators + na_users + global_users
     
-    # Blended CAC - now uses actual spend and actual users
-    blended_cac = total_budget / total_users if total_users > 0 else 0
+    # Blended CAC - uses actual spend and acquired users
+    blended_cac = total_budget / total_users_acquired if total_users_acquired > 0 else 0
     
-    return CustomerAcquisitionMetrics(
-        total_creator_cost=round(total_creator_cost, 2),
-        consumer_acquisition_budget=round(consumer_budget, 2),
-        north_america_budget=round(na_budget, 2),
-        global_low_income_budget=round(global_budget, 2),
-        north_america_users=na_users,
-        global_low_income_users=global_users,
-        total_users=total_users,
-        blended_cac=round(blended_cac, 2),
-        # Issue #6: New fields for budget constraint handling
-        high_quality_creators_actual=high_creators_actual,
-        mid_level_creators_actual=mid_creators_actual,
-        budget_shortfall=budget_shortfall,
-        budget_shortfall_amount=round(budget_shortfall_amount, 2),
+    # Dec 2025: Calculate total users that would be acquired over FULL YEAR (12 months)
+    # This is what gets displayed in "Calculated Users" UI
+    total_users_acquired_full_year = total_users_acquired
+    
+    if getattr(params, 'use_distributed_marketing_budget', False):
+        # Calculate total acquisitions over 12 months (not just platform_age)
+        total_acquired_12m, _ = calculate_distributed_acquisition_with_retention(
+            params, 12, VCOIN_RETENTION, is_waitlist=False  # 12 months, retention not needed for count
+        )
+        # Add creators over 12 months
+        total_users_acquired_full_year = total_creators + total_acquired_12m
+    
+    # Now calculate ACTIVE users at platform_age_months for actual simulation
+    total_users_active = total_users_acquired  # Default to acquired
+    
+    if getattr(params, 'use_distributed_marketing_budget', False) and params.apply_retention:
+        # Get retention curve
+        retention_curve = VCOIN_RETENTION
+        if hasattr(params, 'retention') and hasattr(params.retention, 'model_type'):
+            model_type = params.retention.model_type
+            if model_type.value in [m.value for m in RetentionModel]:
+                retention_curve = RETENTION_CURVES.get(
+                    RetentionModel(model_type.value),
+                    VCOIN_RETENTION
+                )
+        
+        # Calculate active users with cohort-based retention at platform_age
+        _, total_users_active = calculate_distributed_acquisition_with_retention(
+            params, platform_age_months, retention_curve, is_waitlist=False
+        )
+        
+        # Add creators (they don't churn as much - use simple retention)
+        if total_creators > 0:
+            creators_active, _ = apply_retention_to_snapshot(
+                total_creators, platform_age_months, retention_curve
+            )
+            creators_active = max(creators_active, int(total_creators * 0.30))  # Min 30% retention for creators
+            total_users_active += creators_active
+    
+    # Calculate blended CAC for full year acquisitions
+    blended_cac_full_year = params.marketing_budget / total_users_acquired_full_year if total_users_acquired_full_year > 0 else 0
+    
+    return (
+        CustomerAcquisitionMetrics(
+            total_creator_cost=round(total_creator_cost, 2),
+            consumer_acquisition_budget=round(consumer_budget, 2),
+            north_america_budget=round(na_budget, 2),
+            global_low_income_budget=round(global_budget, 2),
+            north_america_users=na_users,
+            global_low_income_users=global_users,
+            # Dec 2025: Show total acquired over FULL YEAR (12 months) for UI display
+            # This shows cumulative user acquisition, not active after churn
+            total_users=total_users_acquired_full_year,
+            blended_cac=round(blended_cac_full_year, 2),
+            # Issue #6: New fields for budget constraint handling
+            high_quality_creators_actual=high_creators_actual,
+            mid_level_creators_actual=mid_creators_actual,
+            budget_shortfall=budget_shortfall,
+            budget_shortfall_amount=round(budget_shortfall_amount, 2),
+        ),
+        total_users_acquired_full_year,  # Total acquired over 12 months (for UI display)
+        total_users_active,              # Total active at platform_age (for simulation calculations)
     )
 
 
@@ -247,9 +439,14 @@ def run_deterministic_simulation(
     - Nov 2025: Applies growth scenario multipliers when enabled
     - HIGH-006: Added simulation_month for future module testing
     """
+    # Get platform age for budget and retention calculations
+    platform_age = getattr(params.retention, 'platform_age_months', 6) if hasattr(params, 'retention') else 6
+    
     # Step 1: Calculate customer acquisition to get user count
-    customer_acquisition = calculate_customer_acquisition(params)
-    acquired_users = customer_acquisition.total_users
+    # Dec 2025: Pass platform_age_months to support distributed marketing budget
+    # Dec 2025 v2: Function now returns tuple (metrics, acquired, active)
+    customer_acquisition_base, total_acquired_from_cac, total_active_from_cac = calculate_customer_acquisition(params, platform_age)
+    acquired_users = total_active_from_cac  # Use active users (after cohort retention) not total acquired
     
     # Use provided starting_users if specified, otherwise use calculated
     if params.starting_users > 0:
@@ -284,18 +481,26 @@ def run_deterministic_simulation(
         scenario_multiplier = scenario_config.month1_fomo_multiplier * market_config.fomo_multiplier
         acquired_users = max(1, int(acquired_users * scenario_multiplier * 0.3))  # 30% dampening
     
-    # Issue #1 Fix: Apply retention model
-    active_users = acquired_users
-    users_before_retention = acquired_users
+    # Issue #1 Fix: Apply retention model with separate cohort tracking
+    # Dec 2025: Separate waitlist users from CAC-acquired users for accurate retention modeling
+    # Dec 2025 v2: Use distributed acquisition with cohort-based retention for CAC users
+    
+    # Get waitlist users from parameters
+    waitlist_users_acquired = getattr(params, 'starting_waitlist_users', 0)
+    
+    active_users = waitlist_users_acquired + acquired_users
+    users_before_retention = waitlist_users_acquired + acquired_users
     retention_applied = False
     retention_rate = None
+    waitlist_users_active = waitlist_users_acquired
+    cac_users_acquired = acquired_users
+    cac_users_active = acquired_users
     
     if params.apply_retention and hasattr(params, 'retention'):
         retention_applied = True
         platform_age = params.retention.platform_age_months
         
-        # Issue #2 Fix: Select retention curve based on retention_model_type parameter
-        # Previously always used VCOIN_RETENTION regardless of user selection
+        # Select standard retention curve based on retention_model_type parameter
         retention_curve = VCOIN_RETENTION  # Default fallback
         if hasattr(params.retention, 'model_type'):
             model_type = params.retention.model_type
@@ -306,16 +511,71 @@ def run_deterministic_simulation(
                     VCOIN_RETENTION
                 )
         
-        active_users, retention_stats = apply_retention_to_snapshot(
-            acquired_users,
-            platform_age,
-            retention_curve
-        )
-        # Ensure at least some users remain (minimum 10% of acquired)
-        active_users = max(active_users, int(acquired_users * 0.10))
+        # Apply WAITLIST_USER_RETENTION to waitlist users (gentler churn)
+        if waitlist_users_acquired > 0:
+            waitlist_users_acquired_total, waitlist_users_active = calculate_distributed_acquisition_with_retention(
+                params, platform_age, WAITLIST_USER_RETENTION, is_waitlist=True
+            )
+        
+        # Apply distributed acquisition with cohort retention to CAC users
+        if getattr(params, 'use_distributed_marketing_budget', False):
+            # Use cohort-based tracking for distributed budget
+            cac_users_acquired, cac_users_active = calculate_distributed_acquisition_with_retention(
+                params, platform_age, retention_curve, is_waitlist=False
+            )
+        else:
+            # Legacy behavior: apply retention to total acquired users
+            if acquired_users > 0:
+                cac_users_active, cac_stats = apply_retention_to_snapshot(
+                    acquired_users,
+                    platform_age,
+                    retention_curve
+                )
+                # Ensure at least some CAC users remain (minimum 10% of acquired)
+                cac_users_active = max(cac_users_active, int(acquired_users * 0.10))
+            cac_users_acquired = acquired_users
+        
+        # Combine both cohorts
+        active_users = waitlist_users_active + cac_users_active
+        users_before_retention = waitlist_users_acquired + cac_users_acquired
         retention_rate = (active_users / users_before_retention * 100) if users_before_retention > 0 else 0
     
-    users = active_users
+    # Step 1b: Calculate Organic Growth (Dec 2025)
+    # Must happen BEFORE modules so organic users are included in revenue calculations
+    organic_users = 0
+    organic_growth_result = None
+    if params.organic_growth and params.organic_growth.enable_organic_growth:
+        # For deterministic simulation, calculate organic growth based on active users
+        organic_growth_result = calculate_organic_growth(
+            params=params,
+            current_users=active_users,
+            month=simulation_month,
+            total_users_acquired=total_acquired_from_cac + waitlist_users_acquired,
+        )
+        organic_users = organic_growth_result.total_organic_users
+    
+    # Combine paid + organic users for all module calculations
+    users = active_users + organic_users
+    
+    # Update customer acquisition metrics to include organic users
+    customer_acquisition = CustomerAcquisitionMetrics(
+        total_creator_cost=customer_acquisition_base.total_creator_cost,
+        consumer_acquisition_budget=customer_acquisition_base.consumer_acquisition_budget,
+        north_america_budget=customer_acquisition_base.north_america_budget,
+        global_low_income_budget=customer_acquisition_base.global_low_income_budget,
+        north_america_users=customer_acquisition_base.north_america_users,
+        global_low_income_users=customer_acquisition_base.global_low_income_users,
+        total_users=customer_acquisition_base.total_users,
+        blended_cac=customer_acquisition_base.blended_cac,
+        high_quality_creators_actual=customer_acquisition_base.high_quality_creators_actual,
+        mid_level_creators_actual=customer_acquisition_base.mid_level_creators_actual,
+        budget_shortfall=customer_acquisition_base.budget_shortfall,
+        budget_shortfall_amount=customer_acquisition_base.budget_shortfall_amount,
+        # Add organic users
+        organic_users=organic_users,
+        total_users_with_organic=customer_acquisition_base.total_users + organic_users,
+        organic_percent=round((organic_users / users * 100), 2) if users > 0 else 0.0,
+    )
     
     # Determine user source for summary
     if params.starting_users > 0:
@@ -325,7 +585,7 @@ def run_deterministic_simulation(
     else:
         user_source = 'marketing_budget'
     
-    # Build starting users summary
+    # Build starting users summary with cohort tracking
     starting_users_summary = StartingUsersSummary(
         total_active_users=users,
         user_source=user_source,
@@ -340,6 +600,16 @@ def run_deterministic_simulation(
         users_before_retention=users_before_retention if retention_applied else None,
         users_after_retention=active_users if retention_applied else None,
         retention_rate=round(retention_rate, 1) if retention_rate is not None else None,
+        # Cohort tracking (Dec 2025)
+        waitlist_users_acquired=waitlist_users_acquired if waitlist_users_acquired > 0 else None,
+        waitlist_users_active=waitlist_users_active if retention_applied and waitlist_users_acquired > 0 else None,
+        waitlist_retention_rate=round((waitlist_users_active / waitlist_users_acquired * 100), 1) if retention_applied and waitlist_users_acquired > 0 else None,
+        cac_users_acquired=cac_users_acquired if cac_users_acquired > 0 else None,
+        cac_users_active=cac_users_active if retention_applied and cac_users_acquired > 0 else None,
+        cac_retention_rate=round((cac_users_active / cac_users_acquired * 100), 1) if retention_applied and cac_users_acquired > 0 else None,
+        # Organic growth (Dec 2025)
+        organic_users_acquired=organic_users if organic_users > 0 else None,
+        organic_percent_of_total=round((organic_users / users * 100), 1) if users > 0 and organic_users > 0 else None,
     )
     
     # Step 2a: Calculate 5A Policy first (Dec 2025)
@@ -431,12 +701,21 @@ def run_deterministic_simulation(
     liquidity_result = LiquidityResult(**liquidity_data)
     
     # Step 5c (NEW): Calculate Staking metrics with 5A APY boost
+    # === DYNAMIC STAKING CAP (December 2025) ===
+    # User rewards are calculated first (priority for growth)
+    # Staking is capped based on remaining budget at 7% APY
+    # Cap = (remaining_budget * 12) / APY - ensures budget compliance
+    max_monthly_emission = config.MONTHLY_EMISSION  # 5,833,333 VCoin
+    user_rewards_used = rewards.gross_monthly_emission  # What user rewards already consumed
+    remaining_for_staking = max(0, max_monthly_emission - user_rewards_used)
+    
     staking_data = calculate_staking(
         params,
         users,
         monthly_emission=rewards.monthly_reward_pool,
         circulating_supply=circulating_supply,
         five_a_apy_boost=five_a_apy_boost_avg,
+        max_staking_budget=remaining_for_staking,  # Used to calculate staking cap
     )
     staking_result = StakingResult(**staking_data)
     
@@ -1191,4 +1470,6 @@ def run_deterministic_simulation(
         prelaunch=prelaunch_result,
         # NEW: 5A Policy Gamification (Dec 2025)
         five_a=five_a_result,
+        # NEW: Organic User Growth (Dec 2025)
+        organic_growth=organic_growth_result,
     )

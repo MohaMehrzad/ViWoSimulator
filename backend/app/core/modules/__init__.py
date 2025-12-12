@@ -22,6 +22,9 @@ from .gasless import calculate_gasless, GaslessResult
 # 5A Policy Gamification (Dec 2025)
 from .five_a_policy import calculate_five_a, get_user_multiplier_adjustment
 
+# Organic User Growth (Dec 2025)
+from .organic_growth import calculate_organic_growth, calculate_organic_growth_monthly
+
 __all__ = [
     'calculate_identity',
     'calculate_content',
@@ -46,4 +49,7 @@ __all__ = [
     # 5A Policy
     'calculate_five_a',
     'get_user_multiplier_adjustment',
+    # Organic User Growth
+    'calculate_organic_growth',
+    'calculate_organic_growth_monthly',
 ]

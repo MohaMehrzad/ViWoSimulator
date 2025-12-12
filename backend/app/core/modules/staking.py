@@ -226,6 +226,7 @@ def calculate_staking(
     monthly_emission: float,
     circulating_supply: float = 100_000_000,
     five_a_apy_boost: float = 0.0,
+    max_staking_budget: float = None,
 ) -> dict:
     """
     Calculate complete staking metrics for Solana-based staking program.
@@ -238,12 +239,20 @@ def calculate_staking(
     - Instant staking (no epoch wait)
     - Minimal gas costs (~$0.00025 per transaction)
     
+    === UNIFIED BUDGET CONSTRAINT (December 2025) ===
+    
+    Staking rewards are now subject to a unified budget constraint:
+    - User rewards are calculated first (priority for growth)
+    - Staking rewards are capped to remaining budget
+    - If staking would exceed budget, effective APY is reduced
+    
     Args:
         params: Simulation parameters
         users: Total active users
         monthly_emission: Monthly token emission
         circulating_supply: Current circulating supply
         five_a_apy_boost: Average 5A APY boost across population (0.0-0.5)
+        max_staking_budget: Maximum VCoin available for staking rewards (unified budget constraint)
     
     5A Integration (Dec 2025):
     - High 5A stakers get bonus APY (up to +50%)
@@ -269,6 +278,9 @@ def calculate_staking(
             'tx_fee_revenue_vcoin': 0,
             'total_revenue_vcoin': 0,
             'staking_apy': 0,
+            'staking_cap': 0,
+            'staking_at_capacity': False,
+            'staking_capacity_percent': 0,
             'staker_fee_discount': 0,
             'min_stake_amount': 0,
             'lock_days': 0,
@@ -327,12 +339,48 @@ def calculate_staking(
     total_staked = participation['total_staked']
     avg_stake = participation['avg_stake_amount']
     
-    # Calculate total staking rewards for all stakers
+    # === DYNAMIC STAKING CAP (December 2025) ===
+    # Calculate max tokens that can be staked within budget at current APY
+    # Uses 7% APY cap to ensure budget compliance with minimal overflow
+    # Grandfather: existing stakes stay, cap only limits new staking
+    
+    if max_staking_budget is not None and max_staking_budget > 0 and staking_apy > 0:
+        # Max staked = budget * 12 / APY
+        staking_cap = (max_staking_budget * 12) / staking_apy
+        
+        # Cap the staked amount to what budget allows
+        if total_staked > staking_cap:
+            # Over cap - limit to cap (grandfather in monthly progression)
+            capped_staked = staking_cap
+            staking_at_capacity = True
+        else:
+            capped_staked = total_staked
+            staking_at_capacity = False
+        
+        # Use capped staked amount for reward calculations
+        effective_total_staked = capped_staked
+    else:
+        # No budget constraint or invalid values
+        staking_cap = float('inf')
+        staking_at_capacity = False
+        effective_total_staked = total_staked
+    
+    # Calculate staking capacity percentage
+    if staking_cap > 0 and staking_cap != float('inf'):
+        staking_capacity_percent = (total_staked / staking_cap) * 100
+    else:
+        staking_capacity_percent = 0
+    
+    # Calculate total staking rewards with capped staked amount
     total_monthly_rewards = calculate_staking_rewards(
-        total_staked,
+        effective_total_staked,
         staking_apy,
         duration_months=1
     )
+    
+    # Update total_staked to reflect capped value for downstream calculations
+    original_total_staked = total_staked
+    total_staked = effective_total_staked
     
     # Rewards per staker
     rewards_per_staker = (
@@ -477,7 +525,10 @@ def calculate_staking(
         'total_revenue_vcoin': round(staking_revenue_vcoin, 2),
         
         # Core metrics
-        'staking_apy': round(staking_apy * 100, 1),
+        'staking_apy': round(staking_apy * 100, 1),  # Fixed 7% APY
+        'staking_cap': round(staking_cap, 2) if staking_cap != float('inf') else 0,  # Max tokens allowed
+        'staking_at_capacity': staking_at_capacity,  # Whether staking pool is full
+        'staking_capacity_percent': round(min(staking_capacity_percent, 100), 1),  # Current usage of capacity
         'staker_fee_discount': round(staker_fee_discount * 100, 1),
         'min_stake_amount': min_stake,
         'lock_days': lock_days,

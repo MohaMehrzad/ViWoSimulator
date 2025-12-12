@@ -14,12 +14,16 @@ interface MonthlyProgressionChartProps {
 type MetricType = 'users' | 'financials' | 'tokens' | 'retention' | 'price' | 'allocation';
 
 const formatCurrency = (value: number): string => {
+  if (value >= 1000000000000) return `$${(value / 1000000000000).toFixed(2)}T`;
+  if (value >= 1000000000) return `$${(value / 1000000000).toFixed(2)}B`;
   if (value >= 1000000) return `$${(value / 1000000).toFixed(2)}M`;
   if (value >= 1000) return `$${(value / 1000).toFixed(1)}K`;
   return `$${value.toFixed(0)}`;
 };
 
 const formatNumber = (value: number): string => {
+  if (value >= 1000000000000) return `${(value / 1000000000000).toFixed(2)}T`;
+  if (value >= 1000000000) return `${(value / 1000000000).toFixed(2)}B`;
   if (value >= 1000000) return `${(value / 1000000).toFixed(2)}M`;
   if (value >= 1000) return `${(value / 1000).toFixed(1)}K`;
   return value.toFixed(0);

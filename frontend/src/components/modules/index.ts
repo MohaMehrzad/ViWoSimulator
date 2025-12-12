@@ -29,3 +29,5 @@ export { GameTheorySection } from './GameTheorySection';
 export { TokenUnlocksSection } from './TokenUnlocksSection';
 // 5A Policy Gamification (Dec 2025)
 export { FiveAPolicySection } from './FiveAPolicySection';
+// Organic User Growth (Dec 2025)
+export { OrganicGrowthSection } from './OrganicGrowthSection';

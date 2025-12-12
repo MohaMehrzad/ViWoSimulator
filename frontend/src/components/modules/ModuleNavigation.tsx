@@ -36,6 +36,7 @@ const YEAR1_SECTIONS: SectionConfig[] = [
   { id: 'liquidity', label: 'Liquidity', icon: '💧', alwaysShow: true },
   { id: 'staking', label: 'Staking', icon: '🔒', alwaysShow: true },
   { id: 'fiveA', label: '5A Policy', icon: '⭐', alwaysShow: true },
+  { id: 'organicGrowth', label: 'Organic Growth', icon: '🌱', alwaysShow: true },
 ];
 
 // 5-Year sections - focused on long-term projections
@@ -46,6 +47,7 @@ const YEAR5_SECTIONS: SectionConfig[] = [
   { id: 'token-unlocks', label: 'Token Unlocks', icon: '📅', alwaysShow: true },
   { id: 'governance', label: 'Governance', icon: '🗳️', alwaysShow: true },
   { id: 'fiveA', label: '5A Policy', icon: '⭐', alwaysShow: true },
+  { id: 'organicGrowth', label: 'Organic Growth', icon: '🌱', alwaysShow: true },
   { id: 'velocity', label: 'Velocity', icon: '⚡', alwaysShow: true },
   { id: 'token-metrics', label: 'Token Metrics', icon: '📊', alwaysShow: true },
   { id: 'future-modules', label: 'Future Modules', icon: '🔮', alwaysShow: true },
@@ -59,6 +61,13 @@ export function ModuleNavigation({
   enabledModules 
 }: ModuleNavigationProps) {
   const sections = activeTab === 'year1' ? YEAR1_SECTIONS : YEAR5_SECTIONS;
+  
+  // #region agent log
+  const handleSectionChange = (sectionId: string) => {
+    fetch('http://127.0.0.1:7242/ingest/63e31cbd-d385-4178-b960-6e5c3301028f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ModuleNavigation.tsx:handleSectionChange',message:'User clicked section',data:{fromSection:activeSection,toSection:sectionId,activeTab},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'D'})}).catch(()=>{});
+    onSectionChange(sectionId);
+  };
+  // #endregion
   
   const visibleSections = sections.filter(section => {
     if (section.alwaysShow) return true;
@@ -79,7 +88,7 @@ export function ModuleNavigation({
           {visibleSections.map((section) => (
             <li key={section.id}>
               <button
-                onClick={() => onSectionChange(section.id)}
+                onClick={() => handleSectionChange(section.id)}
                 className={`flex items-center gap-1.5 px-4 py-2 rounded-lg font-semibold text-sm 
                            transition-all hover:-translate-y-0.5
                            ${activeSection === section.id 

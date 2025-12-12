@@ -13,6 +13,10 @@ export function PreLaunchSection({ result, parameters }: PreLaunchSectionProps) 
   const referral = prelaunch?.referral;
   const points = prelaunch?.points;
   const gasless = prelaunch?.gasless;
+  
+  // #region agent log
+  fetch('http://127.0.0.1:7242/ingest/63e31cbd-d385-4178-b960-6e5c3301028f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'PreLaunchSection.tsx:init',message:'Gasless data inspection',data:{hasGasless:!!gasless,gaslessKeys:gasless?Object.keys(gasless):[],costPerTransactionUsd:gasless?.costPerTransactionUsd,budgetUtilization:gasless?.budgetUtilization},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'E'})}).catch(()=>{});
+  // #endregion
 
   // Calculate overview metrics
   const totalCostUsd = prelaunch?.totalPrelaunchCostUsd || 0;
@@ -155,7 +159,7 @@ export function PreLaunchSection({ result, parameters }: PreLaunchSectionProps) 
                 </div>
                 <div className="bg-gray-700/50 rounded-xl p-4">
                   <div className="text-2xl font-bold text-pink-400">
-                    {(referral.qualificationRate * 100).toFixed(0)}%
+                    {((referral.qualificationRate ?? 0) * 100).toFixed(0)}%
                   </div>
                   <div className="text-sm text-gray-400">Qualification Rate</div>
                 </div>
@@ -190,7 +194,7 @@ export function PreLaunchSection({ result, parameters }: PreLaunchSectionProps) 
                   <span className="font-semibold text-red-400">Anti-Sybil Protection</span>
                 </div>
                 <div className="text-sm text-gray-300">
-                  <span className="text-red-400 font-bold">{formatNumber(referral.suspectedSybilReferrals)}</span> suspected sybil referrals blocked ({(referral.sybilRejectionRate * 100).toFixed(1)}% rejection rate)
+                  <span className="text-red-400 font-bold">{formatNumber(referral.suspectedSybilReferrals ?? 0)}</span> suspected sybil referrals blocked ({((referral.sybilRejectionRate ?? 0) * 100).toFixed(1)}% rejection rate)
                 </div>
               </div>
             </div>
@@ -245,10 +249,10 @@ export function PreLaunchSection({ result, parameters }: PreLaunchSectionProps) 
                   {formatNumber(points.pointsPoolTokens)} VCoin
                 </div>
                 <div className="text-sm text-gray-300 mt-1">
-                  Points Pool ({(points.pointsPoolPercent * 100).toFixed(0)}% of supply)
+                  Points Pool ({((points.pointsPoolPercent ?? 0) * 100).toFixed(0)}% of supply)
                 </div>
                 <div className="mt-3 text-sm text-gray-400">
-                  Conversion Rate: <span className="text-white font-mono">{points.tokensPerPoint.toFixed(6)}</span> VCoin/point
+                  Conversion Rate: <span className="text-white font-mono">{(points.tokensPerPoint ?? 0).toFixed(6)}</span> VCoin/point
                 </div>
               </div>
 
@@ -263,7 +267,7 @@ export function PreLaunchSection({ result, parameters }: PreLaunchSectionProps) 
                   <div className="text-xs text-gray-400">Participating</div>
                 </div>
                 <div className="bg-gray-700/50 rounded-xl p-3">
-                  <div className="text-lg font-bold text-blue-400">{points.avgPointsPerUser.toFixed(0)}</div>
+                  <div className="text-lg font-bold text-blue-400">{(points.avgPointsPerUser ?? 0).toFixed(0)}</div>
                   <div className="text-xs text-gray-400">Avg Points/User</div>
                 </div>
                 <div className="bg-gray-700/50 rounded-xl p-3">
@@ -335,36 +339,36 @@ export function PreLaunchSection({ result, parameters }: PreLaunchSectionProps) 
                 <div className="flex justify-between items-center mb-3">
                   <span className="text-gray-400">Monthly Budget</span>
                   <span className="text-xl font-bold text-white">
-                    {formatCurrency(gasless.monthlySponsorshipBudgetUsd)}
+                    {formatCurrency(gasless.monthlySponsorshipBudgetUsd ?? 0)}
                   </span>
                 </div>
                 <div className="w-full bg-gray-600 rounded-full h-3">
                   <div 
                     className="bg-gradient-to-r from-emerald-500 to-teal-500 h-3 rounded-full transition-all"
-                    style={{ width: `${Math.min(gasless.budgetUtilization * 100, 100)}%` }}
+                    style={{ width: `${Math.min((gasless.budgetUtilization ?? 0) * 100, 100)}%` }}
                   />
                 </div>
                 <div className="text-sm text-gray-400 mt-2">
-                  {(gasless.budgetUtilization * 100).toFixed(1)}% utilized ({formatCurrency(gasless.totalSponsorshipCostUsd)} spent)
+                  {((gasless.budgetUtilization ?? 0) * 100).toFixed(1)}% utilized ({formatCurrency(gasless.totalSponsorshipCostUsd ?? 0)} spent)
                 </div>
               </div>
 
               {/* User Breakdown */}
               <div className="grid grid-cols-2 gap-3">
                 <div className="bg-gray-700/50 rounded-xl p-3">
-                  <div className="text-lg font-bold text-blue-400">{formatNumber(gasless.newUsers)}</div>
+                  <div className="text-lg font-bold text-blue-400">{formatNumber(gasless.newUsers ?? 0)}</div>
                   <div className="text-xs text-gray-400">New Users</div>
                 </div>
                 <div className="bg-gray-700/50 rounded-xl p-3">
-                  <div className="text-lg font-bold text-green-400">{formatNumber(gasless.verifiedUsers)}</div>
+                  <div className="text-lg font-bold text-green-400">{formatNumber(gasless.verifiedUsers ?? 0)}</div>
                   <div className="text-xs text-gray-400">Verified Users</div>
                 </div>
                 <div className="bg-gray-700/50 rounded-xl p-3">
-                  <div className="text-lg font-bold text-purple-400">{formatNumber(gasless.premiumUsers)}</div>
+                  <div className="text-lg font-bold text-purple-400">{formatNumber(gasless.premiumUsers ?? 0)}</div>
                   <div className="text-xs text-gray-400">Premium Users</div>
                 </div>
                 <div className="bg-gray-700/50 rounded-xl p-3">
-                  <div className="text-lg font-bold text-amber-400">{formatNumber(gasless.enterpriseUsers)}</div>
+                  <div className="text-lg font-bold text-amber-400">{formatNumber(gasless.enterpriseUsers ?? 0)}</div>
                   <div className="text-xs text-gray-400">Enterprise</div>
                 </div>
               </div>
@@ -375,13 +379,13 @@ export function PreLaunchSection({ result, parameters }: PreLaunchSectionProps) 
                   <div>
                     <div className="text-gray-400">Sponsored Transactions</div>
                     <div className="text-xl font-bold text-emerald-400">
-                      {formatNumber(gasless.totalSponsoredTransactions)}
+                      {formatNumber(gasless.totalSponsoredTransactions ?? 0)}
                     </div>
                   </div>
                   <div>
                     <div className="text-gray-400">Cost per Transaction</div>
                     <div className="text-xl font-bold text-white">
-                      ${gasless.costPerTransactionUsd.toFixed(5)}
+                      ${(gasless.costPerTransactionUsd ?? 0).toFixed(5)}
                     </div>
                   </div>
                 </div>

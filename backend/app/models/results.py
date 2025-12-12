@@ -854,7 +854,10 @@ class StakingResult(BaseModel):
     total_revenue_vcoin: float = 0
     
     # Core metrics
-    staking_apy: float  # As percentage
+    staking_apy: float  # Fixed 7% APY as percentage
+    staking_cap: float = 0  # Maximum tokens that can be staked within budget
+    staking_at_capacity: bool = False  # Whether staking pool is full
+    staking_capacity_percent: float = 0  # Current usage of staking capacity (0-100%)
     staker_fee_discount: float  # As percentage
     min_stake_amount: float
     lock_days: int
@@ -994,6 +997,10 @@ class CustomerAcquisitionMetrics(BaseModel):
     mid_level_creators_actual: int = 0
     budget_shortfall: bool = False
     budget_shortfall_amount: float = 0.0
+    # Organic growth tracking (Dec 2025)
+    organic_users: int = 0
+    total_users_with_organic: int = 0
+    organic_percent: float = 0.0
 
 
 class TotalsResult(BaseModel):
@@ -1366,10 +1373,66 @@ class FiveAResult(BaseModel):
     month60_active_percent: float = 35.0  # Projected ending active + power %
 
 
+class OrganicGrowthResult(BaseModel):
+    """
+    Organic user growth module result (December 2025).
+    
+    Tracks natural user acquisition through multiple channels:
+    - Word-of-mouth (WoM) referrals
+    - App store organic discovery
+    - Network effects (user-base-scaled growth)
+    - Social media sharing
+    - Content virality
+    
+    Based on research-backed industry benchmarks for apps and platforms.
+    """
+    enabled: bool = False
+    
+    # Total organic users acquired
+    total_organic_users: int = 0
+    organic_growth_rate: float = 0.0  # Percentage of total users from organic
+    organic_percent_of_total: float = 0.0
+    
+    # Breakdown by source
+    word_of_mouth_users: int = 0
+    app_store_discovery_users: int = 0
+    network_effect_users: int = 0
+    social_sharing_users: int = 0
+    content_virality_users: int = 0
+    
+    # Monthly breakdown (for charts)
+    monthly_organic_breakdown: List[Dict] = []
+    
+    # Growth metrics
+    average_monthly_growth_rate: float = 0.0
+    peak_monthly_growth_rate: float = 0.0
+    cumulative_organic_users: int = 0
+    
+    # Participation rates
+    actual_referral_participation: float = 0.0
+    actual_sharing_participation: float = 0.0
+    
+    # Network effect metrics
+    network_effect_multiplier: float = 1.0
+    dampening_factor: float = 1.0
+    
+    # K-factor (viral coefficient)
+    effective_k_factor: float = 0.0
+    
+    # Platform maturity impact
+    early_stage_boost_applied: bool = False
+    maturity_dampening_applied: bool = False
+    
+    # Seasonal impact (if enabled)
+    seasonal_adjustments_applied: bool = False
+
+
 class StartingUsersSummary(BaseModel):
     """
     Summary of starting/initial user counts for easy reference.
     Added to make user counts clearly visible at the top level of results.
+    
+    Dec 2025: Added separate cohort tracking for waitlist vs CAC users.
     """
     # Total active users used in simulation
     total_active_users: int
@@ -1395,6 +1458,18 @@ class StartingUsersSummary(BaseModel):
     users_before_retention: Optional[int] = None
     users_after_retention: Optional[int] = None
     retention_rate: Optional[float] = None
+    
+    # Separate cohort tracking (Dec 2025)
+    waitlist_users_acquired: Optional[int] = None
+    waitlist_users_active: Optional[int] = None
+    waitlist_retention_rate: Optional[float] = None
+    cac_users_acquired: Optional[int] = None
+    cac_users_active: Optional[int] = None
+    cac_retention_rate: Optional[float] = None
+    
+    # Organic growth tracking (Dec 2025)
+    organic_users_acquired: Optional[int] = None
+    organic_percent_of_total: Optional[float] = None
 
 
 class SimulationResult(BaseModel):
@@ -1429,6 +1504,8 @@ class SimulationResult(BaseModel):
     sensitivity: Optional[SensitivityResult] = None
     # NEW: 5A Policy Gamification (Dec 2025)
     five_a: Optional[FiveAResult] = None
+    # NEW: Organic User Growth (Dec 2025)
+    organic_growth: Optional[OrganicGrowthResult] = None
 
 
 class PercentileResults(BaseModel):
@@ -1538,6 +1615,12 @@ class MonthlyMetricsResult(BaseModel):
     token_price: float = 0.03  # Current token price
     scenario_multiplier: float = 1.0  # Growth scenario impact
     growth_rate: float = 0.0  # Monthly growth rate
+    
+    # Organic growth tracking (Dec 2025)
+    organic_users_acquired: int = 0  # Organic users acquired this month
+    paid_users_acquired: int = 0  # Paid users acquired this month
+    cumulative_organic_users: int = 0  # Total organic users over all months
+    organic_percent: float = 0.0  # % of total that is organic
     
     # Dynamic allocation fields (NEW - Nov 2025)
     dynamic_allocation_percent: float = 0.0  # Current allocation percentage

@@ -7,7 +7,7 @@ import {
   GrowthScenario, 
   MarketCondition,
   MarketCycleYearConfig,
-  MarketCycle2025_2030,
+  MarketCycle2026_2030,
 } from '@/types/simulation';
 
 /**
@@ -75,6 +75,17 @@ export const DEFAULT_PARAMETERS: SimulationParameters = {
   // Core parameters
   tokenPrice: 0.03,
   marketingBudget: 150000,
+  // Multi-year marketing budget multipliers (Dec 2025)
+  // Each year doubles the previous: Y2=2x, Y3=4x, Y4=8x, Y5=16x of Y1
+  marketingBudgetYear2Multiplier: 2.0,
+  marketingBudgetYear3Multiplier: 2.0,
+  marketingBudgetYear4Multiplier: 2.0,
+  marketingBudgetYear5Multiplier: 2.0,
+  // User growth price impact (Dec 2025) - research-backed network effects
+  // Based on: blockchain gaming ~2.4x elasticity, Friend.tech correlation, dampened Metcalfe's Law
+  enableUserGrowthPriceImpact: true,
+  userGrowthPriceElasticity: 0.35,       // 35% of user growth translates to price appreciation
+  userGrowthPriceMaxMultiplier: 3.0,     // Cap at 3x price boost from user growth
   startingUsers: 0,
   
   // User acquisition (Issue #2 - Realistic CAC)
@@ -132,9 +143,9 @@ export const DEFAULT_PARAMETERS: SimulationParameters = {
   // 
   // The APY boost further adjusts the effective ratio for scoring:
   // - Higher APY (>10%) incentivizes more staking, boosting the ratio
-  // - Lower APY (<10%) reduces staking attractiveness, reducing the ratio
+  // - Lower APY (<7%) reduces staking attractiveness, reducing the ratio
   //
-  stakingApy: 0.10,                 // 10% APY
+  stakingApy: 0.07,                 // 7% APY (budget constrained)
   stakingParticipationRate: 0.10,   // 10% of users stake
   avgStakeAmount: 20000,            // Average 20,000 VCoin per staker
   stakerFeeDiscount: 0.10,          // 10% fee discount
@@ -854,20 +865,12 @@ export const GROWTH_SCENARIO_SUMMARY = {
   },
 };
 
-// === 5-YEAR MARKET CYCLE ANALYSIS (2025-2030) ===
+// === 5-YEAR MARKET CYCLE ANALYSIS (2026-2030) ===
 /**
- * Bitcoin Halving April 2024 - Market cycle analysis for 2025-2030
+ * Bitcoin Halving April 2024 - Market cycle analysis for 2026-2030
  * Based on historical halving cycles and 2024-2025 market conditions
  */
-export const MARKET_CYCLE_2025_2030: MarketCycle2025_2030 = {
-  2025: {
-    year: 2025,
-    phase: 'Early Bull / Post-Halving Rally',
-    growthMultiplier: 1.3,
-    retentionMultiplier: 1.1,
-    priceMultiplier: 1.5,
-    description: 'Bitcoin halving (April 2024) effect in full swing. Increased crypto interest, new users entering market. Altcoin season typically begins 12-18 months post-halving.',
-  },
+export const MARKET_CYCLE_2026_2030: MarketCycle2026_2030 = {
   2026: {
     year: 2026,
     phase: 'Peak Bull / Altcoin Season',

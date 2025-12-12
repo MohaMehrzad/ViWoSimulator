@@ -175,6 +175,22 @@ VCOIN_RETENTION = RetentionCurve(
     }
 )
 
+# Waitlist users have higher retention due to organic interest and community commitment
+WAITLIST_USER_RETENTION = RetentionCurve(
+    name="Waitlist Users (High Intent)",
+    description="Organic waitlist users with high platform commitment",
+    monthly_rates={
+        1: 0.45,    # Month 1: 45% retained (vs 22% standard)
+        2: 0.35,    # Month 2: 35% retained
+        3: 0.25,    # Month 3: 25% retained (vs 10% standard)
+        6: 0.15,    # Month 6: 15% retained (vs 6% standard)
+        9: 0.10,    # Month 9: 10% retained
+        12: 0.08,   # Year 1: 8% retained (vs 3% standard)
+        24: 0.05,   # Year 2: 5% retained
+        36: 0.04,   # Year 3: 4% retained
+    }
+)
+
 RETENTION_CURVES: Dict[RetentionModel, RetentionCurve] = {
     RetentionModel.SOCIAL_APP: SOCIAL_APP_RETENTION,
     RetentionModel.CRYPTO_APP: CRYPTO_APP_RETENTION,

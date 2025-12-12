@@ -1,6 +1,17 @@
 import { SimulationParameters, SimulationResult, MonteCarloResult, AgentBasedResult, MonthlyProgressionResult } from '@/types/simulation';
 import { API_BASE_URL } from './constants';
 
+/**
+ * Interface for enhanced full report export request
+ */
+export interface FullReportExportOptions {
+  parameters: SimulationParameters;
+  results: SimulationResult;
+  monthlyProgression?: MonthlyProgressionResult | null;
+  monteCarloResult?: MonteCarloResult | null;
+  agentBasedResult?: AgentBasedResult | null;
+}
+
 export async function exportToJson(
   result: SimulationResult | MonteCarloResult | AgentBasedResult | MonthlyProgressionResult,
   filename: string = 'simulation_results'
@@ -53,11 +64,56 @@ export async function exportParameters(parameters: SimulationParameters): Promis
   downloadBlob(blob, `viwo-parameters-${timestamp}.json`);
 }
 
+/**
+ * Export a comprehensive full report with all simulation data.
+ * 
+ * This is the enhanced version that sends all available data to the backend
+ * for generating a complete report with:
+ * - Executive summary with key KPIs
+ * - Risk assessment aggregation
+ * - Industry benchmark comparisons
+ * - Monthly progression data (if available)
+ * - Monte Carlo analysis (if available)
+ * - Agent-based analysis (if available)
+ * - Recommendations
+ */
+export async function exportFullReportEnhanced(options: FullReportExportOptions): Promise<void> {
+  const { parameters, results, monthlyProgression, monteCarloResult, agentBasedResult } = options;
+  
+  const payload = {
+    parameters,
+    results,
+    monthlyProgression: monthlyProgression || null,
+    monteCarloResult: monteCarloResult || null,
+    agentBasedResult: agentBasedResult || null,
+  };
+
+  const response = await fetch(`${API_BASE_URL}/api/export/full-report`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Export failed: ${errorText}`);
+  }
+
+  const blob = await response.blob();
+  const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+  downloadBlob(blob, `viwo-comprehensive-report-${timestamp}.json`);
+}
+
+/**
+ * Legacy export function - kept for backwards compatibility
+ * @deprecated Use exportFullReportEnhanced instead
+ */
 export async function exportFullReport(
   parameters: SimulationParameters,
   result: SimulationResult | MonteCarloResult | AgentBasedResult | MonthlyProgressionResult
 ): Promise<void> {
-  const response = await fetch(`${API_BASE_URL}/api/export/full-report`, {
+  // Use legacy endpoint for backwards compatibility
+  const response = await fetch(`${API_BASE_URL}/api/export/full-report-legacy`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ parameters, results: result }),

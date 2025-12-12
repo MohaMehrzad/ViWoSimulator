@@ -1,13 +1,23 @@
 """
 Export endpoints for simulation results.
+
+Enhanced with comprehensive report generation including:
+- Executive summary with key KPIs
+- Risk assessment aggregation
+- Industry benchmark comparisons
+- Monthly progression data
+- Recommendations
 """
 
 from fastapi import APIRouter, Response
 from pydantic import BaseModel
-from typing import Any, Literal
+from typing import Any, Literal, Optional, List
 import json
 import csv
 import io
+from datetime import datetime
+
+from app.core.report_generator import generate_full_report
 
 router = APIRouter()
 
@@ -16,6 +26,15 @@ class ExportRequest(BaseModel):
     result: Any
     format: Literal['json', 'csv'] = 'json'
     filename: str = 'simulation_results'
+
+
+class FullReportRequest(BaseModel):
+    """Request model for enhanced full report export."""
+    parameters: dict
+    results: dict
+    monthlyProgression: Optional[dict] = None
+    monteCarloResult: Optional[dict] = None
+    agentBasedResult: Optional[dict] = None
 
 
 def flatten_dict(d: dict, parent_key: str = '', sep: str = '_') -> dict:
@@ -88,12 +107,50 @@ async def export_parameters(parameters: dict):
 
 
 @router.post("/export/full-report")
-async def export_full_report(data: dict):
+async def export_full_report(data: FullReportRequest):
     """
-    Export full simulation report including parameters and results.
-    """
-    from datetime import datetime
+    Export comprehensive simulation report with all available data.
     
+    Includes:
+    - Executive summary with key KPIs
+    - Full parameters
+    - Complete simulation results
+    - Monthly progression (if available)
+    - Token economics analysis
+    - Risk assessment
+    - Industry benchmark comparisons
+    - Aggregated recommendations
+    - Monte Carlo analysis (if available)
+    - Agent-based analysis (if available)
+    - 5A Policy analysis (if enabled)
+    """
+    # Generate the comprehensive report
+    report = generate_full_report(
+        parameters=data.parameters,
+        result=data.results,
+        monthly_progression=data.monthlyProgression,
+        monte_carlo_result=data.monteCarloResult,
+        agent_based_result=data.agentBasedResult,
+    )
+    
+    content = json.dumps(report, indent=2, default=str)
+    timestamp = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
+    
+    return Response(
+        content=content,
+        media_type='application/json',
+        headers={
+            'Content-Disposition': f'attachment; filename="viwo-full-report-{timestamp}.json"'
+        }
+    )
+
+
+@router.post("/export/full-report-legacy")
+async def export_full_report_legacy(data: dict):
+    """
+    Legacy endpoint for basic full report export.
+    Kept for backwards compatibility.
+    """
     report = {
         'metadata': {
             'generated_at': datetime.now().isoformat(),

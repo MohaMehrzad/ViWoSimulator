@@ -3,7 +3,7 @@
 import { useMemo } from 'react';
 import { SimulationResult, SimulationParameters } from '@/types/simulation';
 import { formatNumber, formatCurrency } from '@/lib/utils';
-import { GROWTH_SCENARIOS, MARKET_CONDITIONS, FUTURE_MODULE_DEFAULTS, MARKET_CYCLE_2025_2030 } from '@/lib/constants';
+import { GROWTH_SCENARIOS, MARKET_CONDITIONS, FUTURE_MODULE_DEFAULTS, MARKET_CYCLE_2026_2030 } from '@/lib/constants';
 
 interface Year5OverviewProps {
   result: SimulationResult;
@@ -27,7 +27,98 @@ export interface YearlyProjection {
   activeModules: string[];
   marketCycle: string;
   cycleMultiplier: number;
+  // Marketing budget (Dec 2025)
+  marketingBudget: number;
+  marketingMultiplier: number;
+  // User growth price impact (Dec 2025)
+  userGrowthPriceMultiplier: number;
+  userGrowthRatio: number;
 }
+
+/**
+ * Calculate marketing budget for a specific year based on multipliers.
+ * 
+ * Year 1: Base marketing_budget
+ * Year 2: Year 1 * year2Multiplier (default 2x)
+ * Year 3: Year 2 * year3Multiplier (default 2x = 4x of Y1)
+ * Year 4: Year 3 * year4Multiplier (default 2x = 8x of Y1)
+ * Year 5: Year 4 * year5Multiplier (default 2x = 16x of Y1)
+ */
+function getMarketingBudgetForYear(year: number, parameters: SimulationParameters): { budget: number; multiplier: number } {
+  const baseBudget = parameters.marketingBudget || 150000;
+  // Default to 2x (doubling each year) for realistic growth
+  const year2Mult = parameters.marketingBudgetYear2Multiplier ?? 2.0;
+  const year3Mult = parameters.marketingBudgetYear3Multiplier ?? 2.0;
+  const year4Mult = parameters.marketingBudgetYear4Multiplier ?? 2.0;
+  const year5Mult = parameters.marketingBudgetYear5Multiplier ?? 2.0;
+  
+  if (year <= 1) return { budget: baseBudget, multiplier: 1.0 };
+  
+  const year2Budget = baseBudget * year2Mult;
+  if (year === 2) return { budget: year2Budget, multiplier: year2Mult };
+  
+  const year3Budget = year2Budget * year3Mult;
+  if (year === 3) return { budget: year3Budget, multiplier: year2Mult * year3Mult };
+  
+  const year4Budget = year3Budget * year4Mult;
+  if (year === 4) return { budget: year4Budget, multiplier: year2Mult * year3Mult * year4Mult };
+  
+  const year5Budget = year4Budget * year5Mult;
+  return { budget: year5Budget, multiplier: year2Mult * year3Mult * year4Mult * year5Mult };
+}
+
+/**
+ * Calculate token price multiplier based on user growth with logarithmic dampening.
+ * 
+ * Based on research:
+ * - Blockchain gaming: ~2.4x elasticity (12% DAU growth = 29% value increase)
+ * - Friend.tech: Strong correlation but needs dampening
+ * - Metcalfe's Law: Overstated for crypto; use dampened version
+ * 
+ * @param currentUsers - Current active user count
+ * @param baselineUsers - Baseline users (Year 1) for comparison
+ * @param elasticity - How much growth translates to price (0.35 = 35%)
+ * @param maxMultiplier - Maximum price multiplier cap
+ */
+function calculateUserGrowthPriceMultiplier(
+  currentUsers: number,
+  baselineUsers: number,
+  elasticity: number = 0.35,
+  maxMultiplier: number = 3.0
+): { multiplier: number; userGrowthRatio: number; dampeningFactor: number } {
+  if (baselineUsers <= 0 || currentUsers <= 0) {
+    return { multiplier: 1.0, userGrowthRatio: 1.0, dampeningFactor: 1.0 };
+  }
+  
+  const userGrowthRatio = currentUsers / baselineUsers;
+  
+  // No positive impact if users haven't grown
+  if (userGrowthRatio <= 1.0) {
+    return { multiplier: 1.0, userGrowthRatio, dampeningFactor: 1.0 };
+  }
+  
+  // Logarithmic dampening based on user scale
+  // At 1K users: dampening = 1.0, At 100K: 0.50, At 1M: 0.25
+  const logUsers = Math.log10(Math.max(currentUsers, 1000));
+  let dampeningFactor = 1.0 / (1.0 + 0.25 * (logUsers - 3)); // log10(1000) = 3
+  dampeningFactor = Math.max(0.1, Math.min(1.0, dampeningFactor));
+  
+  // Calculate impact: (growth_ratio - 1) * elasticity * dampening
+  const rawGrowthFactor = userGrowthRatio - 1.0;
+  const dampenedImpact = rawGrowthFactor * elasticity * dampeningFactor;
+  
+  // Final multiplier, capped
+  const multiplier = Math.min(1.0 + dampenedImpact, maxMultiplier);
+  
+  return { multiplier, userGrowthRatio, dampeningFactor };
+}
+
+// ARPU bounds based on industry benchmarks for social/crypto apps
+const MIN_ARPU = 0.10;  // $0.10/user/month floor (freemium baseline)
+const MAX_ARPU = 5.00;  // $5.00/user/month ceiling (mature platform)
+
+// Maximum token price revenue boost to prevent unrealistic compounding
+const MAX_TOKEN_REVENUE_BOOST = 5.0;
 
 // Calculate 5-year (60-month) projections
 export function calculate5YearProjections(
@@ -38,8 +129,14 @@ export function calculate5YearProjections(
   parameters: SimulationParameters
 ): YearlyProjection[] {
   const projections: YearlyProjection[] = [];
-  const baseUsers = baseResult.customerAcquisition.totalUsers;
+  // Use total users with organic if available
+  const baseUsers = Math.max(1, baseResult.customerAcquisition.totalUsersWithOrganic || baseResult.customerAcquisition.totalUsers);
   const baseRevenue = baseResult.totals.revenue;
+  
+  // Calculate ARPU from base results with bounds checking
+  // This is the key fix: use per-user economics instead of scale-factor exponentiation
+  const rawArpu = baseUsers > 0 ? baseRevenue / baseUsers : 0;
+  const baseArpu = Math.max(MIN_ARPU, Math.min(MAX_ARPU, rawArpu));
   
   let currentUsers = baseUsers;
   let currentTokenPrice = baseTokenPrice;
@@ -50,9 +147,58 @@ export function calculate5YearProjections(
     const startUsers = currentUsers;
     const startPrice = currentTokenPrice;
     
-    const calendarYear = 2025 + year - 1;
-    const cycleData = MARKET_CYCLE_2025_2030?.[calendarYear] || { year: calendarYear, phase: 'neutral', growthMultiplier: 1, retentionMultiplier: 1, priceMultiplier: 1, description: '' };
+    const calendarYear = 2026 + year - 1;
+    const cycleData = MARKET_CYCLE_2026_2030?.[calendarYear] || { year: calendarYear, phase: 'neutral', growthMultiplier: 1, retentionMultiplier: 1, priceMultiplier: 1, description: '' };
     const cycleMultiplier = cycleData.growthMultiplier || 1;
+    
+    // Get marketing budget for this year (Dec 2025)
+    const { budget: yearMarketingBudget, multiplier: marketingMultiplier } = getMarketingBudgetForYear(year, parameters);
+    
+    // Calculate effective CAC (blended from NA and Global)
+    const naPercent = parameters.northAmericaBudgetPercent || 0.35;
+    const globalPercent = parameters.globalLowIncomeBudgetPercent || 0.65;
+    const naCac = parameters.cacNorthAmericaConsumer || 75;
+    const globalCac = parameters.cacGlobalLowIncomeConsumer || 25;
+    const effectiveCac = naPercent * naCac + globalPercent * globalCac;
+    
+    // Calculate marketing-driven user acquisition for years 2-5
+    // Year 1 users come from baseResult, years 2-5 add from marketing budget
+    // Apply diminishing returns: CAC increases and efficiency decreases in later years
+    let marketingUsersThisYear = 0;
+    if (year > 1 && yearMarketingBudget > 0 && effectiveCac > 0) {
+      // Diminishing returns on marketing efficiency:
+      // Year 2: 85% efficiency, Year 3: 70%, Year 4: 60%, Year 5: 50%
+      // This accounts for market saturation and competition
+      const cacEfficiency = 1 / Math.pow(year, 0.4);
+      
+      // Marketing budget drives additional user acquisition with diminishing efficiency
+      marketingUsersThisYear = Math.floor(yearMarketingBudget / effectiveCac * cacEfficiency);
+    }
+    
+    // Calculate user growth price impact at START of year (Dec 2025)
+    // Based on research: user growth drives token value via network effects
+    const enablePriceImpact = parameters.enableUserGrowthPriceImpact !== false;
+    const elasticity = parameters.userGrowthPriceElasticity ?? 0.35;
+    const maxPriceMultiplier = parameters.userGrowthPriceMaxMultiplier ?? 3.0;
+    
+    let userGrowthPriceMultiplier = 1.0;
+    let userGrowthRatio = 1.0;
+    
+    if (enablePriceImpact && year > 1) {
+      // Calculate based on start-of-year users vs Year 1 baseline
+      const priceImpact = calculateUserGrowthPriceMultiplier(
+        startUsers,
+        baseUsers,
+        elasticity,
+        maxPriceMultiplier
+      );
+      userGrowthPriceMultiplier = priceImpact.multiplier;
+      userGrowthRatio = priceImpact.userGrowthRatio;
+      
+      // Apply user growth boost to token price at start of year
+      // This will compound with market cycle effects during the year
+      currentTokenPrice *= userGrowthPriceMultiplier;
+    }
     
     let yearRevenue = 0;
     let yearProfit = 0;
@@ -66,12 +212,54 @@ export function calculate5YearProjections(
         const monthIndex = month - 1;
         monthlyGrowthRate = (scenarioConfig.monthlyGrowthRates[monthIndex] || 0.05) * cycleMultiplier;
       } else {
-        const yearGrowthRates = [0, 0.08, 0.06, 0.04, 0.03];
-        monthlyGrowthRate = (yearGrowthRates[year - 1] / 12) * cycleMultiplier;
+        // FIXED: Monthly compounding growth rates for years 2-5
+        // For social/crypto platforms, organic growth INCREASES over time due to network effects
+        
+        // Check if organic growth is enabled
+        const organicEnabled = parameters.organicGrowth?.enableOrganicGrowth || false;
+        
+        let baseMonthlyRate;
+        if (organicEnabled) {
+          // With organic growth enabled: REALISTIC social platform growth
+          // These are MONTHLY rates that compound to massive yearly growth
+          // Year 2: 6.5% monthly → 120% yearly (network effects kick in)
+          // Year 3: 7.5% monthly → 145% yearly (strong network effects dominate)
+          // Year 4: 6.0% monthly → 100% yearly (mature but sustained)
+          // Year 5: 5.0% monthly → 80% yearly (established platform)
+          const monthlyRates = [0, 0.065, 0.075, 0.060, 0.050];
+          baseMonthlyRate = monthlyRates[year - 1];
+        } else {
+          // Without organic: Only marketing-driven growth (much slower)
+          // Year 2: 3% monthly → 43% yearly
+          // Year 3: 2.5% monthly → 34% yearly
+          // Year 4: 2% monthly → 27% yearly
+          // Year 5: 1.5% monthly → 20% yearly
+          const monthlyRates = [0, 0.030, 0.025, 0.020, 0.015];
+          baseMonthlyRate = monthlyRates[year - 1];
+        }
+        
+        monthlyGrowthRate = baseMonthlyRate * cycleMultiplier;
       }
       
       if (month > 1) {
+        // Apply monthly compounding growth
+        // CRITICAL: This is where organic growth compounds exponentially!
+        // Example: 6.5% monthly × 12 months = 120% yearly growth (users MORE than double!)
         currentUsers = Math.round(currentUsers * (1 + monthlyGrowthRate));
+        
+        // Add marketing-driven users (distributed across the year)
+        // Using same front-loaded distribution as backend: 50% in first 3 months
+        if (year > 1 && marketingUsersThisYear > 0) {
+          const monthInYear = ((month - 1) % 12) + 1;
+          const distribution: Record<number, number> = {
+            1: 0.2333, 2: 0.1667, 3: 0.1000,
+            4: 0.0667, 5: 0.0667, 6: 0.0667,
+            7: 0.0556, 8: 0.0556, 9: 0.0556,
+            10: 0.0444, 11: 0.0444, 12: 0.0444,
+          };
+          const monthlyMarketingUsers = Math.floor(marketingUsersThisYear * (distribution[monthInYear] || 0));
+          currentUsers += monthlyMarketingUsers;
+        }
       }
       
       let priceGrowthRate: number;
@@ -82,8 +270,22 @@ export function calculate5YearProjections(
       }
       currentTokenPrice *= (1 + priceGrowthRate);
       
-      const userScaleFactor = currentUsers / baseUsers;
-      const monthCoreRevenue = baseRevenue * Math.pow(userScaleFactor, 0.85);
+      // Token price affects revenue: ~50% of revenue is token-denominated
+      // When token price rises, USD value of token-based revenue increases
+      const tokenPriceRatio = currentTokenPrice / baseTokenPrice;
+      const rawTokenRevenueBoost = 0.5 * (tokenPriceRatio - 1) + 1; // 50% of revenue scales with price
+      // Cap token revenue boost to prevent unrealistic compounding
+      const tokenRevenueBoost = Math.min(MAX_TOKEN_REVENUE_BOOST, rawTokenRevenueBoost);
+      
+      // Platform maturity multiplier: revenue per user improves over time
+      // as features mature, monetization improves, and user engagement increases
+      // Year 1: 1.0x, Year 2: 1.12x, Year 3: 1.24x, Year 4: 1.36x, Year 5: 1.48x (capped at 1.5x)
+      const maturityMultiplier = 1 + Math.min(0.5, (year - 1) * 0.12);
+      
+      // FIXED: Use ARPU-based linear calculation instead of exponential scale-factor
+      // Revenue = users × ARPU × maturity × token boost
+      // This ensures revenue scales linearly with users, not exponentially
+      const monthCoreRevenue = currentUsers * baseArpu * maturityMultiplier * tokenRevenueBoost;
       yearCoreRevenue += monthCoreRevenue;
       
       let monthFutureRevenue = 0;
@@ -129,10 +331,17 @@ export function calculate5YearProjections(
       
       yearFutureRevenue += monthFutureRevenue;
       const monthTotalRevenue = monthCoreRevenue + monthFutureRevenue;
-      const monthCosts = monthTotalRevenue * 0.25;
+      // Costs include operational costs (25% of revenue) plus marketing spend
+      const monthOperationalCosts = monthTotalRevenue * 0.25;
       yearRevenue += monthTotalRevenue;
-      yearProfit += monthTotalRevenue - monthCosts;
+      yearProfit += monthTotalRevenue - monthOperationalCosts;
     }
+    
+    // Subtract marketing budget from profit (it's an expense)
+    const yearProfitAfterMarketing = yearProfit - yearMarketingBudget;
+    
+    // Update end-of-year user growth ratio for reporting (already applied at start of year)
+    const endOfYearGrowthRatio = currentUsers / baseUsers;
     
     projections.push({
       year,
@@ -142,8 +351,8 @@ export function calculate5YearProjections(
       endUsers: currentUsers,
       avgUsers: Math.round((startUsers + currentUsers) / 2),
       totalRevenue: yearRevenue,
-      totalProfit: yearProfit,
-      avgMargin: yearRevenue > 0 ? (yearProfit / yearRevenue) * 100 : 0,
+      totalProfit: yearProfitAfterMarketing,
+      avgMargin: yearRevenue > 0 ? (yearProfitAfterMarketing / yearRevenue) * 100 : 0,
       tokenPriceStart: startPrice,
       tokenPriceEnd: currentTokenPrice,
       coreModulesRevenue: yearCoreRevenue,
@@ -151,6 +360,12 @@ export function calculate5YearProjections(
       activeModules: Array.from(activeModulesSet),
       marketCycle: cycleData.phase,
       cycleMultiplier,
+      // Marketing budget (Dec 2025)
+      marketingBudget: yearMarketingBudget,
+      marketingMultiplier,
+      // User growth price impact (Dec 2025)
+      userGrowthPriceMultiplier,
+      userGrowthRatio: endOfYearGrowthRatio,
     });
   }
   
@@ -187,7 +402,7 @@ export function Year5Overview({ result, parameters }: Year5OverviewProps) {
           <span className="text-4xl">📈</span>
           <div>
             <h2 className="text-2xl font-bold">5-Year Financial Projection</h2>
-            <p className="text-indigo-300">Long-term growth analysis (2025-2030)</p>
+            <p className="text-indigo-300">Long-term growth analysis (2026-2030)</p>
           </div>
         </div>
         
@@ -200,12 +415,12 @@ export function Year5Overview({ result, parameters }: Year5OverviewProps) {
             </div>
           </div>
           <div className="bg-white/15 backdrop-blur-sm rounded-xl p-4 text-center">
-            <div className="text-3xl font-bold">${(totalRevenue / 1_000_000).toFixed(2)}M</div>
+            <div className="text-3xl font-bold">{formatCurrency(totalRevenue)}</div>
             <div className="text-sm text-indigo-200 uppercase font-semibold mt-1">Total Revenue</div>
           </div>
           <div className="bg-white/15 backdrop-blur-sm rounded-xl p-4 text-center">
             <div className={`text-3xl font-bold ${totalProfit >= 0 ? 'text-emerald-300' : 'text-red-300'}`}>
-              ${(totalProfit / 1_000_000).toFixed(2)}M
+              {formatCurrency(totalProfit)}
             </div>
             <div className="text-sm text-indigo-200 uppercase font-semibold mt-1">Total Profit</div>
           </div>
@@ -219,13 +434,13 @@ export function Year5Overview({ result, parameters }: Year5OverviewProps) {
         </div>
       </div>
 
-      {/* Market Cycle Analysis (2025-2030) */}
+      {/* Market Cycle Analysis (2026-2030) */}
       <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
         <h3 className="font-bold text-lg mb-4 flex items-center gap-2">
-          <span>🔄</span> Market Cycle Analysis (2025-2030)
+          <span>🔄</span> Market Cycle Analysis (2026-2030)
         </h3>
         <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-          {Object.entries(MARKET_CYCLE_2025_2030 || {}).map(([year, data]) => {
+          {Object.entries(MARKET_CYCLE_2026_2030 || {}).map(([year, data]) => {
             const cycleColors: Record<string, string> = {
               'bull': 'from-emerald-500 to-green-600',
               'bear': 'from-red-500 to-orange-600',
@@ -262,6 +477,7 @@ export function Year5Overview({ result, parameters }: Year5OverviewProps) {
               <tr className="bg-gray-100">
                 <th className="px-3 py-2 text-left font-semibold text-gray-600">Year</th>
                 <th className="px-3 py-2 text-right font-semibold text-gray-600">Users</th>
+                <th className="px-3 py-2 text-right font-semibold text-gray-600">Marketing</th>
                 <th className="px-3 py-2 text-right font-semibold text-gray-600">Core Revenue</th>
                 <th className="px-3 py-2 text-right font-semibold text-gray-600">Future Modules</th>
                 <th className="px-3 py-2 text-right font-semibold text-gray-600">Total Revenue</th>
@@ -289,7 +505,7 @@ export function Year5Overview({ result, parameters }: Year5OverviewProps) {
                           {year.year === 1 ? '🚀' : year.year === 2 ? '📈' : year.year === 3 ? '🏗️' : year.year === 4 ? '🎯' : '🏆'}
                         </span>
                         Year {year.year}
-                        <span className="text-xs text-gray-400">({2024 + year.year})</span>
+                        <span className="text-xs text-gray-400">({2025 + year.year})</span>
                       </div>
                       {year.activeModules.length > 0 && (
                         <div className="text-xs text-purple-500 mt-1">
@@ -304,22 +520,30 @@ export function Year5Overview({ result, parameters }: Year5OverviewProps) {
                       </div>
                     </td>
                     <td className="px-3 py-3 text-right">
-                      ${(year.coreModulesRevenue / 1000).toFixed(0)}K
+                      <div className="text-orange-600 font-semibold">
+                        {formatCurrency(year.marketingBudget)}
+                      </div>
+                      <div className="text-xs text-gray-400">
+                        {year.marketingMultiplier.toFixed(0)}x
+                      </div>
+                    </td>
+                    <td className="px-3 py-3 text-right">
+                      {formatCurrency(year.coreModulesRevenue)}
                     </td>
                     <td className="px-3 py-3 text-right">
                       {year.futureModulesRevenue > 0 ? (
                         <span className="text-purple-600 font-semibold">
-                          +${(year.futureModulesRevenue / 1000).toFixed(0)}K
+                          +{formatCurrency(year.futureModulesRevenue)}
                         </span>
                       ) : (
                         <span className="text-gray-400">-</span>
                       )}
                     </td>
                     <td className="px-3 py-3 text-right font-semibold text-emerald-600">
-                      ${(year.totalRevenue / 1000).toFixed(0)}K
+                      {formatCurrency(year.totalRevenue)}
                     </td>
                     <td className={`px-3 py-3 text-right font-semibold ${year.totalProfit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                      ${(year.totalProfit / 1000).toFixed(0)}K
+                      {formatCurrency(year.totalProfit)}
                     </td>
                     <td className="px-3 py-3 text-right">
                       {year.avgMargin.toFixed(1)}%
@@ -339,17 +563,20 @@ export function Year5Overview({ result, parameters }: Year5OverviewProps) {
               <tr className="bg-gray-900 text-white font-bold">
                 <td className="px-3 py-3">5-Year Total</td>
                 <td className="px-3 py-3 text-right">{formatNumber(fiveYearProjections[4].endUsers)}</td>
+                <td className="px-3 py-3 text-right text-orange-300">
+                  {formatCurrency(fiveYearProjections.reduce((s, y) => s + y.marketingBudget, 0))}
+                </td>
                 <td className="px-3 py-3 text-right">
-                  ${(fiveYearProjections.reduce((s, y) => s + y.coreModulesRevenue, 0) / 1000).toFixed(0)}K
+                  {formatCurrency(fiveYearProjections.reduce((s, y) => s + y.coreModulesRevenue, 0))}
                 </td>
                 <td className="px-3 py-3 text-right text-purple-300">
-                  +${(totalFutureRevenue / 1000).toFixed(0)}K
+                  +{formatCurrency(totalFutureRevenue)}
                 </td>
                 <td className="px-3 py-3 text-right text-emerald-300">
-                  ${(totalRevenue / 1_000_000).toFixed(2)}M
+                  {formatCurrency(totalRevenue)}
                 </td>
                 <td className="px-3 py-3 text-right text-green-300">
-                  ${(totalProfit / 1_000_000).toFixed(2)}M
+                  {formatCurrency(totalProfit)}
                 </td>
                 <td className="px-3 py-3 text-right">
                   {(totalProfit / totalRevenue * 100).toFixed(1)}%
@@ -379,7 +606,7 @@ export function Year5Overview({ result, parameters }: Year5OverviewProps) {
                 </div>
                 <div className="text-sm text-gray-500 mb-2">Launches Month 15</div>
                 <div className="text-xl font-bold text-purple-600">
-                  ${((fiveYearProjections[1]?.futureModulesRevenue || 0) * 0.3 / 1000).toFixed(0)}K/yr
+                  {formatCurrency((fiveYearProjections[1]?.futureModulesRevenue || 0) * 0.3)}/yr
                 </div>
                 <div className="text-xs text-gray-500 mt-1">Content sharing & rentals</div>
                 <div className="mt-3 pt-3 border-t border-gray-100">
@@ -396,7 +623,7 @@ export function Year5Overview({ result, parameters }: Year5OverviewProps) {
                 </div>
                 <div className="text-sm text-gray-500 mb-2">Launches Month 18</div>
                 <div className="text-xl font-bold text-purple-600">
-                  ${((fiveYearProjections[2]?.futureModulesRevenue || 0) * 0.35 / 1000).toFixed(0)}K/yr
+                  {formatCurrency((fiveYearProjections[2]?.futureModulesRevenue || 0) * 0.35)}/yr
                 </div>
                 <div className="text-xs text-gray-500 mt-1">Physical & digital goods</div>
                 <div className="mt-3 pt-3 border-t border-gray-100">
@@ -413,7 +640,7 @@ export function Year5Overview({ result, parameters }: Year5OverviewProps) {
                 </div>
                 <div className="text-sm text-gray-500 mb-2">Launches Month 21</div>
                 <div className="text-xl font-bold text-purple-600">
-                  ${((fiveYearProjections[2]?.futureModulesRevenue || 0) * 0.25 / 1000).toFixed(0)}K/yr
+                  {formatCurrency((fiveYearProjections[2]?.futureModulesRevenue || 0) * 0.25)}/yr
                 </div>
                 <div className="text-xs text-gray-500 mt-1">Freelancer ecosystem</div>
                 <div className="mt-3 pt-3 border-t border-gray-100">
@@ -430,7 +657,7 @@ export function Year5Overview({ result, parameters }: Year5OverviewProps) {
                 </div>
                 <div className="text-sm text-gray-500 mb-2">Launches Month 24</div>
                 <div className="text-xl font-bold text-purple-600">
-                  ${((fiveYearProjections[2]?.futureModulesRevenue || 0) * 0.4 / 1000).toFixed(0)}K/yr
+                  {formatCurrency((fiveYearProjections[2]?.futureModulesRevenue || 0) * 0.4)}/yr
                 </div>
                 <div className="text-xs text-gray-500 mt-1">Cross-chain infrastructure</div>
                 <div className="mt-3 pt-3 border-t border-gray-100">
@@ -443,7 +670,7 @@ export function Year5Overview({ result, parameters }: Year5OverviewProps) {
           <div className="mt-4 bg-white/70 rounded-lg p-4">
             <div className="flex items-center justify-between">
               <span className="font-semibold text-purple-800">Total Future Module Contribution (5 years)</span>
-              <span className="text-2xl font-bold text-purple-700">${(totalFutureRevenue / 1000).toFixed(0)}K</span>
+              <span className="text-2xl font-bold text-purple-700">{formatCurrency(totalFutureRevenue)}</span>
             </div>
             <div className="text-sm text-purple-600 mt-1">
               {(totalFutureRevenue / totalRevenue * 100).toFixed(1)}% of total 5-year revenue

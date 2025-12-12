@@ -771,7 +771,7 @@ export interface MarketCycleYearConfig {
   description: string;
 }
 
-export type MarketCycle2025_2030 = Record<number, MarketCycleYearConfig>;
+export type MarketCycle2026_2030 = Record<number, MarketCycleYearConfig>;
 
 // === SOLANA NETWORK TYPES (November 2025) ===
 
@@ -859,6 +859,16 @@ export interface SimulationParameters {
   // Core parameters
   tokenPrice: number;
   marketingBudget: number;
+  // Multi-year marketing budget multipliers (Dec 2025)
+  // Each year doubles the previous: Y2=2x, Y3=4x, Y4=8x, Y5=16x of Y1
+  marketingBudgetYear2Multiplier?: number;  // Default 2.0 (2x of Year 1)
+  marketingBudgetYear3Multiplier?: number;  // Default 2.0 (2x of Year 2 = 4x of Y1)
+  marketingBudgetYear4Multiplier?: number;  // Default 2.0 (2x of Year 3 = 8x of Y1)
+  marketingBudgetYear5Multiplier?: number;  // Default 2.0 (2x of Year 4 = 16x of Y1)
+  // User growth price impact (Dec 2025) - based on research
+  enableUserGrowthPriceImpact?: boolean;    // Default true - enable network effect on price
+  userGrowthPriceElasticity?: number;       // Default 0.35 - 35% of growth translates to price
+  userGrowthPriceMaxMultiplier?: number;    // Default 3.0 - cap on price boost from user growth
   startingUsers: number;
   
   // User acquisition (Issue #2)
@@ -966,6 +976,9 @@ export interface SimulationParameters {
   
   // 5A Policy Gamification (Dec 2025)
   fiveA?: FiveAPolicyParameters;
+  
+  // Organic User Growth (Dec 2025)
+  organicGrowth?: OrganicGrowthParameters;
   
   // Identity Module pricing (USD) - Issue #11
   basicPrice: number;
@@ -1203,6 +1216,9 @@ export interface StakingResult {
   
   // Core metrics
   stakingApy: number;
+  stakingCap: number;                // Maximum tokens that can be staked within budget
+  stakingAtCapacity: boolean;        // Whether staking pool is full
+  stakingCapacityPercent: number;    // Current usage of staking capacity (0-100%)
   stakerFeeDiscount: number;
   minStakeAmount: number;
   lockDays: number;
@@ -1301,6 +1317,13 @@ export interface CustomerAcquisitionMetrics {
   globalLowIncomeUsers: number;
   totalUsers: number;
   blendedCAC: number;
+  highQualityCreatorsActual?: number;
+  midLevelCreatorsActual?: number;
+  budgetShortfall?: boolean;
+  budgetShortfallAmount?: number;
+  organicUsers?: number;
+  totalUsersWithOrganic?: number;
+  organicPercent?: number;
 }
 
 // Full Simulation Result
@@ -1611,6 +1634,55 @@ export interface FiveAPolicyParameters {
   segmentPowerPercent?: number;     // Power users/creators (default 3%)
 }
 
+// === ORGANIC USER GROWTH (Dec 2025) ===
+
+export interface OrganicGrowthParameters {
+  enableOrganicGrowth: boolean;
+  baseMonthlyGrowthRate: number;
+  wordOfMouthCoefficient: number;
+  appStoreDiscoveryRate: number;
+  networkEffectStrength: number;
+  referralParticipationRate: number;
+  socialSharingRate: number;
+  contentViralityFactor: number;
+  earlyStageBoost: number;
+  maturityDampening: number;
+  applySeasonality: boolean;
+}
+
+export interface OrganicGrowthResult {
+  enabled: boolean;
+  totalOrganicUsers: number;
+  organicGrowthRate: number;
+  organicPercentOfTotal: number;
+  wordOfMouthUsers: number;
+  appStoreDiscoveryUsers: number;
+  networkEffectUsers: number;
+  socialSharingUsers: number;
+  contentViralityUsers: number;
+  monthlyOrganicBreakdown: Array<{
+    month: number;
+    users: number;
+    wom: number;
+    appStore: number;
+    network: number;
+    social: number;
+    viral: number;
+    kFactor: number;
+  }>;
+  averageMonthlyGrowthRate: number;
+  peakMonthlyGrowthRate: number;
+  cumulativeOrganicUsers: number;
+  actualReferralParticipation: number;
+  actualSharingParticipation: number;
+  networkEffectMultiplier: number;
+  dampeningFactor: number;
+  effectiveKFactor: number;
+  earlyStageBoostApplied: boolean;
+  maturityDampeningApplied: boolean;
+  seasonalAdjustmentsApplied: boolean;
+}
+
 // Pre-Launch Parameters
 export interface ReferralParameters {
   enableReferral: boolean;
@@ -1665,6 +1737,16 @@ export interface StartingUsersSummary {
   usersBeforeRetention?: number | null;
   usersAfterRetention?: number | null;
   retentionRate?: number | null;
+  // Cohort tracking
+  waitlistUsersAcquired?: number | null;
+  waitlistUsersActive?: number | null;
+  waitlistRetentionRate?: number | null;
+  cacUsersAcquired?: number | null;
+  cacUsersActive?: number | null;
+  cacRetentionRate?: number | null;
+  // Organic growth
+  organicUsersAcquired?: number | null;
+  organicPercentOfTotal?: number | null;
 }
 
 export interface SimulationResult {
@@ -1697,6 +1779,8 @@ export interface SimulationResult {
   prelaunch?: PreLaunchResult;
   // 5A Policy Gamification (Dec 2025)
   fiveA?: FiveAResult;
+  // Organic User Growth (Dec 2025)
+  organicGrowth?: OrganicGrowthResult;
 }
 
 // Monte Carlo Results
@@ -1780,6 +1864,11 @@ export interface MonthlyMetrics {
   growthRate?: number;
   scenarioMultiplier?: number;
   fomoEvent?: FomoEvent | null;
+  // Organic growth tracking (Dec 2025)
+  organicUsersAcquired?: number;
+  paidUsersAcquired?: number;
+  cumulativeOrganicUsers?: number;
+  organicPercent?: number;
   // Dynamic allocation fields (NEW - Nov 2025)
   dynamicAllocationPercent?: number;
   dynamicGrowthFactor?: number;

@@ -28,6 +28,7 @@ import {
   PreLaunchSection,
   TokenUnlocksSection,
   FiveAPolicySection,
+  OrganicGrowthSection,
 } from '@/components/modules';
 import { calculate5YearProjections } from '@/components/modules/Year5Overview';
 import { formatNumber, formatCurrency } from '@/lib/utils';
@@ -72,9 +73,15 @@ export default function Home() {
 
   // Reset active section and auto-toggle future modules when switching tabs
   useEffect(() => {
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/63e31cbd-d385-4178-b960-6e5c3301028f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'page.tsx:useEffect-tabSwitch',message:'Tab switch effect triggered',data:{activeTab,activeSection,year1Sections:YEAR1_SECTIONS,year5Sections:YEAR5_SECTIONS,sectionInYear1:YEAR1_SECTIONS.includes(activeSection),sectionInYear5:YEAR5_SECTIONS.includes(activeSection)},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'A'})}).catch(()=>{});
+    // #endregion
     if (activeTab === 'year1') {
       // Default to overview for Year 1
       if (!YEAR1_SECTIONS.includes(activeSection)) {
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/63e31cbd-d385-4178-b960-6e5c3301028f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'page.tsx:year1-reset',message:'Resetting section to overview (Year 1)',data:{activeSection,reason:'Section not in YEAR1_SECTIONS'},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'A'})}).catch(()=>{});
+        // #endregion
         setActiveSection('overview');
       }
       // Disable future modules when switching to Year 1
@@ -87,6 +94,9 @@ export default function Home() {
     } else {
       // Default to overview for 5-Year
       if (!YEAR5_SECTIONS.includes(activeSection)) {
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/63e31cbd-d385-4178-b960-6e5c3301028f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'page.tsx:year5-reset',message:'Resetting section to overview (Year 5)',data:{activeSection,reason:'Section not in YEAR5_SECTIONS'},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'B'})}).catch(()=>{});
+        // #endregion
         setActiveSection('overview');
       }
       // Enable future modules when switching to Year 5
@@ -181,7 +191,7 @@ export default function Home() {
                   />
                   <HeaderStat 
                     label="Staking APY" 
-                    value={simulation.activeResult?.staking?.stakingApy != null ? `${simulation.activeResult.staking.stakingApy.toFixed(1)}%` : '10%'} 
+                    value={simulation.activeResult?.staking?.stakingApy != null ? `${simulation.activeResult.staking.stakingApy.toFixed(1)}%` : '7%'} 
                   />
                   <HeaderStat 
                     label="Daily Rewards" 
@@ -197,11 +207,11 @@ export default function Home() {
                   />
                   <HeaderStat 
                     label="5Y Revenue" 
-                    value={fiveYearStats ? `$${(fiveYearStats.totalRevenue / 1000000).toFixed(2)}M` : '$0'} 
+                    value={fiveYearStats ? formatCurrency(fiveYearStats.totalRevenue) : '$0'} 
                   />
                   <HeaderStat 
                     label="5Y Profit" 
-                    value={fiveYearStats ? `$${(fiveYearStats.totalProfit / 1000000).toFixed(2)}M` : '$0'}
+                    value={fiveYearStats ? formatCurrency(fiveYearStats.totalProfit) : '$0'}
                     valueColor="text-emerald-400"
                   />
                   <HeaderStat 
@@ -219,7 +229,7 @@ export default function Home() {
                   />
                   <HeaderStat 
                     label="Treasury (5Y)" 
-                    value={fiveYearStats ? `$${(fiveYearStats.treasury / 1000000).toFixed(2)}M` : '$0'} 
+                    value={fiveYearStats ? formatCurrency(fiveYearStats.treasury) : '$0'} 
                     valueColor="text-emerald-400"
                   />
                   <HeaderStat 
@@ -238,6 +248,7 @@ export default function Home() {
             onUpdateParameters={simulation.updateParameters}
             onReset={simulation.resetParameters}
             onLoadPreset={simulation.loadPreset}
+            simulationResult={simulation.activeResult}
           />
 
           {/* Export Buttons */}
@@ -246,6 +257,9 @@ export default function Home() {
               parameters={simulation.parameters}
               result={simulation.activeResult}
               onImportParameters={simulation.updateParameters}
+              baseResult={simulation.result}
+              monteCarloResult={simulation.monteCarloResult}
+              agentBasedResult={simulation.agentBasedResult}
             />
           </div>
 
@@ -306,6 +320,9 @@ export default function Home() {
                 {activeSection === 'fiveA' && simulation.activeResult && (
                   <FiveAPolicySection result={simulation.activeResult} parameters={simulation.parameters} />
                 )}
+                {activeSection === 'organicGrowth' && simulation.activeResult && (
+                  <OrganicGrowthSection result={simulation.activeResult} parameters={simulation.parameters} />
+                )}
               </>
             )}
 
@@ -342,6 +359,9 @@ export default function Home() {
                 {activeSection === 'fiveA' && simulation.activeResult && (
                   <FiveAPolicySection result={simulation.activeResult} parameters={simulation.parameters} />
                 )}
+                {activeSection === 'organicGrowth' && simulation.activeResult && (
+                  <OrganicGrowthSection result={simulation.activeResult} parameters={simulation.parameters} />
+                )}
               </>
             )}
           </main>
@@ -358,14 +378,17 @@ export default function Home() {
 }
 
 // Sections for Year 1 page
+// NOTE: Keep in sync with ModuleNavigation.tsx YEAR1_SECTIONS
 const YEAR1_SECTIONS = [
   'overview', 'prelaunch', 'identity', 'content', 'advertising', 'exchange', 
-  'rewards', 'recapture', 'liquidity', 'staking'
+  'rewards', 'recapture', 'liquidity', 'staking', 'fiveA'
 ];
 
 // Sections for 5-Year page
+// NOTE: Keep in sync with ModuleNavigation.tsx YEAR5_SECTIONS
 const YEAR5_SECTIONS = [
-  'overview', 'prelaunch', 'tokenomics', 'governance', 'velocity', 'token-metrics', 'future-modules', 'summary'
+  'overview', 'prelaunch', 'tokenomics', 'token-unlocks', 'governance', 'fiveA',
+  'velocity', 'token-metrics', 'future-modules', 'summary'
 ];
 
 function HeaderStat({ 

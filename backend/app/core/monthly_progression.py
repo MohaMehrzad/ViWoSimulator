@@ -34,6 +34,7 @@ from app.models.results import (
 from app.core.retention import (
     CohortTracker,
     VCOIN_RETENTION,
+    WAITLIST_USER_RETENTION,
     SOCIAL_APP_RETENTION,
     CRYPTO_APP_RETENTION,
     RetentionCurve,
@@ -52,7 +53,7 @@ from app.core.growth_scenarios import (
     calculate_token_price,
     get_fomo_event_for_month,
     get_cycle_multipliers,
-    MARKET_CYCLE_2025_2030,
+    MARKET_CYCLE_2026_2030,
     # 5A Integration (Dec 2025)
     calculate_five_a_retention_boost,
     calculate_five_a_growth_boost,
@@ -72,6 +73,7 @@ from app.core.modules.five_a_policy import (
     SEGMENT_ORDER,
 )
 from app.core.modules.liquidity import calculate_five_a_price_impact
+from app.core.modules.organic_growth import calculate_organic_growth
 from app.config import config
 
 
@@ -147,7 +149,7 @@ def apply_market_cycle_multipliers(
         base_growth_rate: Base growth rate
         base_retention: Base retention rate
         base_price_multiplier: Base price multiplier
-        year: Calendar year (2025-2030)
+        year: Calendar year (2026-2030)
         month_in_year: Month within the year (1-12)
     
     Returns:
@@ -639,7 +641,7 @@ def run_monthly_progression_simulation(
     market_saturation_factor: float = 0.0,
     target_market_size: int = 1_000_000,  # Total addressable market
     progress_callback: Optional[Callable[[int, int], None]] = None,
-    start_year: int = 2025,  # HIGH-03: Starting year for market cycle
+    start_year: int = 2026,  # HIGH-03: Starting year for market cycle
     start_month: int = 3,    # HIGH-03: Starting month (default March)
     apply_market_cycle: bool = True,  # HIGH-03: Apply 5-year market cycle
 ) -> MonthlyProgressionResult:
@@ -653,7 +655,7 @@ def run_monthly_progression_simulation(
         market_saturation_factor: How saturated the market is (0-1)
         target_market_size: Total addressable market for saturation calc
         progress_callback: Optional callback for progress updates
-        start_year: Calendar year when simulation starts (default 2025)
+        start_year: Calendar year when simulation starts (default 2026)
         start_month: Calendar month when simulation starts (default March = 3)
         apply_market_cycle: Whether to apply 5-year market cycle adjustments
     
@@ -661,7 +663,7 @@ def run_monthly_progression_simulation(
         MonthlyProgressionResult with full time-series data
     
     HIGH-03 Fix: Added market cycle integration for simulations > 12 months.
-    Uses MARKET_CYCLE_2025_2030 for growth, retention, and price multipliers.
+    Uses MARKET_CYCLE_2026_2030 for growth, retention, and price multipliers.
     """
     # Select retention curve based on parameters
     retention_curve = VCOIN_RETENTION
@@ -690,7 +692,87 @@ def run_monthly_progression_simulation(
     # Track profitability
     months_to_profitability = None
     
-    # Base monthly marketing budget
+    # Marketing budget distribution (Dec 2025)
+    # Updated to support 5-year marketing budget (months 1-60)
+    def get_monthly_marketing_budget(month: int) -> float:
+        """
+        Get marketing budget for a specific month based on distribution strategy.
+        
+        Supports months 1-60 (5 years) with configurable multipliers (doubling each year):
+        - Year 1: Base marketing_budget
+        - Year 2: Year 1 * marketing_budget_year2_multiplier (default 2x)
+        - Year 3: Year 2 * marketing_budget_year3_multiplier (default 2x = 4x of Y1)
+        - Year 4: Year 3 * marketing_budget_year4_multiplier (default 2x = 8x of Y1)
+        - Year 5: Year 4 * marketing_budget_year5_multiplier (default 2x = 16x of Y1)
+        
+        Default distribution within each year (50% in first 3 months):
+        - Month 1: 23.3%
+        - Month 2: 16.7%
+        - Month 3: 10.0%
+        - Month 4-6: 6.67% each
+        - Month 7-9: 5.56% each
+        - Month 10-12: 4.44% each
+        """
+        if month <= 0 or month > 60:
+            return 0
+        
+        # Use the helper method from params if available
+        if hasattr(params, 'get_marketing_budget_for_month'):
+            return params.get_marketing_budget_for_month(month)
+        
+        # Fallback: Calculate manually for backwards compatibility
+        year = ((month - 1) // 12) + 1
+        month_in_year = ((month - 1) % 12) + 1
+        
+        # Get annual budget for this year
+        if year == 1:
+            annual_budget = params.marketing_budget
+        else:
+            # Calculate cumulative multiplier (each year doubles by default)
+            year1_budget = params.marketing_budget
+            year2_mult = getattr(params, 'marketing_budget_year2_multiplier', 2.0)
+            year3_mult = getattr(params, 'marketing_budget_year3_multiplier', 2.0)
+            year4_mult = getattr(params, 'marketing_budget_year4_multiplier', 2.0)
+            year5_mult = getattr(params, 'marketing_budget_year5_multiplier', 2.0)
+            
+            if year == 2:
+                annual_budget = year1_budget * year2_mult
+            elif year == 3:
+                annual_budget = year1_budget * year2_mult * year3_mult
+            elif year == 4:
+                annual_budget = year1_budget * year2_mult * year3_mult * year4_mult
+            else:  # year >= 5
+                annual_budget = year1_budget * year2_mult * year3_mult * year4_mult * year5_mult
+        
+        # Use custom distribution if provided (only for Year 1)
+        if year == 1 and hasattr(params, 'marketing_budget_distribution_months') and params.marketing_budget_distribution_months:
+            if month_in_year <= len(params.marketing_budget_distribution_months):
+                return params.marketing_budget_distribution_months[month_in_year - 1]
+            return 0
+        
+        # Use distributed or even distribution
+        if hasattr(params, 'use_distributed_marketing_budget') and params.use_distributed_marketing_budget:
+            # Default distribution (50% in first 3 months of each year)
+            distribution = {
+                1: 0.2333,  # 23.3%
+                2: 0.1667,  # 16.7%
+                3: 0.1000,  # 10.0%
+                4: 0.0667,  # 6.67%
+                5: 0.0667,  # 6.67%
+                6: 0.0667,  # 6.67%
+                7: 0.0556,  # 5.56%
+                8: 0.0556,  # 5.56%
+                9: 0.0556,  # 5.56%
+                10: 0.0444, # 4.44%
+                11: 0.0444, # 4.44%
+                12: 0.0444, # 4.44%
+            }
+            return annual_budget * distribution.get(month_in_year, 0)
+        else:
+            # Even distribution (legacy behavior)
+            return annual_budget / 12
+    
+    # Base monthly marketing budget (for reference)
     base_monthly_marketing = params.marketing_budget / 12
     
     # 5A Segment Evolution (Dec 2025)
@@ -706,6 +788,10 @@ def run_monthly_progression_simulation(
     cumulative_churned_5a = 0
     cumulative_improved = 0
     cumulative_decayed = 0
+    
+    # Organic growth tracking (Dec 2025)
+    cumulative_organic = 0
+    cumulative_paid = 0
     
     # HIGH-03: Track current calendar year/month for market cycle
     current_calendar_year = start_year
@@ -759,7 +845,8 @@ def run_monthly_progression_simulation(
         effective_cac = effective_cac / cycle_growth_mult if cycle_growth_mult > 0 else effective_cac
         
         # Calculate users acquired this month
-        monthly_marketing = base_monthly_marketing * seasonality
+        # Dec 2025: Use distributed marketing budget
+        monthly_marketing = get_monthly_marketing_budget(month) * seasonality
         
         # Creator acquisition (fixed monthly targets)
         monthly_creator_cost = (
@@ -773,7 +860,31 @@ def run_monthly_progression_simulation(
             (params.high_quality_creators_needed + params.mid_level_creators_needed) / 12
         )
         
-        total_acquired_this_month = consumers_acquired + creators_acquired
+        # Calculate paid acquisition (marketing + creators)
+        paid_acquired_this_month = consumers_acquired + creators_acquired
+        
+        # === ORGANIC GROWTH CALCULATION (Dec 2025) ===
+        # Calculate organic users from word-of-mouth, app store, network effects, etc.
+        organic_users_this_month = 0
+        if params.organic_growth and params.organic_growth.enable_organic_growth:
+            # Get current active users for organic growth calculation
+            current_active = tracker.get_active_users_at_month(month - 1) if month > 1 else 0
+            
+            # Calculate organic growth
+            organic_result = calculate_organic_growth(
+                params,
+                current_active,
+                month,
+                tracker.get_total_acquired(),
+            )
+            organic_users_this_month = organic_result.total_organic_users
+        
+        # Total acquired = paid + organic
+        total_acquired_this_month = paid_acquired_this_month + organic_users_this_month
+        
+        # Track cumulative organic and paid users
+        cumulative_organic += organic_users_this_month
+        cumulative_paid += paid_acquired_this_month
         
         # Add cohort to tracker
         tracker.add_cohort(month, total_acquired_this_month)
@@ -888,8 +999,9 @@ def run_monthly_progression_simulation(
         # Disable growth scenarios in deterministic sim - we handle them separately
         month_params.use_growth_scenarios = False
         
-        # Run simulation
-        sim_result = run_deterministic_simulation(month_params)
+        # Run simulation with current month for accurate circulating supply
+        # and unified budget constraint enforcement
+        sim_result = run_deterministic_simulation(month_params, simulation_month=month)
         
         # Calculate ARPU
         month_revenue = sim_result.totals.revenue
@@ -935,13 +1047,21 @@ def run_monthly_progression_simulation(
         five_a_enabled = five_a.enabled if five_a else False
         
         # Create monthly metrics
+        total_lifetime = tracker.get_total_acquired()
+        organic_percent_this_month = (cumulative_organic / total_lifetime * 100) if total_lifetime > 0 else 0
+        
         metrics = MonthlyMetrics(
             month=month,
             users_acquired=total_acquired_this_month,
             users_churned=users_churned,
             active_users=active_users,
-            total_acquired_lifetime=tracker.get_total_acquired(),
+            total_acquired_lifetime=total_lifetime,
             retention_rate=round(retention_stats['overall_retention_rate'] * 100, 2),
+            # Organic growth tracking
+            organic_users_acquired=organic_users_this_month,
+            paid_users_acquired=paid_acquired_this_month,
+            cumulative_organic_users=cumulative_organic,
+            organic_percent=round(organic_percent_this_month, 2),
             revenue=round(month_revenue, 2),
             costs=round(month_costs, 2),
             profit=round(month_profit, 2),
@@ -1184,8 +1304,10 @@ def run_growth_scenario_simulation(
     base_token_price = params.token_price
     
     # Calculate base users from marketing budget (same as regular simulation)
-    customer_acquisition = calculate_customer_acquisition(params)
-    base_users_from_marketing = customer_acquisition.total_users
+    # For growth scenarios, use month 1 as baseline (platform just launched)
+    # Dec 2025: Function now returns tuple (metrics, acquired, active)
+    customer_acquisition, total_acquired, total_active = calculate_customer_acquisition(params, platform_age_months=1)
+    base_users_from_marketing = total_active  # Use active users after retention
     
     # Use override if provided, otherwise use marketing-calculated users
     if params.starting_waitlist_users and params.starting_waitlist_users > 0:
@@ -1200,6 +1322,63 @@ def run_growth_scenario_simulation(
     
     # Store the base users for reference
     waitlist_users = base_users
+    
+    # Marketing budget distribution function (Dec 2025)
+    # Updated to support 5-year marketing budget (months 1-60)
+    def get_monthly_marketing_budget_gs(month: int) -> float:
+        """
+        Get marketing budget for a specific month in growth scenario.
+        
+        Supports months 1-60 (5 years) with configurable multipliers.
+        """
+        if month <= 0 or month > 60:
+            return 0
+        
+        # Use the helper method from params if available
+        if hasattr(params, 'get_marketing_budget_for_month'):
+            return params.get_marketing_budget_for_month(month)
+        
+        # Fallback: Calculate manually for backwards compatibility
+        year = ((month - 1) // 12) + 1
+        month_in_year = ((month - 1) % 12) + 1
+        
+        # Get annual budget for this year
+        if year == 1:
+            annual_budget = params.marketing_budget
+        else:
+            # Each year doubles by default
+            year1_budget = params.marketing_budget
+            year2_mult = getattr(params, 'marketing_budget_year2_multiplier', 2.0)
+            year3_mult = getattr(params, 'marketing_budget_year3_multiplier', 2.0)
+            year4_mult = getattr(params, 'marketing_budget_year4_multiplier', 2.0)
+            year5_mult = getattr(params, 'marketing_budget_year5_multiplier', 2.0)
+            
+            if year == 2:
+                annual_budget = year1_budget * year2_mult
+            elif year == 3:
+                annual_budget = year1_budget * year2_mult * year3_mult
+            elif year == 4:
+                annual_budget = year1_budget * year2_mult * year3_mult * year4_mult
+            else:  # year >= 5
+                annual_budget = year1_budget * year2_mult * year3_mult * year4_mult * year5_mult
+        
+        # Use custom distribution if provided (only for Year 1)
+        if year == 1 and hasattr(params, 'marketing_budget_distribution_months') and params.marketing_budget_distribution_months:
+            if month_in_year <= len(params.marketing_budget_distribution_months):
+                return params.marketing_budget_distribution_months[month_in_year - 1]
+            return 0
+        
+        # Use distributed or even distribution
+        if hasattr(params, 'use_distributed_marketing_budget') and params.use_distributed_marketing_budget:
+            distribution = {
+                1: 0.2333, 2: 0.1667, 3: 0.1000,
+                4: 0.0667, 5: 0.0667, 6: 0.0667,
+                7: 0.0556, 8: 0.0556, 9: 0.0556,
+                10: 0.0444, 11: 0.0444, 12: 0.0444,
+            }
+            return annual_budget * distribution.get(month_in_year, 0)
+        else:
+            return annual_budget / 12
     
     # Track monthly results
     monthly_data: List[MonthlyMetrics] = []
@@ -1315,8 +1494,9 @@ def run_growth_scenario_simulation(
         # Disable growth scenarios in deterministic sim - we already handle them in monthly progression
         month_params.use_growth_scenarios = False
         
-        # Run simulation
-        sim_result = run_deterministic_simulation(month_params)
+        # Run simulation with current month for accurate circulating supply
+        # and unified budget constraint enforcement
+        sim_result = run_deterministic_simulation(month_params, simulation_month=month)
         
         # Calculate ARPU
         month_revenue = sim_result.totals.revenue
@@ -1378,7 +1558,7 @@ def run_growth_scenario_simulation(
             net_emission=round(tokens_distributed - tokens_recaptured, 2),
             cac_effective=0.0,  # N/A for growth scenarios
             ltv_estimate=round(arpu * 6, 2),  # Simplified LTV estimate
-            marketing_spend=round(params.marketing_budget / 12 * seasonality, 2),
+            marketing_spend=round(get_monthly_marketing_budget_gs(month) * seasonality, 2),
             arpu=round(arpu, 2),
             arr=round(month_revenue * 12, 2),
             cohort_breakdown={},

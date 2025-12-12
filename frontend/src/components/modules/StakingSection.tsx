@@ -18,7 +18,7 @@ export function StakingSection({ result, parameters }: StakingSectionProps) {
   const fiveAApyBoost = fiveA?.stakingApyBoostAvg || 0;
   
   // Fallback values if staking module not available
-  const stakingApy = staking?.stakingApy || (parameters.stakingApy || 0.10) * 100;
+  const stakingApy = staking?.stakingApy || (parameters.stakingApy || 0.07) * 100;
   const stakerFeeDiscount = staking?.stakerFeeDiscount || (parameters.stakerFeeDiscount || 0.30) * 100;
   const minStakeAmount = staking?.minStakeAmount || parameters.minStakeAmount || 100;
   const lockDays = staking?.lockDays || parameters.stakeLockDays || 30;
@@ -91,6 +91,11 @@ export function StakingSection({ result, parameters }: StakingSectionProps) {
   const earlyUnstakeRate = staking?.earlyUnstakeRate || 0;
   const earlyUnstakersCount = staking?.earlyUnstakersCount || 0;
   const expectedEarlyUnstakeRewardLoss = staking?.expectedEarlyUnstakeRewardLoss || 0;
+  
+  // Dynamic Staking Cap (December 2025 Budget Constraint)
+  const stakingCap = staking?.stakingCap || 0;
+  const stakingAtCapacity = staking?.stakingAtCapacity || false;
+  const stakingCapacityPercent = staking?.stakingCapacityPercent || 0;
 
   // Status colors
   const statusColors = {
@@ -126,6 +131,17 @@ export function StakingSection({ result, parameters }: StakingSectionProps) {
                 <div className="flex items-center gap-2">
                   <span className="text-lg">⭐</span>
                   <span className="font-semibold text-sm">+{fiveAApyBoost.toFixed(1)}% APY Boost</span>
+                </div>
+              </div>
+            )}
+            {/* Staking Capacity Badge */}
+            {stakingCap > 0 && (
+              <div className={`backdrop-blur-sm rounded-lg px-3 py-1 ${stakingAtCapacity ? 'bg-red-500/30' : 'bg-white/20'}`}>
+                <div className="flex items-center gap-2">
+                  <span className="text-lg">{stakingAtCapacity ? '⚠️' : '📊'}</span>
+                  <span className="font-semibold text-sm">
+                    {stakingAtCapacity ? 'At Capacity' : `${stakingCapacityPercent.toFixed(0)}% Capacity`}
+                  </span>
                 </div>
               </div>
             )}
@@ -312,6 +328,38 @@ export function StakingSection({ result, parameters }: StakingSectionProps) {
                 <strong>Auto-Compound Enabled:</strong> Rewards automatically compound for {dailyCompoundApy.toFixed(1)}% effective APY (+{(dailyCompoundApy - stakingApy).toFixed(2)}% boost)
               </div>
             </div>
+          </div>
+        )}
+        
+        {/* Budget Constraint - Dynamic Staking Cap */}
+        {stakingCap > 0 && (
+          <div className={`mt-4 p-4 rounded-lg border ${stakingAtCapacity ? 'bg-red-50 border-red-200' : 'bg-slate-50 border-slate-200'}`}>
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                <span className="text-lg">{stakingAtCapacity ? '⚠️' : '📊'}</span>
+                <span className={`font-semibold ${stakingAtCapacity ? 'text-red-700' : 'text-slate-700'}`}>
+                  Budget-Constrained Staking Cap
+                </span>
+              </div>
+              <span className={`text-sm font-medium ${stakingAtCapacity ? 'text-red-600' : 'text-slate-600'}`}>
+                {stakingCapacityPercent.toFixed(1)}% utilized
+              </span>
+            </div>
+            <div className="w-full bg-gray-200 rounded-full h-2 mb-2">
+              <div 
+                className={`h-2 rounded-full transition-all ${stakingAtCapacity ? 'bg-red-500' : stakingCapacityPercent > 80 ? 'bg-amber-500' : 'bg-emerald-500'}`}
+                style={{ width: `${Math.min(stakingCapacityPercent, 100)}%` }}
+              />
+            </div>
+            <div className="flex justify-between text-xs text-slate-500">
+              <span>Staked: {formatNumber(totalStaked)} VCoin</span>
+              <span>Cap: {formatNumber(stakingCap)} VCoin</span>
+            </div>
+            {stakingAtCapacity && (
+              <div className="mt-2 text-xs text-red-600">
+                <strong>At Capacity:</strong> New staking is limited. Existing stakers continue earning {stakingApy.toFixed(1)}% APY.
+              </div>
+            )}
           </div>
         )}
       </div>

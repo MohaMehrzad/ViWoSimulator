@@ -12,6 +12,8 @@ interface ParameterControlsProps {
   onUpdateParameters: (updates: Partial<SimulationParameters>) => void;
   onReset: () => void;
   onLoadPreset: (preset: Partial<SimulationParameters>) => void;
+  // Dec 2025: Pass actual simulation result for accurate user count
+  simulationResult?: any;
 }
 
 export function ParameterControls({
@@ -20,6 +22,7 @@ export function ParameterControls({
   onUpdateParameters,
   onReset,
   onLoadPreset,
+  simulationResult,
 }: ParameterControlsProps) {
   // Section collapse states
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({
@@ -48,6 +51,8 @@ export function ParameterControls({
     gasless: false,
     // 5A Policy
     fiveA: false,
+    // Organic User Growth
+    organicGrowth: false,
   });
 
   const toggleSection = (section: string) => {
@@ -55,26 +60,37 @@ export function ParameterControls({
   };
 
   // Calculate derived values
-  const totalCreatorCost = 
-    parameters.highQualityCreatorsNeeded * parameters.highQualityCreatorCAC +
-    parameters.midLevelCreatorsNeeded * parameters.midLevelCreatorCAC;
+  // Dec 2025: Use actual simulation result if available, otherwise estimate
+  let totalUsers: number;
+  let blendedCAC: number;
   
-  const consumerBudget = Math.max(0, parameters.marketingBudget - totalCreatorCost);
-  
-  const totalPercent = parameters.northAmericaBudgetPercent + parameters.globalLowIncomeBudgetPercent;
-  const normalizedNA = totalPercent > 0 ? parameters.northAmericaBudgetPercent / totalPercent : 0.5;
-  const normalizedGlobal = totalPercent > 0 ? parameters.globalLowIncomeBudgetPercent / totalPercent : 0.5;
-  
-  const naBudget = consumerBudget * normalizedNA;
-  const globalBudget = consumerBudget * normalizedGlobal;
-  
-  const naUsers = parameters.cacNorthAmericaConsumer > 0 ? Math.floor(naBudget / parameters.cacNorthAmericaConsumer) : 0;
-  const globalUsers = parameters.cacGlobalLowIncomeConsumer > 0 ? Math.floor(globalBudget / parameters.cacGlobalLowIncomeConsumer) : 0;
-  
-  const totalCreators = parameters.highQualityCreatorsNeeded + parameters.midLevelCreatorsNeeded;
-  const totalUsers = totalCreators + naUsers + globalUsers;
-  
-  const blendedCAC = totalUsers > 0 ? parameters.marketingBudget / totalUsers : 0;
+  if (simulationResult?.customerAcquisition) {
+    // Use accurate values from backend (includes distributed budget + cohort retention)
+    totalUsers = simulationResult.customerAcquisition.totalUsers || 0;
+    blendedCAC = simulationResult.customerAcquisition.blendedCAC || 0;
+  } else {
+    // Fallback: Estimate using old logic (before first simulation run)
+    const totalCreatorCost = 
+      parameters.highQualityCreatorsNeeded * parameters.highQualityCreatorCAC +
+      parameters.midLevelCreatorsNeeded * parameters.midLevelCreatorCAC;
+    
+    const consumerBudget = Math.max(0, parameters.marketingBudget - totalCreatorCost);
+    
+    const totalPercent = parameters.northAmericaBudgetPercent + parameters.globalLowIncomeBudgetPercent;
+    const normalizedNA = totalPercent > 0 ? parameters.northAmericaBudgetPercent / totalPercent : 0.5;
+    const normalizedGlobal = totalPercent > 0 ? parameters.globalLowIncomeBudgetPercent / totalPercent : 0.5;
+    
+    const naBudget = consumerBudget * normalizedNA;
+    const globalBudget = consumerBudget * normalizedGlobal;
+    
+    const naUsers = parameters.cacNorthAmericaConsumer > 0 ? Math.floor(naBudget / parameters.cacNorthAmericaConsumer) : 0;
+    const globalUsers = parameters.cacGlobalLowIncomeConsumer > 0 ? Math.floor(globalBudget / parameters.cacGlobalLowIncomeConsumer) : 0;
+    
+    const totalCreators = parameters.highQualityCreatorsNeeded + parameters.midLevelCreatorsNeeded;
+    totalUsers = totalCreators + naUsers + globalUsers;
+    
+    blendedCAC = totalUsers > 0 ? parameters.marketingBudget / totalUsers : 0;
+  }
 
   // Count enabled modules
   const coreModulesEnabled = [
@@ -137,6 +153,81 @@ export function ParameterControls({
           <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-lg p-3">
             <div className="text-xs text-gray-300 mb-1">Blended CAC</div>
             <div className="text-2xl font-bold text-emerald-400">{formatCurrency(blendedCAC, 2)}</div>
+          </div>
+        </div>
+        
+        {/* Multi-Year Marketing Budget Multipliers (Dec 2025) */}
+        <div className="mt-4 p-4 bg-orange-500/10 border border-orange-500/30 rounded-lg">
+          <h4 className="text-sm font-semibold text-orange-400 mb-3 flex items-center gap-2">
+            <span>📈</span> Years 2-5 Marketing Budget Multipliers
+          </h4>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <NumberInput
+              label="Year 2 (x of Y1)"
+              value={parameters.marketingBudgetYear2Multiplier ?? 2.0}
+              onChange={(v) => onUpdateParameter('marketingBudgetYear2Multiplier', v)}
+              min={0}
+              max={10}
+              step={0.5}
+              icon="2️⃣"
+            />
+            <NumberInput
+              label="Year 3 (x of Y2)"
+              value={parameters.marketingBudgetYear3Multiplier ?? 2.0}
+              onChange={(v) => onUpdateParameter('marketingBudgetYear3Multiplier', v)}
+              min={0}
+              max={10}
+              step={0.5}
+              icon="3️⃣"
+            />
+            <NumberInput
+              label="Year 4 (x of Y3)"
+              value={parameters.marketingBudgetYear4Multiplier ?? 2.0}
+              onChange={(v) => onUpdateParameter('marketingBudgetYear4Multiplier', v)}
+              min={0}
+              max={10}
+              step={0.5}
+              icon="4️⃣"
+            />
+            <NumberInput
+              label="Year 5 (x of Y4)"
+              value={parameters.marketingBudgetYear5Multiplier ?? 2.0}
+              onChange={(v) => onUpdateParameter('marketingBudgetYear5Multiplier', v)}
+              min={0}
+              max={10}
+              step={0.5}
+              icon="5️⃣"
+            />
+          </div>
+          <div className="mt-3 grid grid-cols-5 gap-2 text-center text-xs">
+            <div className="p-2 bg-gray-800 rounded">
+              <div className="text-gray-400">Y1</div>
+              <div className="text-white font-bold">${(parameters.marketingBudget / 1000).toFixed(0)}K</div>
+            </div>
+            <div className="p-2 bg-gray-800 rounded">
+              <div className="text-gray-400">Y2</div>
+              <div className="text-orange-400 font-bold">
+                ${((parameters.marketingBudget * (parameters.marketingBudgetYear2Multiplier ?? 5)) / 1000).toFixed(0)}K
+              </div>
+            </div>
+            <div className="p-2 bg-gray-800 rounded">
+              <div className="text-gray-400">Y3</div>
+              <div className="text-orange-400 font-bold">
+                ${((parameters.marketingBudget * (parameters.marketingBudgetYear2Multiplier ?? 5) * (parameters.marketingBudgetYear3Multiplier ?? 5)) / 1000000).toFixed(1)}M
+              </div>
+            </div>
+            <div className="p-2 bg-gray-800 rounded">
+              <div className="text-gray-400">Y4</div>
+              <div className="text-orange-400 font-bold">
+                ${((parameters.marketingBudget * (parameters.marketingBudgetYear2Multiplier ?? 5) * (parameters.marketingBudgetYear3Multiplier ?? 5) * (parameters.marketingBudgetYear4Multiplier ?? 5)) / 1000000).toFixed(1)}M
+              </div>
+            </div>
+            <div className="p-2 bg-gray-800 rounded">
+              <div className="text-gray-400">Y5</div>
+              <div className="text-orange-400 font-bold">
+                ${((parameters.marketingBudget * (parameters.marketingBudgetYear2Multiplier ?? 5) * (parameters.marketingBudgetYear3Multiplier ?? 5) * (parameters.marketingBudgetYear4Multiplier ?? 5) * (parameters.marketingBudgetYear5Multiplier ?? 5)) / 1000000).toFixed(1)}M
+              </div>
+            </div>
           </div>
         </div>
       </CollapsibleSection>
@@ -477,6 +568,139 @@ export function ParameterControls({
           </div>
           <div className="text-xs text-gray-400 p-2 bg-gray-800/50 rounded">
             💡 5 Stars: Authenticity, Accuracy, Agility, Activity, Approved. Users earn from 0x to 2x based on their weighted average star rating.
+          </div>
+        </div>
+      </CollapsibleSection>
+
+      {/* Organic User Growth - Off by Default */}
+      <CollapsibleSection
+        title="Organic User Growth"
+        icon="🌱"
+        isExpanded={expandedSections.organicGrowth}
+        onToggle={() => toggleSection('organicGrowth')}
+        badge={parameters.organicGrowth?.enableOrganicGrowth ? "on" : "off"}
+        badgeColor={parameters.organicGrowth?.enableOrganicGrowth ? "green" : "gray"}
+      >
+        <div className="space-y-4">
+          {/* Enable Toggle */}
+          <div className="flex items-center justify-between p-3 bg-gray-800/50 rounded-lg">
+            <div>
+              <div className="text-sm font-medium text-white">Enable Organic Growth</div>
+              <div className="text-xs text-gray-500">Model natural user acquisition (word-of-mouth, app store, network effects)</div>
+            </div>
+            <label className="relative inline-flex items-center cursor-pointer">
+              <input
+                type="checkbox"
+                checked={parameters.organicGrowth?.enableOrganicGrowth || false}
+                onChange={(e) => onUpdateParameters({ 
+                  organicGrowth: { ...parameters.organicGrowth, enableOrganicGrowth: e.target.checked } as any 
+                })}
+                className="sr-only peer"
+              />
+              <div className="w-11 h-6 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-green-600"></div>
+            </label>
+          </div>
+
+          {/* Research Benchmarks Info */}
+          <div className="p-3 bg-blue-900/30 border border-blue-700/50 rounded-lg">
+            <div className="text-sm font-medium text-blue-300 mb-1">Industry Benchmarks - Social/Crypto Platforms</div>
+            <div className="text-xs text-gray-400 grid grid-cols-2 gap-2">
+              <div>Monthly Growth: <span className="text-white">5-15%</span> (compounding!)</div>
+              <div>K-Factor: <span className="text-white">0.25-0.60</span> (WhatsApp: 0.6+)</div>
+              <div>Referral Rate: <span className="text-white">15-25%</span> (social platforms)</div>
+              <div>App Store: <span className="text-white">1-3%</span> (with good ASO)</div>
+            </div>
+            <div className="text-xs text-yellow-300 mt-2">
+              💡 For social/crypto platforms, organic becomes 50-80% of total growth over time due to network effects!
+            </div>
+          </div>
+
+          {/* Growth Parameters */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <SliderInput
+              label="Base Monthly Growth (%)"
+              value={(parameters.organicGrowth?.baseMonthlyGrowthRate || 0.08) * 100}
+              onChange={(v) => onUpdateParameters({ 
+                organicGrowth: { ...parameters.organicGrowth, baseMonthlyGrowthRate: v / 100 } as any 
+              })}
+              min={0}
+              max={25}
+            />
+            <SliderInput
+              label="Word-of-Mouth K-Factor"
+              value={(parameters.organicGrowth?.wordOfMouthCoefficient || 0.35) * 100}
+              onChange={(v) => onUpdateParameters({ 
+                organicGrowth: { ...parameters.organicGrowth, wordOfMouthCoefficient: v / 100 } as any 
+              })}
+              min={0}
+              max={100}
+            />
+            <SliderInput
+              label="App Store Discovery (%)"
+              value={(parameters.organicGrowth?.appStoreDiscoveryRate || 0.015) * 100}
+              onChange={(v) => onUpdateParameters({ 
+                organicGrowth: { ...parameters.organicGrowth, appStoreDiscoveryRate: v / 100 } as any 
+              })}
+              min={0}
+              max={5}
+            />
+            <SliderInput
+              label="Network Effect Strength (%)"
+              value={(parameters.organicGrowth?.networkEffectStrength || 0.60) * 100}
+              onChange={(v) => onUpdateParameters({ 
+                organicGrowth: { ...parameters.organicGrowth, networkEffectStrength: v / 100 } as any 
+              })}
+              min={0}
+              max={100}
+            />
+          </div>
+
+          {/* Participation Rates */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <SliderInput
+              label="Referral Participation (%)"
+              value={(parameters.organicGrowth?.referralParticipationRate || 0.18) * 100}
+              onChange={(v) => onUpdateParameters({ 
+                organicGrowth: { ...parameters.organicGrowth, referralParticipationRate: v / 100 } as any 
+              })}
+              min={0}
+              max={40}
+            />
+            <SliderInput
+              label="Social Sharing Rate (%)"
+              value={(parameters.organicGrowth?.socialSharingRate || 0.12) * 100}
+              onChange={(v) => onUpdateParameters({ 
+                organicGrowth: { ...parameters.organicGrowth, socialSharingRate: v / 100 } as any 
+              })}
+              min={0}
+              max={30}
+            />
+            <SliderInput
+              label="Content Virality Factor (%)"
+              value={(parameters.organicGrowth?.contentViralityFactor || 0.25) * 100}
+              onChange={(v) => onUpdateParameters({ 
+                organicGrowth: { ...parameters.organicGrowth, contentViralityFactor: v / 100 } as any 
+              })}
+              min={0}
+              max={100}
+            />
+            <div className="flex items-center p-3 bg-gray-800/50 rounded-lg">
+              <label className="flex items-center cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={parameters.organicGrowth?.applySeasonality !== false}
+                  onChange={(e) => onUpdateParameters({ 
+                    organicGrowth: { ...parameters.organicGrowth, applySeasonality: e.target.checked } as any 
+                  })}
+                  className="mr-2"
+                />
+                <span className="text-sm text-gray-300">Apply Seasonality</span>
+              </label>
+            </div>
+          </div>
+
+          <div className="text-xs text-gray-400 p-2 bg-gray-800/50 rounded">
+            🌱 REALISTIC EXPECTATIONS: For social/crypto platforms, organic growth compounds exponentially. Year 1: 20-40% organic. Years 2-5: 50-80% organic as network effects dominate!
           </div>
         </div>
       </CollapsibleSection>
@@ -880,7 +1104,7 @@ export function ParameterControls({
             />
             <SliderInput
               label="Staking APY (%)"
-              value={(parameters.stakingApy || 0.10) * 100}
+              value={(parameters.stakingApy || 0.07) * 100}
               onChange={(v) => onUpdateParameter('stakingApy', v / 100)}
               min={0}
               max={30}

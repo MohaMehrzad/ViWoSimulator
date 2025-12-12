@@ -17,6 +17,8 @@ PRESETS = {
         "parameters": {
             "token_price": 0.03,
             "marketing_budget": 50000,
+            "starting_waitlist_users": 2000,
+            "use_distributed_marketing_budget": True,
             "platform_maturity": "launch",
             "auto_adjust_for_maturity": True,
             "apply_retention": True,
@@ -55,6 +57,8 @@ PRESETS = {
         "description": "Balanced growth strategy for Series A",
         "parameters": {
             # Uses updated defaults from parameters.py
+            "starting_waitlist_users": 2000,
+            "use_distributed_marketing_budget": True,
             "platform_maturity": "launch",
             "auto_adjust_for_maturity": True,
         }
@@ -65,6 +69,8 @@ PRESETS = {
         "parameters": {
             "token_price": 0.03,
             "marketing_budget": 250000,
+            "starting_waitlist_users": 2000,
+            "use_distributed_marketing_budget": True,
             "platform_maturity": "growing",
             "auto_adjust_for_maturity": True,
             "apply_retention": True,
@@ -108,6 +114,8 @@ PRESETS = {
         "parameters": {
             "token_price": 0.06,
             "marketing_budget": 400000,
+            "starting_waitlist_users": 2000,
+            "use_distributed_marketing_budget": True,
             "platform_maturity": "established",
             "auto_adjust_for_maturity": True,
             "apply_retention": True,

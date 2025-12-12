@@ -2,7 +2,7 @@
 
 import { SimulationResult, SimulationParameters } from '@/types/simulation';
 import { formatNumber, formatCurrency, getMarginStatus, getRecaptureStatus } from '@/lib/utils';
-import { GROWTH_SCENARIOS, MARKET_CONDITIONS, MARKET_CYCLE_2025_2030 } from '@/lib/constants';
+import { GROWTH_SCENARIOS, MARKET_CONDITIONS, MARKET_CYCLE_2026_2030 } from '@/lib/constants';
 
 interface SummarySectionProps {
   result: SimulationResult;
@@ -47,10 +47,12 @@ export function SummarySection({ result, parameters }: SummarySectionProps) {
   const marketConfig = MARKET_CONDITIONS[marketCondition];
   
   // Issue #1 Fix: Guard against division by zero for both totalUsers and blendedCAC
-  const arpu = customerAcquisition.totalUsers > 0 
-    ? totals.revenue / customerAcquisition.totalUsers 
+  // Dec 2025: Use total users with organic if available
+  const totalUsersForCalc = customerAcquisition.totalUsersWithOrganic || customerAcquisition.totalUsers;
+  const arpu = totalUsersForCalc > 0 
+    ? totals.revenue / totalUsersForCalc 
     : 0;
-  const ltvCacRatio = (customerAcquisition.blendedCAC > 0 && customerAcquisition.totalUsers > 0)
+  const ltvCacRatio = (customerAcquisition.blendedCAC > 0 && totalUsersForCalc > 0)
     ? arpu / customerAcquisition.blendedCAC 
     : 0;
 
@@ -415,11 +417,11 @@ export function SummarySection({ result, parameters }: SummarySectionProps) {
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <div className="text-xs text-purple-600">Total Revenue</div>
-                <div className="text-xl font-bold text-purple-700">${(fiveYearRevenue / 1_000_000).toFixed(2)}M</div>
+                <div className="text-xl font-bold text-purple-700">{formatCurrency(fiveYearRevenue)}</div>
               </div>
               <div>
                 <div className="text-xs text-purple-600">Total Profit</div>
-                <div className="text-xl font-bold text-purple-700">${(fiveYearProfit / 1_000_000).toFixed(2)}M</div>
+                <div className="text-xl font-bold text-purple-700">{formatCurrency(fiveYearProfit)}</div>
               </div>
               <div>
                 <div className="text-xs text-purple-600">Future Modules</div>
@@ -428,7 +430,7 @@ export function SummarySection({ result, parameters }: SummarySectionProps) {
               <div>
                 <div className="text-xs text-purple-600">Market Cycles</div>
                 <div className="text-sm font-bold text-purple-700">
-                  {Object.keys(MARKET_CYCLE_2025_2030 || {}).length} years
+                  {Object.keys(MARKET_CYCLE_2026_2030 || {}).length} years
                 </div>
               </div>
             </div>
@@ -475,7 +477,7 @@ export function SummarySection({ result, parameters }: SummarySectionProps) {
             <div className="flex items-center justify-between">
               <span className="text-gray-600">Staking APY</span>
               <span className="font-bold text-indigo-600">
-                {(staking?.stakingApy || (parameters.stakingApy || 0.10) * 100).toFixed(1)}%
+                {(staking?.stakingApy || (parameters.stakingApy || 0.07) * 100).toFixed(1)}%
               </span>
             </div>
           </div>
@@ -616,7 +618,7 @@ export function SummarySection({ result, parameters }: SummarySectionProps) {
             <div className="bg-indigo-50 rounded-lg p-3 border border-indigo-100">
               <div className="text-xs text-indigo-600">APY</div>
               <div className="text-xl font-bold text-emerald-600">
-                {(staking?.stakingApy || (parameters.stakingApy || 0.10) * 100).toFixed(1)}%
+                {(staking?.stakingApy || (parameters.stakingApy || 0.07) * 100).toFixed(1)}%
               </div>
             </div>
             <div className="bg-indigo-50 rounded-lg p-3 border border-indigo-100">

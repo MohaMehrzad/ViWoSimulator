@@ -1093,6 +1093,92 @@ class GaslessParameters(BaseModel):
     )
 
 
+class OrganicGrowthParameters(BaseModel):
+    """
+    Organic user growth configuration (December 2025).
+    
+    Models natural user acquisition through:
+    - Word-of-mouth (K-factor: 0.15-0.25 for social/crypto apps)
+    - App store discovery (0.5-1% monthly organic downloads)
+    - Network effects (logarithmic scaling with user base)
+    - Social sharing and content virality
+    - Referral participation (8-15% of users refer others)
+    
+    Based on industry research:
+    - Monthly organic growth: 2-5% (conservative), 5-10% (base), 10-15% (bullish)
+    - Finance apps: 27% YoY growth, crypto apps: 45% session surge
+    - Network effects: Dampened Metcalfe's Law (n^1.2 vs n^2)
+    - Viral coefficient: 0.15-0.25 typical for consumer apps
+    
+    Sources:
+    - App Annie/data.ai Mobile Trends 2024-2025
+    - Y Combinator startup metrics
+    - Blockchain gaming elasticity research (~2.4x)
+    """
+    enable_organic_growth: bool = Field(
+        default=False,
+        description="Enable organic user growth module (OFF by default)"
+    )
+    
+    # Base growth rate
+    base_monthly_growth_rate: float = Field(
+        default=0.08, ge=0.0, le=0.25,
+        description="Base monthly organic growth rate (8% = realistic for social/crypto, 5% conservative, 15% bullish)"
+    )
+    
+    # Word-of-mouth / viral coefficient
+    word_of_mouth_coefficient: float = Field(
+        default=0.35, ge=0.0, le=1.0,
+        description="K-factor: users acquired per referrer per month (0.35 = social platforms, WhatsApp had 0.6+)"
+    )
+    
+    # App store organic discovery
+    app_store_discovery_rate: float = Field(
+        default=0.015, ge=0.0, le=0.05,
+        description="Monthly organic app store discovery rate (1.5% = realistic with good ASO, scales with reviews)"
+    )
+    
+    # Network effects
+    network_effect_strength: float = Field(
+        default=0.60, ge=0.0, le=1.0,
+        description="Network effect strength (0.60 = strong social platform, 0.35 = dampened, 1.0 = full Metcalfe's)"
+    )
+    
+    # User participation rates
+    referral_participation_rate: float = Field(
+        default=0.18, ge=0.0, le=0.40,
+        description="Percentage of users who refer others (18% = social/crypto apps, scales to 25% at larger user bases)"
+    )
+    
+    social_sharing_rate: float = Field(
+        default=0.12, ge=0.0, le=0.30,
+        description="Percentage of users who share on social media (12% = realistic, increases with engagement)"
+    )
+    
+    # Content virality
+    content_virality_factor: float = Field(
+        default=0.25, ge=0.0, le=1.0,
+        description="Content-driven viral growth factor (25% = social platform, content is growth engine)"
+    )
+    
+    # Growth phase modifiers
+    early_stage_boost: float = Field(
+        default=1.5, ge=1.0, le=3.0,
+        description="Organic growth boost for early stage (months 1-6), 1.5x = 50% boost from launch excitement"
+    )
+    
+    maturity_dampening: float = Field(
+        default=0.85, ge=0.5, le=1.2,
+        description="Growth factor at maturity (0.85 = slight reduction, social platforms stay strong due to network effects)"
+    )
+    
+    # Seasonal adjustments
+    apply_seasonality: bool = Field(
+        default=True,
+        description="Apply seasonal adjustments (Q4 boost, summer dip)"
+    )
+
+
 class RetentionParameters(BaseModel):
     """
     User retention configuration - Issue #1 fix.
@@ -1208,6 +1294,12 @@ class SimulationParameters(BaseModel):
         description="5A Policy gamification parameters (Identity, Accuracy, Agility, Activity, Approved)"
     )
     
+    # === ORGANIC USER GROWTH (Dec 2025) ===
+    organic_growth: Optional[OrganicGrowthParameters] = Field(
+        default_factory=OrganicGrowthParameters,
+        description="Organic user growth parameters (word-of-mouth, app store, network effects)"
+    )
+    
     # === GROWTH SCENARIO SETTINGS (NEW - Nov 2025) ===
     growth_scenario: GrowthScenarioType = Field(
         default=GrowthScenarioType.BASE,
@@ -1218,7 +1310,7 @@ class SimulationParameters(BaseModel):
         description="Macro market condition affecting growth (bear, neutral, bull)"
     )
     starting_waitlist_users: int = Field(
-        default=1000, ge=100, le=100000,
+        default=2000, ge=100, le=100000,
         description="Number of users on waitlist at token launch"
     )
     enable_fomo_events: bool = Field(
@@ -1247,7 +1339,48 @@ class SimulationParameters(BaseModel):
     )
     marketing_budget: float = Field(
         default=150000, ge=0, 
-        description="Monthly marketing budget in USD"
+        description="Total annual marketing budget in USD (distributed over 12 months if use_distributed_marketing_budget=True)"
+    )
+    use_distributed_marketing_budget: bool = Field(
+        default=True,
+        description="Distribute marketing budget over 12 months (50% in first 3 months) instead of all at once"
+    )
+    marketing_budget_distribution_months: Optional[list] = Field(
+        default=None,
+        description="Custom monthly budget distribution (12 values). If None, uses default distribution: 50% in first 3 months"
+    )
+    # === MULTI-YEAR MARKETING BUDGET (Dec 2025) ===
+    # Marketing budget multipliers for years 2-5 (each year doubles the previous by default)
+    marketing_budget_year2_multiplier: float = Field(
+        default=2.0, ge=0.0, le=10.0,
+        description="Year 2 marketing budget as multiplier of Year 1 (2.0 = 2x Year 1)"
+    )
+    marketing_budget_year3_multiplier: float = Field(
+        default=2.0, ge=0.0, le=10.0,
+        description="Year 3 marketing budget as multiplier of Year 2 (2.0 = 2x Year 2 = 4x Y1)"
+    )
+    marketing_budget_year4_multiplier: float = Field(
+        default=2.0, ge=0.0, le=10.0,
+        description="Year 4 marketing budget as multiplier of Year 3 (2.0 = 2x Year 3 = 8x Y1)"
+    )
+    marketing_budget_year5_multiplier: float = Field(
+        default=2.0, ge=0.0, le=10.0,
+        description="Year 5 marketing budget as multiplier of Year 4 (2.0 = 2x Year 4 = 16x Y1)"
+    )
+    # === USER GROWTH PRICE IMPACT (Dec 2025) ===
+    # Based on research: blockchain gaming shows ~2.4x elasticity, but with dampening
+    # Friend.tech showed strong correlation but pure Metcalfe's Law is overstated
+    enable_user_growth_price_impact: bool = Field(
+        default=True,
+        description="Enable token price adjustment based on user growth (network effects)"
+    )
+    user_growth_price_elasticity: float = Field(
+        default=0.35, ge=0.0, le=1.0,
+        description="How much user growth affects token price (0.35 = 35% of growth translates to price appreciation)"
+    )
+    user_growth_price_max_multiplier: float = Field(
+        default=3.0, ge=1.0, le=10.0,
+        description="Maximum price multiplier from user growth alone (cap to prevent unrealistic projections)"
     )
     starting_users: int = Field(
         default=0, ge=0, 
@@ -1396,8 +1529,8 @@ class SimulationParameters(BaseModel):
     
     # === STAKING PARAMETERS (NEW - Nov 2025) ===
     staking_apy: float = Field(
-        default=0.10, ge=0.0, le=0.30,
-        description="Annual staking APY (10% default)"
+        default=0.07, ge=0.0, le=0.30,
+        description="Annual staking APY (7% default - budget constrained)"
     )
     staking_participation_rate: float = Field(
         default=0.10, ge=0.0, le=0.50,
@@ -1741,6 +1874,86 @@ class SimulationParameters(BaseModel):
             if self.regional_compliance:
                 total += self.regional_compliance.monthly_ongoing
         return total
+    
+    def get_marketing_budget_for_year(self, year: int) -> float:
+        """
+        Get marketing budget for a specific year (1-5).
+        
+        Budget scales based on multipliers (each year doubles the previous by default):
+        - Year 1: Base marketing_budget
+        - Year 2: Year 1 * marketing_budget_year2_multiplier (default 2x)
+        - Year 3: Year 2 * marketing_budget_year3_multiplier (default 2x = 4x of Y1)
+        - Year 4: Year 3 * marketing_budget_year4_multiplier (default 2x = 8x of Y1)
+        - Year 5: Year 4 * marketing_budget_year5_multiplier (default 2x = 16x of Y1)
+        
+        Args:
+            year: Year number (1-5)
+        
+        Returns:
+            Annual marketing budget for the specified year in USD
+        """
+        if year <= 0:
+            return 0.0
+        if year == 1:
+            return self.marketing_budget
+        
+        # Calculate cumulative multiplier
+        year1_budget = self.marketing_budget
+        year2_budget = year1_budget * self.marketing_budget_year2_multiplier
+        
+        if year == 2:
+            return year2_budget
+        
+        year3_budget = year2_budget * self.marketing_budget_year3_multiplier
+        if year == 3:
+            return year3_budget
+        
+        year4_budget = year3_budget * self.marketing_budget_year4_multiplier
+        if year == 4:
+            return year4_budget
+        
+        year5_budget = year4_budget * self.marketing_budget_year5_multiplier
+        if year >= 5:
+            return year5_budget
+        
+        return 0.0
+    
+    def get_marketing_budget_for_month(self, month: int) -> float:
+        """
+        Get marketing budget for a specific month (1-60).
+        
+        Distributes the yearly budget across 12 months using the same
+        distribution pattern as Year 1 (50% in first 3 months of each year).
+        
+        Args:
+            month: Month number (1-60)
+        
+        Returns:
+            Monthly marketing budget in USD
+        """
+        if month <= 0 or month > 60:
+            return 0.0
+        
+        # Determine which year this month belongs to
+        year = ((month - 1) // 12) + 1
+        month_in_year = ((month - 1) % 12) + 1
+        
+        # Get annual budget for this year
+        annual_budget = self.get_marketing_budget_for_year(year)
+        
+        if not self.use_distributed_marketing_budget:
+            # Evenly distributed
+            return annual_budget / 12
+        
+        # Use distribution pattern (50% in first 3 months)
+        distribution = {
+            1: 0.2333, 2: 0.1667, 3: 0.1000,
+            4: 0.0667, 5: 0.0667, 6: 0.0667,
+            7: 0.0556, 8: 0.0556, 9: 0.0556,
+            10: 0.0444, 11: 0.0444, 12: 0.0444,
+        }
+        
+        return annual_budget * distribution.get(month_in_year, 0)
 
     class Config:
         populate_by_name = True

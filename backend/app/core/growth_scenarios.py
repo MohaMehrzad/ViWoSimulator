@@ -497,7 +497,7 @@ MARKET_CONDITIONS: Dict[MarketCondition, MarketConditionConfig] = {
 
 
 # ============================================================================
-# 5-YEAR MARKET CYCLE ANALYSIS (2025-2030)
+# 5-YEAR MARKET CYCLE ANALYSIS (2026-2030)
 # ============================================================================
 
 @dataclass
@@ -511,19 +511,9 @@ class MarketCycleYearConfig:
     description: str
 
 
-# Bitcoin Halving April 2024 - Market cycle analysis for 2025-2030
+# Bitcoin Halving April 2024 - Market cycle analysis for 2026-2030
 # Based on historical halving cycles and 2024-2025 market conditions
-MARKET_CYCLE_2025_2030: Dict[int, MarketCycleYearConfig] = {
-    2025: MarketCycleYearConfig(
-        year=2025,
-        phase="Early Bull / Post-Halving Rally",
-        growth_multiplier=1.3,
-        retention_multiplier=1.1,
-        price_multiplier=1.5,
-        description="Bitcoin halving (April 2024) effect in full swing. "
-                    "Increased crypto interest, new users entering market. "
-                    "Altcoin season typically begins 12-18 months post-halving."
-    ),
+MARKET_CYCLE_2026_2030: Dict[int, MarketCycleYearConfig] = {
     2026: MarketCycleYearConfig(
         year=2026,
         phase="Peak Bull / Altcoin Season",
@@ -582,13 +572,13 @@ def get_cycle_multipliers(year: int, base_month: int = 0) -> Dict[str, float]:
     Get market cycle multipliers for a specific year.
     
     Args:
-        year: Calendar year (2025-2030)
+        year: Calendar year (2026-2030)
         base_month: Month within the year (0-11) for fine-grained adjustments
     
     Returns:
         Dictionary with growth, retention, and price multipliers
     """
-    if year not in MARKET_CYCLE_2025_2030:
+    if year not in MARKET_CYCLE_2026_2030:
         # Default to neutral for years outside range
         return {
             "growth_multiplier": 1.0,
@@ -597,7 +587,7 @@ def get_cycle_multipliers(year: int, base_month: int = 0) -> Dict[str, float]:
             "phase": "Unknown",
         }
     
-    config = MARKET_CYCLE_2025_2030[year]
+    config = MARKET_CYCLE_2026_2030[year]
     
     # Optional: Add monthly variance within the year
     # e.g., Q4 tends to be stronger (holiday season)
@@ -616,12 +606,12 @@ def get_cycle_multipliers(year: int, base_month: int = 0) -> Dict[str, float]:
     }
 
 
-def get_5_year_projection_multipliers(start_year: int = 2025, start_month: int = 3) -> List[Dict]:
+def get_5_year_projection_multipliers(start_year: int = 2026, start_month: int = 3) -> List[Dict]:
     """
     Get month-by-month multipliers for a 60-month (5-year) projection.
     
     Args:
-        start_year: Starting year (default 2025)
+        start_year: Starting year (default 2026)
         start_month: Starting month 1-12 (default March = 3)
     
     Returns:
@@ -735,9 +725,9 @@ def calculate_monthly_growth(
         decay_factor = decay_factors[min(years_elapsed, len(decay_factors) - 1)]
         
         # Apply market cycle multiplier if available
-        year = 2025 + years_elapsed
-        if year in MARKET_CYCLE_2025_2030:
-            cycle_config = MARKET_CYCLE_2025_2030[year]
+        year = 2026 + years_elapsed
+        if year in MARKET_CYCLE_2026_2030:
+            cycle_config = MARKET_CYCLE_2026_2030[year]
             base_growth_rate = base_growth_rate * decay_factor * cycle_config.growth_multiplier
         else:
             base_growth_rate = base_growth_rate * decay_factor
@@ -1030,9 +1020,9 @@ def calculate_monthly_growth_with_five_a(
         years_elapsed = (month - 1) // 12
         decay_factors = [1.0, 0.80, 0.65, 0.55, 0.50]
         decay_factor = decay_factors[min(years_elapsed, len(decay_factors) - 1)]
-        year = 2025 + years_elapsed
-        if year in MARKET_CYCLE_2025_2030:
-            cycle_config = MARKET_CYCLE_2025_2030[year]
+        year = 2026 + years_elapsed
+        if year in MARKET_CYCLE_2026_2030:
+            cycle_config = MARKET_CYCLE_2026_2030[year]
             base_growth_rate = base_growth_rate * decay_factor * cycle_config.growth_multiplier
         else:
             base_growth_rate = base_growth_rate * decay_factor
@@ -1097,3 +1087,230 @@ def calculate_monthly_growth_with_five_a(
     }
     
     return new_users, churned_users, adjusted_growth_rate, five_a_impacts
+
+
+# =============================================================================
+# MULTI-YEAR MARKETING BUDGET HELPERS (Dec 2025)
+# =============================================================================
+
+def get_marketing_budget_multiplier_for_year(year: int) -> float:
+    """
+    Get the cumulative marketing budget multiplier for a given year.
+    
+    Based on the default multipliers:
+    - Year 1: 1.0x (base)
+    - Year 2: 2.0x (2x of Year 1)
+    - Year 3: 6.0x (3x of Year 2 = 6x of Year 1)
+    - Year 4: 12.0x (2x of Year 3 = 12x of Year 1)
+    - Year 5: 24.0x (2x of Year 4 = 24x of Year 1)
+    
+    Args:
+        year: Year number (1-5)
+    
+    Returns:
+        Cumulative multiplier relative to Year 1
+    """
+    if year <= 1:
+        return 1.0
+    
+    # Default multipliers (can be overridden via params)
+    multipliers = {
+        1: 1.0,
+        2: 2.0,   # 2x of Year 1
+        3: 6.0,   # 3x of Year 2
+        4: 12.0,  # 2x of Year 3
+        5: 24.0,  # 2x of Year 4
+    }
+    
+    return multipliers.get(year, multipliers[5])
+
+
+def calculate_marketing_driven_growth_boost(
+    month: int,
+    base_users: int,
+    year1_marketing_budget: float,
+    effective_cac: float = 40.0,
+) -> Dict[str, float]:
+    """
+    Calculate additional user growth from marketing budget beyond Year 1.
+    
+    This function estimates how many additional users can be acquired
+    from the increased marketing budget in years 2-5.
+    
+    Args:
+        month: Month number (1-60)
+        base_users: Current user base
+        year1_marketing_budget: Year 1 annual marketing budget
+        effective_cac: Effective customer acquisition cost (blended)
+    
+    Returns:
+        Dictionary with:
+        - year: Current year (1-5)
+        - annual_budget: Marketing budget for this year
+        - monthly_budget: Marketing budget for this month
+        - potential_users: Users that could be acquired this month
+        - growth_multiplier: Multiplier compared to Year 1
+    """
+    year = ((month - 1) // 12) + 1
+    month_in_year = ((month - 1) % 12) + 1
+    
+    # Get cumulative multiplier for this year
+    cumulative_multiplier = get_marketing_budget_multiplier_for_year(year)
+    annual_budget = year1_marketing_budget * cumulative_multiplier
+    
+    # Distribution within year (front-loaded: 50% in first 3 months)
+    distribution = {
+        1: 0.2333, 2: 0.1667, 3: 0.1000,
+        4: 0.0667, 5: 0.0667, 6: 0.0667,
+        7: 0.0556, 8: 0.0556, 9: 0.0556,
+        10: 0.0444, 11: 0.0444, 12: 0.0444,
+    }
+    
+    monthly_budget = annual_budget * distribution.get(month_in_year, 0)
+    
+    # Calculate potential users from marketing (using effective CAC)
+    potential_users = int(monthly_budget / effective_cac) if effective_cac > 0 else 0
+    
+    return {
+        'year': year,
+        'annual_budget': annual_budget,
+        'monthly_budget': monthly_budget,
+        'potential_users': potential_users,
+        'growth_multiplier': cumulative_multiplier,
+    }
+
+
+# =============================================================================
+# USER GROWTH PRICE IMPACT (Dec 2025)
+# =============================================================================
+# Based on research:
+# - Blockchain gaming: ~2.4x elasticity (12% DAU growth = 29% value increase)
+# - Friend.tech: Strong correlation but 98% drop when users declined
+# - Metcalfe's Law: Overstated for crypto (10-1000x higher than Facebook)
+# - a16z framework: Recommends dampened network effects with multiple metrics
+
+def calculate_user_growth_price_multiplier(
+    current_users: int,
+    baseline_users: int,
+    elasticity: float = 0.35,
+    max_multiplier: float = 3.0,
+) -> Dict[str, float]:
+    """
+    Calculate token price multiplier based on user growth with logarithmic dampening.
+    
+    This implements a research-backed model for how user growth affects token price:
+    - Uses dampened Metcalfe's Law (n^1.2 instead of n^2)
+    - Applies logarithmic dampening at scale to prevent unrealistic projections
+    - Caps maximum multiplier to ensure conservative estimates
+    
+    Research basis:
+    - Blockchain gaming tokens: 12% DAU increase → 29% market cap increase (~2.4x elasticity)
+    - But pure correlation leads to overestimation; we use 0.35 elasticity as default
+    - Logarithmic dampening ensures diminishing returns at scale
+    
+    Args:
+        current_users: Current active user count
+        baseline_users: Baseline user count (typically Year 1 starting users)
+        elasticity: How much user growth translates to price (0.35 = 35%)
+        max_multiplier: Maximum price multiplier cap (default 3.0x)
+    
+    Returns:
+        Dictionary with:
+        - multiplier: The price multiplier to apply
+        - user_growth_ratio: How much users have grown
+        - dampening_factor: Scale-based dampening applied
+        - raw_impact: Impact before dampening
+    """
+    if baseline_users <= 0 or current_users <= 0:
+        return {
+            'multiplier': 1.0,
+            'user_growth_ratio': 1.0,
+            'dampening_factor': 1.0,
+            'raw_impact': 0.0,
+        }
+    
+    # Calculate user growth ratio
+    user_growth_ratio = current_users / baseline_users
+    
+    # If users haven't grown (or shrunk), no positive price impact
+    if user_growth_ratio <= 1.0:
+        # Could apply negative impact for user decline, but keep neutral for now
+        return {
+            'multiplier': 1.0,
+            'user_growth_ratio': user_growth_ratio,
+            'dampening_factor': 1.0,
+            'raw_impact': 0.0,
+        }
+    
+    # Calculate logarithmic dampening factor based on user scale
+    # At 1K users: dampening = 1.0 (full impact)
+    # At 10K users: dampening = 0.75
+    # At 100K users: dampening = 0.50
+    # At 1M users: dampening = 0.25
+    # Formula: dampening = 1 / (1 + 0.25 * log10(users / 1000))
+    log_users = math.log10(max(current_users, 1000))
+    dampening_factor = 1.0 / (1.0 + 0.25 * (log_users - 3))  # log10(1000) = 3
+    dampening_factor = max(0.1, min(1.0, dampening_factor))  # Clamp between 0.1 and 1.0
+    
+    # Calculate raw impact from user growth
+    # Using (growth_ratio - 1) so that 2x users = 1.0 raw growth factor
+    raw_growth_factor = user_growth_ratio - 1.0
+    
+    # Apply elasticity (how much growth translates to price)
+    raw_impact = raw_growth_factor * elasticity
+    
+    # Apply dampening based on scale
+    dampened_impact = raw_impact * dampening_factor
+    
+    # Calculate final multiplier (1.0 = no change)
+    multiplier = 1.0 + dampened_impact
+    
+    # Cap at maximum multiplier
+    multiplier = min(multiplier, max_multiplier)
+    
+    return {
+        'multiplier': round(multiplier, 4),
+        'user_growth_ratio': round(user_growth_ratio, 4),
+        'dampening_factor': round(dampening_factor, 4),
+        'raw_impact': round(raw_impact, 4),
+    }
+
+
+def get_user_growth_price_impact_for_year(
+    year: int,
+    year_end_users: int,
+    year1_baseline_users: int,
+    elasticity: float = 0.35,
+    max_multiplier: float = 3.0,
+) -> Dict[str, float]:
+    """
+    Get the user-growth-driven price multiplier for a specific year.
+    
+    This is a convenience function that wraps calculate_user_growth_price_multiplier
+    for year-based calculations in the 5-year projections.
+    
+    Args:
+        year: Year number (1-5)
+        year_end_users: Users at end of the year
+        year1_baseline_users: Baseline users from Year 1 (for comparison)
+        elasticity: Price elasticity (default 0.35)
+        max_multiplier: Maximum price multiplier cap
+    
+    Returns:
+        Same as calculate_user_growth_price_multiplier
+    """
+    if year <= 1:
+        # Year 1 is the baseline, no growth impact
+        return {
+            'multiplier': 1.0,
+            'user_growth_ratio': 1.0,
+            'dampening_factor': 1.0,
+            'raw_impact': 0.0,
+        }
+    
+    return calculate_user_growth_price_multiplier(
+        current_users=year_end_users,
+        baseline_users=year1_baseline_users,
+        elasticity=elasticity,
+        max_multiplier=max_multiplier,
+    )
