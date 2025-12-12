@@ -579,7 +579,7 @@ export function ParameterControls({
         isExpanded={expandedSections.organicGrowth}
         onToggle={() => toggleSection('organicGrowth')}
         badge={parameters.organicGrowth?.enableOrganicGrowth ? "on" : "off"}
-        badgeColor={parameters.organicGrowth?.enableOrganicGrowth ? "green" : "gray"}
+        badgeColor={parameters.organicGrowth?.enableOrganicGrowth ? "emerald" : "gray"}
       >
         <div className="space-y-4">
           {/* Enable Toggle */}
