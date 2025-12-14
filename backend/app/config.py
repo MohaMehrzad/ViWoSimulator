@@ -206,7 +206,7 @@ class TokenAllocationConfig:
         percent=0.05,
         tokens=50_000_000,
         tge_percent=1.0,
-        description="DEX/CEX liquidity pools (locked 12 months)"
+        description="DEX/CEX liquidity pools (locked 24 months)"
     ))
     
     FOUNDATION: TokenAllocationCategory = field(default_factory=lambda: TokenAllocationCategory(
@@ -469,11 +469,11 @@ class SupplyConfig:
     - TGE Circulating: 114,833,333 (includes 1st month ecosystem per tokenomics tool)
       - Private: 4M + Public: 40M + Liquidity: 50M + Marketing: 15M + Ecosystem: 5.83M
     - Treasury Allocation: 200,000,000 (20%)
-    - Liquidity: 50,000,000 (5%, locked 12 months)
+    - Liquidity: 50,000,000 (5%, locked 24 months)
     """
     TOTAL: int = 1_000_000_000
     TGE_CIRCULATING: int = 114_833_333  # Includes 1st month ecosystem distribution
-    LIQUIDITY: int = 50_000_000  # 5% - locked 12 months
+    LIQUIDITY: int = 50_000_000  # 5% - locked 24 months
     REWARDS_ALLOCATION: int = 350_000_000  # 35%
     REWARDS_DURATION_MONTHS: int = 60  # 5 years
     TREASURY_ALLOCATION: int = 200_000_000  # 20%

@@ -89,7 +89,7 @@ USER_SEGMENTS = {
         'activity_mean': 0,    # Zero activity
         'approved_mean': 10,   # Minimal standing
         'std_dev': 5,
-        'expected_multiplier': 0.03,  # ~1.5% avg = essentially ZERO
+        'expected_multiplier': 0.06,  # 3% avg stars × 2.0 = 0.06x (Issue #4 fix)
     },
     'lurkers': {
         'name': 'Lurkers',
@@ -101,7 +101,7 @@ USER_SEGMENTS = {
         'activity_mean': 10,   # Very low activity
         'approved_mean': 40,   # Basic standing
         'std_dev': 15,
-        'expected_multiplier': 0.23,  # ~11.5% avg stars
+        'expected_multiplier': 0.46,  # 23% avg stars × 2.0 = 0.46x (Issue #4 fix)
     },
     'casual': {
         'name': 'Casual Users',

@@ -473,8 +473,9 @@ def calculate_content(
         active_dynamic_nfts = int(nft_mints * 0.25)  # 25% adoption
         dynamic_nft_costs = active_dynamic_nfts * 0.01
     
-    # Total costs (optimized)
-    total_costs = adjusted_infrastructure + adjusted_solana_costs + dynamic_nft_costs
+    # Total costs (optimized) - clamped to 0 to prevent negative costs
+    # when optimization savings exceed base costs (Issue #2 fix)
+    total_costs = max(0, adjusted_infrastructure + adjusted_solana_costs + dynamic_nft_costs)
     
     # Calculate total savings from all optimizations
     total_smart_savings = lazy_mint_savings_usd + batch_mint_savings_usd
