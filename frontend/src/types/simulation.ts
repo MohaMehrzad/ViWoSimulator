@@ -94,6 +94,38 @@ export interface TreasuryResult {
   revenueShareRate: number;
 }
 
+// === 5-YEAR PROJECTIONS (December 2025) ===
+
+export interface YearlyProjection {
+  year: number;
+  startMonth: number;
+  endMonth: number;
+  startUsers: number;
+  endUsers: number;
+  avgUsers: number;
+  totalRevenue: number;
+  totalProfit: number;
+  avgMargin: number;
+  tokenPriceStart: number;
+  tokenPriceEnd: number;
+  coreModulesRevenue: number;
+  futureModulesRevenue: number;
+  activeModules: string[];
+  marketCycle: string;
+  cycleMultiplier: number;
+  marketingBudget: number;
+  marketingMultiplier: number;
+  userGrowthPriceMultiplier: number;
+  userGrowthRatio: number;
+}
+
+export interface FiveYearProjectionResult {
+  available: boolean;
+  source: string; // "calculated" or "estimated"
+  years: YearlyProjection[];
+  summary: Record<string, any>;
+}
+
 // === GROWTH SCENARIO TYPES (November 2025) ===
 
 // Growth scenario selection
@@ -480,21 +512,28 @@ export interface RunwayResult {
 }
 
 export interface InflationResult {
-  // Emission
-  monthlyEmission: number;
+  // Rewards Emission (tokens distributed from 350M rewards pool)
+  monthlyEmission: number;  // Rewards emission only
   monthlyEmissionUsd: number;
   annualEmission: number;
-  emissionRate: number;
+  emissionRate: number;  // Rewards emission as % of circulating
+  // Vesting Unlocks (pre-allocated tokens becoming liquid - NOT inflation!)
+  vestingUnlocks?: number;  // VCoin from vesting schedules (SEED, PRIVATE, PUBLIC, TEAM, etc.)
+  vestingUnlocksUsd?: number;
+  // Dilution metrics (often mislabeled as "inflation")
+  // VCoin has FIXED supply - true inflation = 0%, this is circulating supply growth
+  dilutionRate?: number;  // Total unlocks as % of circulating (NOT true inflation!)
+  rewardsEmissionRate?: number;  // Rewards-only rate for mechanism analysis
   // Deflationary
   monthlyBurns: number;
   monthlyBurnsUsd: number;
   monthlyBuybacks: number;
   monthlyBuybacksUsd: number;
   totalDeflationary: number;
-  // Net inflation
-  netMonthlyInflation: number;
+  // Net Supply Change (CORRECTED: now includes ALL tokens entering circulation)
+  netMonthlyInflation: number;  // Total unlocks - burns - buybacks
   netMonthlyInflationUsd: number;
-  netInflationRate: number;
+  netInflationRate: number;  // As % of circulating
   annualNetInflationRate: number;
   // Supply
   circulatingSupply: number;
@@ -511,6 +550,25 @@ export interface InflationResult {
   monthsToMaxSupply: number;
   projectedYear1Inflation: number;
   projectedYear5Supply: number;
+  // Yearly snapshots for slider (Year 1-5)
+  yearlySnapshots?: YearlySupplySnapshot[];
+}
+
+export interface YearlySupplySnapshot {
+  year: number;
+  month: number;
+  rewardsEmission: number;
+  vestingUnlocks: number;
+  totalUnlocks: number;
+  burns: number;
+  buybacks: number;
+  totalDeflationary: number;
+  netChange: number;
+  circulatingSupply: number;
+  monthlyRate: number;
+  annualRate: number;
+  isDeflationary: boolean;
+  status: string;
 }
 
 // === WHALE ANALYSIS RESULTS (December 2025 - 2025 Audit Compliance) ===
@@ -1324,6 +1382,10 @@ export interface CustomerAcquisitionMetrics {
   organicUsers?: number;
   totalUsersWithOrganic?: number;
   organicPercent?: number;
+  effectiveCac?: number;  // CAC including organic/referral users
+  ltvEstimate?: number;  // Lifetime value estimate
+  ltvCacRatio?: number;  // LTV/CAC ratio
+  paybackMonths?: number;  // Months to recover CAC
 }
 
 // Full Simulation Result
@@ -1781,6 +1843,8 @@ export interface SimulationResult {
   fiveA?: FiveAResult;
   // Organic User Growth (Dec 2025)
   organicGrowth?: OrganicGrowthResult;
+  // 5-Year Projections (Dec 2025)
+  fiveYearProjections?: FiveYearProjectionResult;
 }
 
 // Monte Carlo Results

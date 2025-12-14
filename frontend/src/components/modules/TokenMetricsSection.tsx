@@ -1,7 +1,7 @@
 'use client';
 
-import React from 'react';
-import { SimulationResult, TokenMetricsResult } from '@/types/simulation';
+import React, { useState } from 'react';
+import { SimulationResult, TokenMetricsResult, YearlySupplySnapshot } from '@/types/simulation';
 
 interface TokenMetricsSectionProps {
   result: SimulationResult;
@@ -9,6 +9,7 @@ interface TokenMetricsSectionProps {
 
 export function TokenMetricsSection({ result }: TokenMetricsSectionProps) {
   const metrics = result.tokenMetrics;
+  const [selectedYear, setSelectedYear] = useState(5); // Default to Year 5
 
   if (!metrics) {
     return (
@@ -381,55 +382,127 @@ export function TokenMetricsSection({ result }: TokenMetricsSectionProps) {
         )}
       </div>
 
-      {/* Inflation Dashboard - 2025 Compliance */}
-      {metrics.inflation && (
-        <div className="bg-gradient-to-br from-violet-50 to-fuchsia-50 rounded-xl border border-violet-200 p-6">
-          <div className="flex items-center justify-between mb-6">
+      {/* Supply Dynamics Dashboard with Year Slider */}
+      {metrics.inflation && (() => {
+        // Get snapshot for selected year (or use default values)
+        const snapshots = metrics.inflation.yearlySnapshots || [];
+        const snapshot = snapshots.find(s => s.year === selectedYear) || {
+          year: selectedYear,
+          month: selectedYear * 12,
+          rewardsEmission: metrics.inflation.monthlyEmission ?? 0,
+          vestingUnlocks: metrics.inflation.vestingUnlocks ?? 0,
+          totalUnlocks: metrics.inflation.totalMonthlyUnlocks ?? 0,
+          burns: metrics.inflation.monthlyBurns ?? 0,
+          buybacks: metrics.inflation.monthlyBuybacks ?? 0,
+          totalDeflationary: metrics.inflation.totalDeflationary ?? 0,
+          netChange: metrics.inflation.netMonthlyInflation ?? 0,
+          circulatingSupply: metrics.inflation.circulatingSupply ?? 0,
+          monthlyRate: metrics.inflation.netInflationRate ?? 0,
+          annualRate: metrics.inflation.annualNetInflationRate ?? 0,
+          isDeflationary: metrics.inflation.isDeflationary ?? false,
+          status: metrics.inflation.deflationStrength ?? 'Unknown',
+        };
+        
+        const isDeflationary = snapshot.isDeflationary;
+        const yearLabels = ['Year 1', 'Year 2', 'Year 3', 'Year 4', 'Year 5'];
+        
+        return (
+        <div className={`bg-gradient-to-br ${isDeflationary ? 'from-emerald-50 to-teal-50 border-emerald-200' : 'from-violet-50 to-fuchsia-50 border-violet-200'} rounded-xl border p-6`}>
+          <div className="flex items-center justify-between mb-4">
             <div>
-              <h3 className="font-bold text-lg text-violet-900 flex items-center gap-2">
-                📈 Inflation Dashboard
+              <h3 className={`font-bold text-lg ${isDeflationary ? 'text-emerald-900' : 'text-violet-900'} flex items-center gap-2`}>
+                📊 Supply Dynamics — {yearLabels[selectedYear - 1]} End
               </h3>
-              <p className="text-sm text-violet-600 mt-1">
-                Token supply dynamics and deflationary mechanisms
+              <p className={`text-sm ${isDeflationary ? 'text-emerald-600' : 'text-violet-600'} mt-1`}>
+                Month {snapshot.month} • Fixed supply: 1B tokens
               </p>
             </div>
             <div className={`px-4 py-2 rounded-xl ${
-              metrics.inflation.isDeflationary 
+              isDeflationary 
                 ? 'bg-emerald-100 border border-emerald-300' 
                 : 'bg-amber-100 border border-amber-300'
             }`}>
               <div className={`text-2xl font-bold ${
-                metrics.inflation.isDeflationary ? 'text-emerald-700' : 'text-amber-700'
+                isDeflationary ? 'text-emerald-700' : 'text-amber-700'
               }`}>
-                {metrics.inflation.isDeflationary ? '📉' : '📈'} {Math.abs(metrics.inflation.annualNetInflationRate ?? 0).toFixed(2)}%
+                {isDeflationary ? '🔥' : '📈'} {snapshot.annualRate.toFixed(1)}%
               </div>
-              <div className="text-xs text-center">
-                {metrics.inflation.deflationStrength ?? 'Annual Rate'}
+              <div className="text-xs text-center text-slate-600">
+                {snapshot.status}
+              </div>
+            </div>
+          </div>
+          
+          {/* Year Slider */}
+          <div className="bg-white/60 rounded-xl p-4 mb-4">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-sm font-medium text-slate-700">Select Year End</span>
+              <span className="text-sm font-bold text-slate-800">{yearLabels[selectedYear - 1]} (Month {selectedYear * 12})</span>
+            </div>
+            <input
+              type="range"
+              min="1"
+              max="5"
+              value={selectedYear}
+              onChange={(e) => setSelectedYear(parseInt(e.target.value))}
+              className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-violet-600"
+            />
+            <div className="flex justify-between mt-1 text-xs text-slate-500">
+              {yearLabels.map((label, idx) => (
+                <span 
+                  key={idx} 
+                  className={`cursor-pointer hover:text-violet-600 ${selectedYear === idx + 1 ? 'font-bold text-violet-700' : ''}`}
+                  onClick={() => setSelectedYear(idx + 1)}
+                >
+                  {label}
+                </span>
+              ))}
+            </div>
+          </div>
+          
+          {/* Status Banner */}
+          <div className={`${isDeflationary ? 'bg-emerald-100 border-emerald-300' : 'bg-blue-50 border-blue-200'} border rounded-lg p-3 mb-4 text-sm`}>
+            <div className="flex items-start gap-2">
+              <span className={isDeflationary ? 'text-emerald-500' : 'text-blue-500'}>
+                {isDeflationary ? '🔥' : '📅'}
+              </span>
+              <div>
+                <span className={`font-medium ${isDeflationary ? 'text-emerald-800' : 'text-blue-800'}`}>
+                  {selectedYear === 5 ? 'Post-Vesting State' : `Year ${selectedYear} Vesting Active`}
+                </span>
+                <span className={isDeflationary ? 'text-emerald-700' : 'text-blue-700'} style={{marginLeft: '4px'}}>
+                  {isDeflationary 
+                    ? '— All vesting complete. Only burns & buybacks active.' 
+                    : `— Vesting unlocks: ${(snapshot.vestingUnlocks / 1_000_000).toFixed(2)}M/month`
+                  }
+                </span>
               </div>
             </div>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-            {/* Emission (Inflationary) */}
+            {/* Total New Supply */}
             <div className="bg-white/80 rounded-xl p-4">
               <div className="flex items-center gap-2 mb-3">
-                <span className="w-8 h-8 rounded-full bg-red-100 flex items-center justify-center text-red-600">⬆️</span>
+                <span className={`w-8 h-8 rounded-full ${snapshot.totalUnlocks === 0 ? 'bg-emerald-100 text-emerald-600' : 'bg-red-100 text-red-600'} flex items-center justify-center`}>
+                  {snapshot.totalUnlocks === 0 ? '✓' : '⬆️'}
+                </span>
                 <div>
-                  <h4 className="font-semibold text-slate-800">Emission</h4>
-                  <p className="text-xs text-slate-500">New tokens entering</p>
+                  <h4 className="font-semibold text-slate-800">New Supply</h4>
+                  <p className="text-xs text-slate-500">Tokens entering circulation</p>
                 </div>
               </div>
-              <div className="text-2xl font-bold text-red-600 mb-2">
-                +{((metrics.inflation.monthlyEmission ?? 0) / 1_000_000).toFixed(2)}M
+              <div className={`text-2xl font-bold ${snapshot.totalUnlocks === 0 ? 'text-emerald-600' : 'text-red-600'} mb-2`}>
+                {snapshot.totalUnlocks === 0 ? '0' : `+${(snapshot.totalUnlocks / 1_000_000).toFixed(2)}M`}
               </div>
               <div className="space-y-1 text-sm">
                 <div className="flex justify-between">
-                  <span className="text-slate-500">Monthly Value</span>
-                  <span className="font-medium">${((metrics.inflation.monthlyEmissionUsd ?? 0) / 1000).toFixed(0)}K</span>
+                  <span className="text-slate-500">🎁 Rewards</span>
+                  <span className="font-medium text-purple-600">{(snapshot.rewardsEmission / 1_000_000).toFixed(2)}M</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-slate-500">Rate</span>
-                  <span className="font-medium">{(metrics.inflation.emissionRate ?? 0).toFixed(3)}%</span>
+                  <span className="text-slate-500">🔓 Vesting</span>
+                  <span className="font-medium text-blue-600">{(snapshot.vestingUnlocks / 1_000_000).toFixed(2)}M</span>
                 </div>
               </div>
             </div>
@@ -444,105 +517,100 @@ export function TokenMetricsSection({ result }: TokenMetricsSectionProps) {
                 </div>
               </div>
               <div className="text-2xl font-bold text-emerald-600 mb-2">
-                -{((metrics.inflation.totalDeflationary ?? 0) / 1_000_000).toFixed(2)}M
+                -{(snapshot.totalDeflationary / 1_000_000).toFixed(2)}M
               </div>
               <div className="space-y-1 text-sm">
                 <div className="flex justify-between">
                   <span className="text-slate-500">Burns</span>
-                  <span className="font-medium text-orange-600">🔥 {((metrics.inflation.monthlyBurns ?? 0) / 1000).toFixed(0)}K</span>
+                  <span className="font-medium text-orange-600">🔥 {(snapshot.burns / 1000).toFixed(0)}K</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-slate-500">Buybacks</span>
-                  <span className="font-medium text-blue-600">💰 {((metrics.inflation.monthlyBuybacks ?? 0) / 1000).toFixed(0)}K</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-slate-500">USD Spent</span>
-                  <span className="font-medium">${((metrics.inflation.monthlyBuybacksUsd ?? 0) / 1000).toFixed(0)}K</span>
+                  <span className="font-medium text-blue-600">💰 {(snapshot.buybacks / 1000).toFixed(0)}K</span>
                 </div>
               </div>
             </div>
 
-            {/* Net Result */}
+            {/* Net Result - Uses snapshot data */}
             <div className="bg-white/80 rounded-xl p-4">
               <div className="flex items-center gap-2 mb-3">
                 <span className={`w-8 h-8 rounded-full flex items-center justify-center ${
-                  metrics.inflation.isDeflationary 
+                  isDeflationary 
                     ? 'bg-emerald-100 text-emerald-600' 
-                    : 'bg-amber-100 text-amber-600'
+                    : 'bg-blue-100 text-blue-600'
                 }`}>
-                  {metrics.inflation.isDeflationary ? '✅' : '⚠️'}
+                  {isDeflationary ? '🔥' : '📊'}
                 </span>
                 <div>
-                  <h4 className="font-semibold text-slate-800">Net Supply Change</h4>
-                  <p className="text-xs text-slate-500">Monthly net inflation</p>
+                  <h4 className="font-semibold text-slate-800">Net Circulating Change</h4>
+                  <p className="text-xs text-slate-500">Unlocks - Burns - Buybacks</p>
                 </div>
               </div>
               <div className={`text-2xl font-bold mb-2 ${
-                metrics.inflation.isDeflationary ? 'text-emerald-600' : 'text-amber-600'
+                isDeflationary ? 'text-emerald-600' : 'text-amber-600'
               }`}>
-                {metrics.inflation.isDeflationary ? '' : '+'}
-                {((metrics.inflation.netMonthlyInflation ?? 0) / 1_000_000).toFixed(3)}M
+                {isDeflationary ? '' : '+'}{(snapshot.netChange / 1_000_000).toFixed(2)}M
               </div>
               <div className="space-y-1 text-sm">
                 <div className="flex justify-between">
-                  <span className="text-slate-500">Monthly %</span>
+                  <span className="text-slate-500">Monthly Rate</span>
                   <span className={`font-medium ${
-                    metrics.inflation.isDeflationary ? 'text-emerald-600' : 'text-amber-600'
+                    isDeflationary ? 'text-emerald-600' : 'text-amber-600'
                   }`}>
-                    {(metrics.inflation.netInflationRate ?? 0).toFixed(3)}%
+                    {snapshot.monthlyRate.toFixed(2)}%
                   </span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-slate-500">Annual %</span>
+                  <span className="text-slate-500">Annual Rate</span>
                   <span className={`font-bold ${
-                    metrics.inflation.isDeflationary ? 'text-emerald-600' : 'text-amber-600'
+                    isDeflationary ? 'text-emerald-600' : 'text-amber-600'
                   }`}>
-                    {(metrics.inflation.annualNetInflationRate ?? 0).toFixed(2)}%
+                    {snapshot.annualRate.toFixed(1)}%
                   </span>
                 </div>
               </div>
             </div>
           </div>
 
-          {/* Supply Progress Bar */}
+          {/* Supply Progress Bar - Uses snapshot data */}
           <div className="bg-white/60 rounded-xl p-4">
             <div className="flex justify-between text-sm mb-2">
-              <span className="text-slate-600 font-medium">Circulating Supply Progress</span>
+              <span className="text-slate-600 font-medium">Circulating Supply at Year {selectedYear} End</span>
               <span className="font-bold text-slate-800">
-                {((metrics.inflation.circulatingSupply ?? 0) / (metrics.inflation.totalSupply ?? 1_000_000_000) * 100).toFixed(1)}%
+                {(snapshot.circulatingSupply / 1_000_000_000 * 100).toFixed(1)}%
               </span>
             </div>
             <div className="h-4 bg-slate-200 rounded-full overflow-hidden mb-2">
               <div 
-                className="h-full bg-gradient-to-r from-violet-400 to-fuchsia-500 rounded-full transition-all"
+                className={`h-full ${isDeflationary ? 'bg-gradient-to-r from-emerald-400 to-teal-500' : 'bg-gradient-to-r from-violet-400 to-fuchsia-500'} rounded-full transition-all`}
                 style={{ 
-                  width: `${Math.min(100, (metrics.inflation.circulatingSupply ?? 0) / (metrics.inflation.totalSupply ?? 1_000_000_000) * 100)}%` 
+                  width: `${Math.min(100, snapshot.circulatingSupply / 1_000_000_000 * 100)}%` 
                 }}
               />
             </div>
             <div className="flex justify-between text-xs text-slate-500">
-              <span>{((metrics.inflation.circulatingSupply ?? 0) / 1_000_000).toFixed(0)}M Circulating</span>
-              <span>{((metrics.inflation.totalSupply ?? 0) / 1_000_000).toFixed(0)}M Total Supply</span>
+              <span>{(snapshot.circulatingSupply / 1_000_000).toFixed(0)}M Circulating</span>
+              <span>1000M Total Supply</span>
             </div>
 
             <div className="grid grid-cols-3 gap-4 mt-4 pt-4 border-t border-slate-200">
               <div className="text-center">
                 <div className="text-lg font-bold text-violet-600">
-                  {metrics.inflation.monthsToMaxSupply ?? 60}
+                  {Math.max(0, 60 - snapshot.month)}
                 </div>
-                <div className="text-xs text-slate-500">Months to Max Supply</div>
+                <div className="text-xs text-slate-500">Months to Vesting End</div>
+              </div>
+              <div className="text-center">
+                <div className={`text-lg font-bold ${isDeflationary ? 'text-emerald-600' : 'text-violet-600'}`}>
+                  {isDeflationary ? '🔥' : snapshot.annualRate.toFixed(0) + '%'}
+                </div>
+                <div className="text-xs text-slate-500">{isDeflationary ? 'Deflationary' : 'Annual Rate'}</div>
               </div>
               <div className="text-center">
                 <div className="text-lg font-bold text-violet-600">
-                  {(metrics.inflation.supplyHealthScore ?? 50).toFixed(0)}
+                  {(snapshot.circulatingSupply / 1_000_000).toFixed(0)}M
                 </div>
-                <div className="text-xs text-slate-500">Supply Health Score</div>
-              </div>
-              <div className="text-center">
-                <div className="text-lg font-bold text-violet-600">
-                  {((metrics.inflation.projectedYear5Supply ?? 0) / 1_000_000).toFixed(0)}M
-                </div>
-                <div className="text-xs text-slate-500">Year 5 Projection</div>
+                <div className="text-xs text-slate-500">Year {selectedYear} Supply</div>
               </div>
             </div>
           </div>
@@ -605,7 +673,8 @@ export function TokenMetricsSection({ result }: TokenMetricsSectionProps) {
             </div>
           )}
         </div>
-      )}
+        );
+      })()}
 
       {/* Interpretation Guide */}
       <div className="bg-slate-50 rounded-xl p-5">
@@ -644,12 +713,12 @@ export function TokenMetricsSection({ result }: TokenMetricsSectionProps) {
             </ul>
           </div>
           <div>
-            <h4 className="font-medium text-slate-700 mb-2">Net Inflation</h4>
+            <h4 className="font-medium text-slate-700 mb-2">Supply Growth (Fixed Supply)</h4>
             <ul className="space-y-1 text-slate-500">
               <li>• <span className="text-emerald-600">&lt;0%:</span> Deflationary 🔥</li>
-              <li>• <span className="text-blue-600">0-1%:</span> Low inflation</li>
-              <li>• <span className="text-amber-600">1-5%:</span> Moderate</li>
-              <li>• <span className="text-red-600">&gt;5%:</span> High inflation</li>
+              <li>• <span className="text-blue-600">Early:</span> High dilution (vesting)</li>
+              <li>• <span className="text-amber-600">Mid:</span> Decreasing unlocks</li>
+              <li>• <span className="text-purple-600">Post-60:</span> Burns only</li>
             </ul>
           </div>
         </div>

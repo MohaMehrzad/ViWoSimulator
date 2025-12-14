@@ -12,8 +12,8 @@ All presets now use realistic values for:
 
 PRESETS = {
     "conservative": {
-        "label": "Lean Bootstrap ($50K/yr)",
-        "description": "Conservative growth with minimal spend, realistic for seed stage",
+        "label": "Conservative ($50K/yr)",
+        "description": "Conservative revenue projection with Phase 1 compliance",
         "parameters": {
             "token_price": 0.03,
             "marketing_budget": 50000,
@@ -22,7 +22,8 @@ PRESETS = {
             "platform_maturity": "launch",
             "auto_adjust_for_maturity": True,
             "apply_retention": True,
-            "include_compliance_costs": False,
+            "include_compliance_costs": True,
+            "revenue_scenario": "conservative",
             # User acquisition (Issue #2 - Realistic CAC)
             "north_america_budget_percent": 0.30,
             "global_low_income_budget_percent": 0.70,
@@ -54,18 +55,20 @@ PRESETS = {
     },
     "base": {
         "label": "Base Case ($150K/yr)",
-        "description": "Balanced growth strategy for Series A",
+        "description": "Balanced growth with Phase 2 compliance (marketplace)",
         "parameters": {
             # Uses updated defaults from parameters.py
             "starting_waitlist_users": 2000,
             "use_distributed_marketing_budget": True,
             "platform_maturity": "launch",
             "auto_adjust_for_maturity": True,
+            "include_compliance_costs": True,
+            "revenue_scenario": "conservative",
         }
     },
     "aggressive": {
-        "label": "Growth Phase ($250K/yr)",
-        "description": "Aggressive acquisition for growing platform",
+        "label": "Optimistic Growth ($250K/yr)",
+        "description": "Optimistic revenue projection with Phase 4 compliance",
         "parameters": {
             "token_price": 0.03,
             "marketing_budget": 250000,
@@ -74,7 +77,8 @@ PRESETS = {
             "platform_maturity": "growing",
             "auto_adjust_for_maturity": True,
             "apply_retention": True,
-            "include_compliance_costs": False,  # Enable when needed
+            "include_compliance_costs": True,
+            "revenue_scenario": "optimistic",
             # User acquisition
             "north_america_budget_percent": 0.40,
             "global_low_income_budget_percent": 0.60,

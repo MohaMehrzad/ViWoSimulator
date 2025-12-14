@@ -171,17 +171,59 @@ def calculate_content(
     image_posts = round(total_posts * dist['IMAGE'])    # 30%
     video_posts = round(total_posts * dist['VIDEO'])    # 4.9%
     
-    # NFT mints (if enabled)
+    # NFT mints (if enabled) - SMART OPTIMIZATION
     # Issue #7 Fix: Use maturity-adjusted NFT percentage
     if hasattr(params, 'get_effective_nft_percentage'):
         nft_percentage = params.get_effective_nft_percentage()
     else:
         nft_percentage = getattr(params, 'nft_mint_percentage', dist.get('NFT', 0.005))
+    
     if getattr(params, 'enable_nft', False):
-        nft_mints = max(1, round(total_posts * nft_percentage))
-        nft_mints = max(nft_mints, max(1, int(creators * 0.01)))
+        # Base mints from post volume
+        base_nft_mints = max(1, round(total_posts * nft_percentage))
+        base_nft_mints = max(base_nft_mints, max(1, int(creators * 0.01)))
+        
+        # SMART OPTIMIZATION #6: AI-Assisted NFT Valuation
+        # Simulate AI increasing mint conversion rate by identifying viral posts
+        enable_ai_valuation = getattr(params, 'enable_nft_ai_valuation', False)
+        ai_conversion_boost = 1.0
+        if enable_ai_valuation:
+            # AI identifies high-potential posts, boosting conversion 2-3x
+            # Scales with platform maturity (better training data)
+            maturity_factor = min(1.0, users / 10000)  # Max boost at 10k users
+            ai_conversion_boost = 1.0 + (2.0 * maturity_factor)  # 1.0x to 3.0x
+        
+        nft_mints = int(base_nft_mints * ai_conversion_boost)
+        
+        # SMART OPTIMIZATION #4: Edition NFTs
+        # Some mints are editions (multiple copies), increasing revenue
+        enable_edition_nfts = getattr(params, 'enable_edition_nfts', False)
+        edition_nft_ratio = 0.0
+        avg_edition_size = 1  # Default: 1-of-1 NFTs
+        
+        if enable_edition_nfts:
+            # 20% of NFTs are editions at maturity
+            edition_nft_ratio = min(0.20, users / 50000)  # Scales to 20% at 50k users
+            # Edition sizes: 10, 25, 50, or 100 copies
+            # Weighted average: (10*0.5 + 25*0.3 + 50*0.15 + 100*0.05) = 20.5
+            avg_edition_size = 1 + (edition_nft_ratio * 19.5)  # Avg 1-20 copies
+        
+        edition_nfts = int(nft_mints * edition_nft_ratio)
+        single_nfts = nft_mints - edition_nfts
+        
+        # Total NFT tokens minted (accounting for editions)
+        total_nft_tokens_minted = single_nfts + int(edition_nfts * avg_edition_size)
     else:
         nft_mints = 0
+        base_nft_mints = 0
+        ai_conversion_boost = 1.0
+        edition_nfts = 0
+        single_nfts = 0
+        total_nft_tokens_minted = 0
+        avg_edition_size = 1
+        edition_nft_ratio = 0.0
+        enable_ai_valuation = False
+        enable_edition_nfts = False
     
     # === ANTI-BOT FEE CALCULATION (Break-Even Design) ===
     
@@ -215,12 +257,126 @@ def calculate_content(
     engagement_refund_rate = getattr(params, 'engagement_refund_rate', 0.80)
     effective_anti_bot_revenue = anti_bot_fees_usd * (1 - engagement_refund_rate)
     
-    # === NFT MINTING ===
-    # NFT fee uses WhitePaper-specified value (50 VCN default)
-    # Fee set in params.nft_mint_fee_vcoin
-    nft_mint_fee_vcoin = getattr(params, 'nft_mint_fee_vcoin', 50)
-    nft_fees_vcoin = nft_mints * nft_mint_fee_vcoin
+    # === NFT MINTING - SMART OPTIMIZATION ===
+    
+    # SMART OPTIMIZATION #3: Dynamic Pricing Based on 5A Score
+    # High-quality creators pay less (or nothing) for minting
+    base_nft_fee_vcoin = getattr(params, 'nft_mint_fee_vcoin', 50)
+    enable_5a_nft_pricing = getattr(params, 'enable_5a_nft_pricing', False)
+    
+    if enable_5a_nft_pricing and five_a_visibility_boost > 0:
+        # 5A tiers and their NFT fee multipliers
+        # Diamond (1.87x): 0% fee (FREE)
+        # Gold (1.44x): 50% discount
+        # Silver (0.90x): 20% discount  
+        # Bronze (0.33x): 0% discount (base fee)
+        # Penalty (<0.33x): 50% penalty (150% of base)
+        
+        # Estimate creator quality distribution
+        # Assume normal distribution around avg 5A boost
+        diamond_creators = int(creators * 0.01)  # Top 1%
+        gold_creators = int(creators * 0.12)     # Next 12%
+        silver_creators = int(creators * 0.26)   # Next 26%
+        bronze_creators = int(creators * 0.61)   # Bottom 61%
+        
+        # Calculate weighted average fee based on tier distribution
+        # Assumes mints proportional to creator count in each tier
+        diamond_fee = 0  # FREE for top creators
+        gold_fee = base_nft_fee_vcoin * 0.5
+        silver_fee = base_nft_fee_vcoin * 0.8
+        bronze_fee = base_nft_fee_vcoin
+        penalty_fee = base_nft_fee_vcoin * 1.5
+        
+        # Weighted average across all tiers
+        avg_nft_fee_vcoin = (
+            (diamond_creators * diamond_fee +
+             gold_creators * gold_fee +
+             silver_creators * silver_fee +
+             bronze_creators * bronze_fee) / 
+            max(1, creators)
+        )
+        
+        # Apply 5A boost effect: higher avg boost = more high-tier creators
+        # This shifts distribution toward lower fees
+        fee_reduction_factor = 1.0 - (five_a_visibility_boost * 0.4)  # Up to 40% reduction
+        nft_mint_fee_vcoin = round(avg_nft_fee_vcoin * fee_reduction_factor, 2)
+    else:
+        nft_mint_fee_vcoin = base_nft_fee_vcoin
+    
+    # SMART OPTIMIZATION #4: Edition NFTs pricing
+    # Edition NFTs have lower per-copy price but higher total revenue
+    if enable_edition_nfts and edition_nft_ratio > 0:
+        # Single NFTs: Full price
+        single_nft_revenue_vcoin = single_nfts * nft_mint_fee_vcoin
+        
+        # Edition NFTs: Lower per-copy price (30% of single), but 20 copies average
+        edition_price_per_copy = nft_mint_fee_vcoin * 0.3
+        edition_nft_revenue_vcoin = edition_nfts * edition_price_per_copy * avg_edition_size
+        
+        nft_fees_vcoin = single_nft_revenue_vcoin + edition_nft_revenue_vcoin
+    else:
+        nft_fees_vcoin = nft_mints * nft_mint_fee_vcoin
+    
     nft_fees_usd = nft_fees_vcoin * params.token_price
+    
+    # SMART OPTIMIZATION #1: Lazy Minting Cost Savings
+    # Only mint NFTs that have demand, not all posts
+    enable_lazy_minting = getattr(params, 'enable_lazy_minting', True)  # Default ON
+    
+    if enable_lazy_minting:
+        # Traditional approach: Mint all posts = total_posts * storage_cost
+        traditional_storage_cost = total_posts * 0.011  # $0.011 per post (IPFS + metadata)
+        
+        # Lazy approach: Only mint actual NFTs
+        lazy_storage_cost = nft_mints * 0.011
+        
+        # Cost savings from lazy minting
+        lazy_mint_savings_usd = traditional_storage_cost - lazy_storage_cost
+    else:
+        lazy_mint_savings_usd = 0
+    
+    # SMART OPTIMIZATION #2: Batch Minting (applies at scale)
+    # Batch multiple NFTs in single transaction when volume justifies it
+    batch_mint_threshold = getattr(params, 'batch_mint_threshold', 50)  # Daily threshold
+    enable_batch_minting = getattr(params, 'enable_batch_minting', True)
+    
+    daily_nft_mints = nft_mints / 30
+    if enable_batch_minting and daily_nft_mints >= batch_mint_threshold:
+        # Individual minting: N transactions @ $0.00025 each
+        individual_tx_cost = nft_mints * 0.00025
+        
+        # Batch minting: 4 batches/day @ $0.00025 each = $0.03/month
+        batch_tx_cost = 4 * 30 * 0.00025  # 4 batches/day * 30 days
+        
+        # Savings from batching (97% reduction)
+        batch_mint_savings_usd = individual_tx_cost - batch_tx_cost
+        using_batch_minting = True
+    else:
+        batch_mint_savings_usd = 0
+        using_batch_minting = False
+    
+    # SMART OPTIMIZATION #5: Dynamic NFTs (Premium Feature)
+    # Some NFT holders pay monthly for live stat updates
+    enable_dynamic_nfts = getattr(params, 'enable_dynamic_nfts', False)
+    dynamic_nft_revenue_usd = 0
+    
+    if enable_dynamic_nfts:
+        # Estimate 20% of NFT holders want daily updates @ 5 VCoin/month
+        # 5% want real-time updates @ 25 VCoin/month
+        daily_update_holders = int(nft_mints * 0.20)
+        realtime_update_holders = int(nft_mints * 0.05)
+        
+        daily_update_fee = 5  # VCoin/month
+        realtime_update_fee = 25  # VCoin/month
+        
+        dynamic_nft_revenue_vcoin = (
+            daily_update_holders * daily_update_fee +
+            realtime_update_holders * realtime_update_fee
+        )
+        dynamic_nft_revenue_usd = dynamic_nft_revenue_vcoin * params.token_price
+    
+    # Total NFT revenue including dynamic features
+    total_nft_revenue_usd = nft_fees_usd + dynamic_nft_revenue_usd
     
     # === OPTIONAL PREMIUM FEATURES (User Choice, Not Required) ===
     
@@ -284,11 +440,11 @@ def calculate_content(
     
     # Revenue sources (minimal, just covers costs):
     # 1. Anti-bot fees (after refunds) - minimal
-    # 2. NFT processing fees - break-even with Solana costs
+    # 2. NFT processing fees - NOW ENHANCED with smart optimizations
     # 3. Optional premium features - user choice (boost, DMs, reactions)
     
-    # Core posting revenue (break-even anti-bot)
-    core_posting_revenue = effective_anti_bot_revenue + nft_fees_usd
+    # Core posting revenue (break-even anti-bot + smart NFT revenue)
+    core_posting_revenue = effective_anti_bot_revenue + total_nft_revenue_usd
     
     # Optional premium revenue (users opt-in)
     optional_premium_revenue = boost_fees_usd + premium_dm_usd + premium_reaction_usd
@@ -296,16 +452,32 @@ def calculate_content(
     # Total revenue
     total_revenue = core_posting_revenue + optional_premium_revenue
     
-    # === COSTS ===
+    # === COSTS - ADJUSTED FOR SMART OPTIMIZATIONS ===
     
     # Infrastructure costs (linear scaling)
-    infrastructure_costs = config.get_linear_cost('CONTENT', users, total_posts)
+    base_infrastructure_costs = config.get_linear_cost('CONTENT', users, total_posts)
     
-    # Solana transaction costs for NFTs
-    solana_nft_costs = nft_mints * 0.50  # Same as NFT fee (break-even)
+    # Solana transaction costs for NFTs (REDUCED by optimizations)
+    base_solana_nft_costs = nft_mints * 0.50
     
-    # Total costs
-    total_costs = infrastructure_costs + solana_nft_costs
+    # Apply lazy minting savings (reduced storage costs)
+    adjusted_infrastructure = base_infrastructure_costs - lazy_mint_savings_usd if enable_lazy_minting else base_infrastructure_costs
+    
+    # Apply batch minting savings (reduced tx costs)
+    adjusted_solana_costs = base_solana_nft_costs - batch_mint_savings_usd if enable_batch_minting else base_solana_nft_costs
+    
+    # Dynamic NFT infrastructure (minimal - just API calls)
+    dynamic_nft_costs = 0
+    if enable_dynamic_nfts:
+        # API + database for live stats: ~$0.01 per active dynamic NFT
+        active_dynamic_nfts = int(nft_mints * 0.25)  # 25% adoption
+        dynamic_nft_costs = active_dynamic_nfts * 0.01
+    
+    # Total costs (optimized)
+    total_costs = adjusted_infrastructure + adjusted_solana_costs + dynamic_nft_costs
+    
+    # Calculate total savings from all optimizations
+    total_smart_savings = lazy_mint_savings_usd + batch_mint_savings_usd
     
     # === BREAK-EVEN ADJUSTMENT ===
     # If revenue > costs, reduce effective revenue (refund more)
@@ -363,10 +535,45 @@ def calculate_content(
             'engagement_refund_rate': round(engagement_refund_rate * 100, 1),
             'effective_anti_bot_revenue': round(effective_anti_bot_revenue, 2),
             
-            # NFT metrics
+            # NFT metrics (enhanced with smart optimizations)
             'nft_mint_fee_vcoin': nft_mint_fee_vcoin,
             'nft_fees_vcoin': round(nft_fees_vcoin, 2),
             'nft_fees_usd': round(nft_fees_usd, 2),
+            
+            # Smart NFT Optimization Metrics
+            'base_nft_mints': base_nft_mints if enable_ai_valuation else nft_mints,
+            'ai_conversion_boost': round(ai_conversion_boost, 2),
+            'enable_ai_valuation': enable_ai_valuation,
+            
+            # Edition NFTs
+            'enable_edition_nfts': enable_edition_nfts,
+            'edition_nfts': edition_nfts,
+            'single_nfts': single_nfts,
+            'avg_edition_size': round(avg_edition_size, 1),
+            'total_nft_tokens_minted': total_nft_tokens_minted,
+            
+            # 5A Dynamic Pricing
+            'enable_5a_nft_pricing': enable_5a_nft_pricing,
+            'base_nft_fee_vcoin': base_nft_fee_vcoin,
+            'avg_nft_fee_vcoin': round(nft_mint_fee_vcoin, 2),
+            
+            # Lazy Minting
+            'enable_lazy_minting': enable_lazy_minting,
+            'lazy_mint_savings_usd': round(lazy_mint_savings_usd, 2),
+            
+            # Batch Minting  
+            'enable_batch_minting': enable_batch_minting,
+            'using_batch_minting': using_batch_minting,
+            'batch_mint_threshold': batch_mint_threshold,
+            'batch_mint_savings_usd': round(batch_mint_savings_usd, 2),
+            
+            # Dynamic NFTs
+            'enable_dynamic_nfts': enable_dynamic_nfts,
+            'dynamic_nft_revenue_usd': round(dynamic_nft_revenue_usd, 2),
+            
+            # Total Optimizations Impact
+            'total_smart_savings_usd': round(total_smart_savings, 2),
+            'smart_optimization_revenue_boost': round(dynamic_nft_revenue_usd, 2),
             
             # Optional premium features
             'boosted_posts': boosted_posts,

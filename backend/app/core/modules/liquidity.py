@@ -308,6 +308,7 @@ def calculate_liquidity(
     monthly_volume: float = 0,
     circulating_supply: float = 100_000_000,
     five_a_lp_boost: float = 0.0,
+    governance_factor: float = 0.5,
 ) -> dict:
     """
     Calculate complete liquidity metrics for Solana DEXs.
@@ -325,12 +326,17 @@ def calculate_liquidity(
     - High 5A users are more likely to provide liquidity
     - five_a_lp_boost increases effective LP participation
     
+    Governance Integration (Dec 2025 - ISSUE #8 FIX):
+    - governance_factor (0-1) represents DAO health
+    - Higher governance health = more community trust = more LP participation
+    
     Args:
         params: Simulation parameters
         users: Total active users
         monthly_volume: Estimated monthly trading volume in VCoin
         circulating_supply: Current circulating token supply
         five_a_lp_boost: Average 5A LP participation boost (0.0-0.5)
+        governance_factor: Governance health score (0-1, 0.5=neutral)
     
     Returns:
         Dict with all liquidity metrics, health score, and Solana-specific data
@@ -524,8 +530,15 @@ def calculate_liquidity(
     # 5A Integration: High 5A users more likely to provide liquidity
     # This increases community LP participation by up to 20%
     five_a_lp_multiplier = 1.0 + (five_a_lp_boost * 0.4)  # Up to +20% more community LPs
+    
+    # ISSUE #8 FIX: Governance Integration
+    # Higher governance health = more community trust = more LP participation
+    # governance_factor ranges from 0-1 (0.5 = neutral)
+    # This affects community LP by +/-10%
+    governance_lp_multiplier = 1.0 + (governance_factor - 0.5) * 0.2  # +/-10%
+    
     protocol_owned_usd = initial_liquidity * pol_percent
-    community_lp_usd = initial_liquidity * (1 - pol_percent) * five_a_lp_multiplier
+    community_lp_usd = initial_liquidity * (1 - pol_percent) * five_a_lp_multiplier * governance_lp_multiplier
     
     # Issue #3 fix: Use actual monthly_volume from simulation when provided
     # instead of synthetic user-based estimate

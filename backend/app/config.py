@@ -229,6 +229,16 @@ class TokenAllocationConfig:
         description="Marketing campaigns and partnerships"
     ))
     
+    POINTS: TokenAllocationCategory = field(default_factory=lambda: TokenAllocationCategory(
+        name="Points Airdrop",
+        percent=0.01,  # 1% of total supply
+        tokens=10_000_000,
+        tge_percent=1.0,  # All released at TGE
+        cliff_months=0,
+        vesting_months=0,
+        description="Pre-launch points system conversion at TGE (carved from MARKETING allocation)"
+    ))
+    
     def get_all_categories(self) -> Dict[str, TokenAllocationCategory]:
         """Get all allocation categories as a dictionary"""
         return {
@@ -242,6 +252,7 @@ class TokenAllocationConfig:
             'LIQUIDITY': self.LIQUIDITY,
             'FOUNDATION': self.FOUNDATION,
             'MARKETING': self.MARKETING,
+            'POINTS': self.POINTS,  # ISSUE #4 FIX: Points airdrop at TGE
         }
     
     def validate_allocations(self) -> bool:
@@ -972,7 +983,7 @@ class Config:
         use_dynamic = users is not None and token_price is not None
         
         for key in ['SEED', 'PRIVATE', 'PUBLIC', 'TEAM', 'ADVISORS', 
-                    'TREASURY', 'REWARDS', 'LIQUIDITY', 'FOUNDATION', 'MARKETING']:
+                    'TREASURY', 'REWARDS', 'LIQUIDITY', 'FOUNDATION', 'MARKETING', 'POINTS']:
             for m in range(month + 1):
                 if key == 'REWARDS' and use_dynamic:
                     # Use dynamic rewards starting from month 0 (TGE)
@@ -1001,7 +1012,7 @@ class Config:
         
         breakdown = {}
         for key in ['SEED', 'PRIVATE', 'PUBLIC', 'TEAM', 'ADVISORS', 
-                    'TREASURY', 'REWARDS', 'LIQUIDITY', 'FOUNDATION', 'MARKETING']:
+                    'TREASURY', 'REWARDS', 'LIQUIDITY', 'FOUNDATION', 'MARKETING', 'POINTS']:
             if key == 'REWARDS' and use_dynamic:
                 # Dynamic rewards starting from month 0 (TGE)
                 breakdown[key] = cls.get_dynamic_rewards_for_month(users, token_price, month)

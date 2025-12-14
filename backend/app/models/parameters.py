@@ -53,6 +53,21 @@ class RetentionModelType(str, Enum):
     CUSTOM = "custom"
 
 
+class RevenueScenarioType(str, Enum):
+    """
+    Revenue scenario for future module projections.
+    
+    Based on ViWO Business Plan validation (Rep.md):
+    - CONSERVATIVE: Section 7.1 values (annual revenue targets, moderate growth)
+    - OPTIMISTIC: Section 4.8 values (monthly revenue at projected levels, aggressive growth)
+    
+    Conservative assumes steady growth to annual targets.
+    Optimistic assumes achieving monthly revenue projections (12x higher).
+    """
+    CONSERVATIVE = "conservative"  # Year 5: ~$93K/year from future modules
+    OPTIMISTIC = "optimistic"      # Year 5: ~$1.12M/year from future modules
+
+
 # Maturity-based default adjustments
 # These multiply/adjust base parameters based on platform maturity
 # Updated Nov 2025: Made "launch" settings viable for profitability
@@ -99,35 +114,56 @@ MATURITY_ADJUSTMENTS = {
 
 class ComplianceCosts(BaseModel):
     """
-    Regulatory and compliance costs - Issue #13 fix.
+    Regulatory and compliance costs - Updated Dec 2025 per Rep.md validation.
     
     These are often overlooked but critical for crypto platforms:
     - KYC/AML: Required for exchanges, fiat on/off ramps
     - Legal: Ongoing securities compliance, terms of service
     - Insurance: Crypto custody, liability insurance
     - Audits: Smart contract audits, financial audits
+    - RegCF: Regulation Crowdfunding compliance (if enabled)
+    - Money Transmitter: State-by-state licenses (if escrow enabled)
     
-    Costs scaled for early-stage platforms. Enterprise costs are 5-10x higher.
+    Updated with realistic costs for planned feature scope:
+    - Phase 1 (Year 1): Basic KYC + legal = $25K/year
+    - Phase 2 (Year 2-3): Marketplace + escrow = $50K/year
+    - Phase 3 (Year 3-4): RegCF preparation = $100K/year
+    - Phase 4 (Year 5+): Full RegCF compliance = $150K/year
     """
+    # Core compliance (always required)
     kyc_aml_monthly: float = Field(
-        default=500, ge=0, 
-        description="KYC/AML provider monthly cost (starter tier)"
+        default=833, ge=0, 
+        description="KYC/AML provider monthly cost ($10K/year)"
     )
     legal_monthly: float = Field(
-        default=1000, ge=0,
-        description="Ongoing legal counsel monthly (fractional/retainer)"
+        default=5000, ge=0,
+        description="Ongoing legal counsel monthly ($60K/year base, scales to $150K Year 5)"
     )
     insurance_monthly: float = Field(
-        default=500, ge=0,
-        description="Crypto/liability insurance monthly (basic coverage)"
+        default=833, ge=0,
+        description="Crypto/liability insurance monthly ($10K/year)"
     )
     audit_quarterly: float = Field(
-        default=2500, ge=0,
-        description="Quarterly security/financial audits"
+        default=7500, ge=0,
+        description="Quarterly security/financial audits ($30K/year)"
     )
     gdpr_privacy_monthly: float = Field(
-        default=250, ge=0,
-        description="GDPR/privacy compliance monthly"
+        default=417, ge=0,
+        description="GDPR/privacy compliance monthly ($5K/year)"
+    )
+    
+    # Advanced compliance (phase-in based on features)
+    regcf_compliance_monthly: float = Field(
+        default=0, ge=0,
+        description="RegCF compliance monthly ($8,333/month = $100K/year when enabled)"
+    )
+    money_transmitter_licenses_monthly: float = Field(
+        default=0, ge=0,
+        description="Money transmitter licenses monthly ($2,500/month if escrow enabled)"
+    )
+    enhanced_kyc_institutional_monthly: float = Field(
+        default=0, ge=0,
+        description="Enhanced KYC for institutional clients ($2,500/month when needed)"
     )
     
     @property
@@ -138,7 +174,24 @@ class ComplianceCosts(BaseModel):
             self.legal_monthly +
             self.insurance_monthly +
             (self.audit_quarterly / 3) +  # Amortize quarterly to monthly
-            self.gdpr_privacy_monthly
+            self.gdpr_privacy_monthly +
+            self.regcf_compliance_monthly +
+            self.money_transmitter_licenses_monthly +
+            self.enhanced_kyc_institutional_monthly
+        )
+    
+    @property
+    def annual_total(self) -> float:
+        """Total annual compliance cost"""
+        return (
+            (self.kyc_aml_monthly * 12) +
+            (self.legal_monthly * 12) +
+            (self.insurance_monthly * 12) +
+            (self.audit_quarterly * 4) +
+            (self.gdpr_privacy_monthly * 12) +
+            (self.regcf_compliance_monthly * 12) +
+            (self.money_transmitter_licenses_monthly * 12) +
+            (self.enhanced_kyc_institutional_monthly * 12)
         )
     
     @classmethod
@@ -150,6 +203,65 @@ class ComplianceCosts(BaseModel):
             insurance_monthly=0,
             audit_quarterly=0,
             gdpr_privacy_monthly=100,
+            regcf_compliance_monthly=0,
+            money_transmitter_licenses_monthly=0,
+            enhanced_kyc_institutional_monthly=0,
+        )
+    
+    @classmethod
+    def phase1_launch(cls) -> 'ComplianceCosts':
+        """Phase 1: Launch (Year 1) - Basic KYC + legal = $25K/year"""
+        return cls(
+            kyc_aml_monthly=833,  # $10K/year
+            legal_monthly=1000,   # $12K/year
+            insurance_monthly=0,
+            audit_quarterly=1000, # $4K/year
+            gdpr_privacy_monthly=0,
+            regcf_compliance_monthly=0,
+            money_transmitter_licenses_monthly=0,
+            enhanced_kyc_institutional_monthly=0,
+        )
+    
+    @classmethod
+    def phase2_marketplace(cls) -> 'ComplianceCosts':
+        """Phase 2: Marketplace (Year 2-3) - Enhanced KYC + escrow = $50K/year"""
+        return cls(
+            kyc_aml_monthly=1667,  # $20K/year (enhanced)
+            legal_monthly=2083,    # $25K/year (escrow framework)
+            insurance_monthly=833, # $10K/year (E&O)
+            audit_quarterly=2500,  # $10K/year
+            gdpr_privacy_monthly=417, # $5K/year
+            regcf_compliance_monthly=0,
+            money_transmitter_licenses_monthly=2083,  # $25K/year (if escrow)
+            enhanced_kyc_institutional_monthly=0,
+        )
+    
+    @classmethod
+    def phase3_regcf_prep(cls) -> 'ComplianceCosts':
+        """Phase 3: RegCF Preparation (Year 3-4) - Registration + testing = $100K/year"""
+        return cls(
+            kyc_aml_monthly=1667,  # $20K/year
+            legal_monthly=5000,    # $60K/year (securities lawyer retainer)
+            insurance_monthly=833, # $10K/year
+            audit_quarterly=3333,  # $13.3K/year
+            gdpr_privacy_monthly=417, # $5K/year
+            regcf_compliance_monthly=4167,  # $50K/year (prep phase)
+            money_transmitter_licenses_monthly=1667,  # $20K/year
+            enhanced_kyc_institutional_monthly=0,
+        )
+    
+    @classmethod
+    def phase4_full_regcf(cls) -> 'ComplianceCosts':
+        """Phase 4: Full RegCF (Year 5+) - Complete compliance = $150K/year"""
+        return cls(
+            kyc_aml_monthly=2500,  # $30K/year (institutional grade)
+            legal_monthly=6250,    # $75K/year (full retainer)
+            insurance_monthly=833, # $10K/year
+            audit_quarterly=6250,  # $25K/year (required audits)
+            gdpr_privacy_monthly=417, # $5K/year
+            regcf_compliance_monthly=8333,  # $100K/year (broker-dealer)
+            money_transmitter_licenses_monthly=1667,  # $20K/year
+            enhanced_kyc_institutional_monthly=2083,  # $25K/year
         )
 
 
@@ -1256,7 +1368,32 @@ class SimulationParameters(BaseModel):
         description="Include compliance costs in simulation (enable for realistic projections)"
     )
     
+    # === REVENUE SCENARIO SELECTION (NEW - Dec 2025) ===
+    revenue_scenario: RevenueScenarioType = Field(
+        default=RevenueScenarioType.CONSERVATIVE,
+        description="Revenue projection scenario (conservative vs optimistic)"
+    )
+    
     # === FUTURE MODULES (2026-2028) - All disabled by default ===
+    # Flat boolean flags (used by frontend)
+    enable_vchain: bool = Field(
+        default=False,
+        description="Enable VChain cross-chain network module (flat flag from frontend)"
+    )
+    enable_marketplace: bool = Field(
+        default=False,
+        description="Enable Marketplace module (flat flag from frontend)"
+    )
+    enable_business_hub: bool = Field(
+        default=False,
+        description="Enable Business Hub module (flat flag from frontend)"
+    )
+    enable_cross_platform: bool = Field(
+        default=False,
+        description="Enable Cross-Platform module (flat flag from frontend)"
+    )
+    
+    # Nested parameter objects (for detailed configuration)
     vchain: Optional[VChainParameters] = Field(
         default=None,
         description="VChain cross-chain network parameters"
@@ -1683,6 +1820,43 @@ class SimulationParameters(BaseModel):
     premium_content_volume_vcoin: float = Field(default=1000, ge=0, description="Monthly premium content volume")
     content_sale_volume_vcoin: float = Field(default=500, ge=0, description="Monthly content sale volume")
     # NOTE: content_sale_commission was removed - Content module is break-even by design (creators keep 100%)
+    
+    # === NFT SMART OPTIMIZATIONS (Dec 2025) ===
+    # Revolutionary features to maximize NFT revenue while minimizing costs
+    
+    enable_lazy_minting: bool = Field(
+        default=True,
+        description="Only mint NFTs with demand (saves 99% storage costs)"
+    )
+    
+    enable_batch_minting: bool = Field(
+        default=True,
+        description="Batch multiple NFT mints into single transactions (97% tx cost reduction)"
+    )
+    batch_mint_threshold: int = Field(
+        default=50, ge=1,
+        description="Daily NFT mints needed to activate batch minting"
+    )
+    
+    enable_5a_nft_pricing: bool = Field(
+        default=False,
+        description="Dynamic NFT pricing based on 5A scores (Diamond tier = FREE, Bronze = base price)"
+    )
+    
+    enable_edition_nfts: bool = Field(
+        default=False,
+        description="Allow creators to mint limited edition series (10-100 copies)"
+    )
+    
+    enable_dynamic_nfts: bool = Field(
+        default=False,
+        description="NFTs with live-updating metadata (stats, engagement) - premium feature"
+    )
+    
+    enable_nft_ai_valuation: bool = Field(
+        default=False,
+        description="AI predicts which posts will become valuable NFTs (2-3x conversion boost)"
+    )
     
     # === ADVERTISING MODULE PRICING (USD) - Updated Nov 2025 ===
     banner_cpm: float = Field(

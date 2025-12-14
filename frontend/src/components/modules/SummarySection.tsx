@@ -52,9 +52,21 @@ export function SummarySection({ result, parameters }: SummarySectionProps) {
   const arpu = totalUsersForCalc > 0 
     ? totals.revenue / totalUsersForCalc 
     : 0;
-  const ltvCacRatio = (customerAcquisition.blendedCAC > 0 && totalUsersForCalc > 0)
-    ? arpu / customerAcquisition.blendedCAC 
-    : 0;
+  
+  // LTV/CAC Ratio - Use backend calculation if available (includes retention curve)
+  // Backend calculates: LTV = Sum(ARPU × Retention) over 24 months
+  // Fallback to simple ARPU-based estimate if not available
+  const ltvCacRatio = customerAcquisition.ltvCacRatio !== undefined && customerAcquisition.ltvCacRatio > 0
+    ? customerAcquisition.ltvCacRatio
+    : (customerAcquisition.blendedCAC > 0 && totalUsersForCalc > 0)
+      ? arpu / customerAcquisition.blendedCAC 
+      : 0;
+  
+  // LTV Estimate from backend
+  const ltvEstimate = customerAcquisition.ltvEstimate || (arpu * 6); // Fallback: 6 month average
+  
+  // Use effective CAC for display (includes organic/referral users)
+  const displayCAC = customerAcquisition.effectiveCac || customerAcquisition.blendedCAC;
 
   const coreModules = [
     { name: 'Identity', data: result.identity, icon: '🆔', enabled: true },
@@ -257,7 +269,7 @@ export function SummarySection({ result, parameters }: SummarySectionProps) {
               {ltvCacRatio >= 3 ? '✅' : ltvCacRatio >= 1 ? '⚠️' : '🚨'}
             </span>
             <div>
-              <div className="font-bold text-lg">LTV/CAC: {ltvCacRatio.toFixed(1)}x</div>
+              <div className="font-bold text-lg">LTV/CAC: {ltvCacRatio.toFixed(2)}x</div>
               <div className="text-sm text-gray-600">
                 {ltvCacRatio >= 3 
                   ? 'Excellent unit economics' 
@@ -265,9 +277,17 @@ export function SummarySection({ result, parameters }: SummarySectionProps) {
                     ? 'Break-even - needs improvement'
                     : 'Losing money per user acquisition'}
               </div>
+              <div className="text-xs text-gray-500 mt-1">
+                LTV: ${ltvEstimate.toFixed(2)} / CAC: ${displayCAC.toFixed(2)}
+              </div>
             </div>
           </div>
-          <div className="mt-2 text-xs text-gray-500">Target: 3x+ LTV/CAC ratio</div>
+          <div className="mt-2 text-xs text-gray-500">
+            Target: 3x+ LTV/CAC ratio
+            {customerAcquisition.paybackMonths && customerAcquisition.paybackMonths > 0 && (
+              <span className="ml-2">• Payback: {customerAcquisition.paybackMonths.toFixed(1)} months</span>
+            )}
+          </div>
         </div>
       </div>
 
@@ -337,9 +357,12 @@ export function SummarySection({ result, parameters }: SummarySectionProps) {
           </div>
           <div className="bg-gray-50 rounded-lg p-4 text-center">
             <div className="text-2xl font-bold text-gray-900">
-              {ltvCacRatio.toFixed(1)}x
+              {ltvCacRatio.toFixed(2)}x
             </div>
             <div className="text-xs text-gray-600 uppercase font-semibold">LTV/CAC Ratio</div>
+            <div className="text-xs text-gray-500 mt-1">
+              LTV: ${ltvEstimate.toFixed(2)} / CAC: ${displayCAC.toFixed(2)}
+            </div>
           </div>
         </div>
       </div>
@@ -674,7 +697,8 @@ export function SummarySection({ result, parameters }: SummarySectionProps) {
               <div>
                 <div className="font-semibold text-purple-800">Improve Unit Economics</div>
                 <div className="text-sm text-purple-700">
-                  LTV/CAC is {ltvCacRatio.toFixed(1)}x. Target 3x+ by increasing monetization or reducing CAC.
+                  LTV/CAC is {ltvCacRatio.toFixed(2)}x. Target 3x+ by increasing monetization or reducing CAC.
+                  Current: LTV ${ltvEstimate.toFixed(2)} / CAC ${displayCAC.toFixed(2)}.
                 </div>
               </div>
             </div>

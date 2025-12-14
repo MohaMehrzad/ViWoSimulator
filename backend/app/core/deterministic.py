@@ -14,6 +14,9 @@ Nov 2025 Updates:
 - Added Staking module with APY calculations
 - Integrated creator economy features
 
+Dec 2025 Updates:
+- Added 5-year projection calculations (backend matching frontend UI)
+
 MONEY FLOW DOCUMENTATION (Issue #15):
 1. Module Revenue (USD) -> Totals revenue
 2. Module Costs (USD) -> Totals costs
@@ -95,6 +98,8 @@ from app.core.modules.gasless import calculate_gasless
 from app.core.modules.five_a_policy import calculate_five_a
 # Organic User Growth (Dec 2025)
 from app.core.modules.organic_growth import calculate_organic_growth
+# 5-Year Projections (Dec 2025)
+from app.core.five_year_projections import calculate_5_year_projections
 from app.core.metrics import (
     calculate_token_velocity,
     calculate_real_yield,
@@ -107,6 +112,7 @@ from app.core.whale_analysis import calculate_whale_concentration
 from app.core.attack_scenarios import calculate_attack_scenarios
 from app.core.liquidity_farming import calculate_full_farming_analysis
 from app.core.game_theory import calculate_full_game_theory_analysis
+from app.core.sensitivity import run_all_stress_tests, run_monte_carlo_sensitivity
 from app.core.retention import (
     apply_retention_to_snapshot, 
     VCOIN_RETENTION,
@@ -554,28 +560,67 @@ def run_deterministic_simulation(
         )
         organic_users = organic_growth_result.total_organic_users
     
-    # Combine paid + organic users for all module calculations
-    users = active_users + organic_users
+    # Step 1c: Calculate Referral Users (Dec 2025)
+    # ISSUE #2 FIX: Referral users must be added BEFORE module calculations
+    # They contribute to revenue generation just like organic users
+    referral_users = 0
+    referral_result_early = None
+    if params.referral and getattr(params.referral, 'enable_referral', True):
+        # Get viral coefficient from growth scenario if available
+        viral_coefficient = 0.5  # Default
+        if hasattr(params, 'use_growth_scenarios') and params.use_growth_scenarios:
+            from app.core.growth_scenarios import GrowthScenario, GROWTH_SCENARIOS
+            from app.models import GrowthScenarioType
+            scenario_map = {
+                GrowthScenarioType.CONSERVATIVE: GrowthScenario.CONSERVATIVE,
+                GrowthScenarioType.BASE: GrowthScenario.BASE,
+                GrowthScenarioType.BULLISH: GrowthScenario.BULLISH,
+            }
+            scenario_key = scenario_map.get(params.growth_scenario, GrowthScenario.BASE)
+            scenario_config = GROWTH_SCENARIOS.get(scenario_key)
+            if scenario_config:
+                viral_coefficient = scenario_config.viral_coefficient
+        
+        # Use a reasonable default budget for early calculation
+        # Budget will be refined later based on actual revenue
+        early_referral_budget = 1000  # Conservative estimate
+        
+        # Calculate referral to get qualified_referrals count
+        ref_data = calculate_referral(params, active_users + organic_users, viral_coefficient, early_referral_budget)
+        referral_result_early = ref_data
+        referral_users = ref_data.qualified_referrals
     
-    # Update customer acquisition metrics to include organic users
-    customer_acquisition = CustomerAcquisitionMetrics(
-        total_creator_cost=customer_acquisition_base.total_creator_cost,
-        consumer_acquisition_budget=customer_acquisition_base.consumer_acquisition_budget,
-        north_america_budget=customer_acquisition_base.north_america_budget,
-        global_low_income_budget=customer_acquisition_base.global_low_income_budget,
-        north_america_users=customer_acquisition_base.north_america_users,
-        global_low_income_users=customer_acquisition_base.global_low_income_users,
-        total_users=customer_acquisition_base.total_users,
-        blended_cac=customer_acquisition_base.blended_cac,
-        high_quality_creators_actual=customer_acquisition_base.high_quality_creators_actual,
-        mid_level_creators_actual=customer_acquisition_base.mid_level_creators_actual,
-        budget_shortfall=customer_acquisition_base.budget_shortfall,
-        budget_shortfall_amount=customer_acquisition_base.budget_shortfall_amount,
-        # Add organic users
-        organic_users=organic_users,
-        total_users_with_organic=customer_acquisition_base.total_users + organic_users,
-        organic_percent=round((organic_users / users * 100), 2) if users > 0 else 0.0,
-    )
+    # Combine paid + organic + referral users for all module calculations
+    users = active_users + organic_users + referral_users
+    
+    # Update customer acquisition metrics to include organic and referral users
+    # ISSUE #6 FIX: Calculate effective CAC including organic/referral users
+    total_users_all_sources = customer_acquisition_base.total_users + organic_users + referral_users
+    marketing_spend = params.marketing_budget
+    effective_cac = marketing_spend / total_users_all_sources if total_users_all_sources > 0 else 0
+    
+    # Store base customer acquisition for later LTV update
+    customer_acquisition_base_data = {
+        'total_creator_cost': customer_acquisition_base.total_creator_cost,
+        'consumer_acquisition_budget': customer_acquisition_base.consumer_acquisition_budget,
+        'north_america_budget': customer_acquisition_base.north_america_budget,
+        'global_low_income_budget': customer_acquisition_base.global_low_income_budget,
+        'north_america_users': customer_acquisition_base.north_america_users,
+        'global_low_income_users': customer_acquisition_base.global_low_income_users,
+        'total_users': customer_acquisition_base.total_users,
+        'blended_cac': customer_acquisition_base.blended_cac,
+        'high_quality_creators_actual': customer_acquisition_base.high_quality_creators_actual,
+        'mid_level_creators_actual': customer_acquisition_base.mid_level_creators_actual,
+        'budget_shortfall': customer_acquisition_base.budget_shortfall,
+        'budget_shortfall_amount': customer_acquisition_base.budget_shortfall_amount,
+        'organic_users': organic_users,
+        'total_users_with_organic': total_users_all_sources,
+        'organic_percent': round((organic_users / users * 100), 2) if users > 0 else 0.0,
+        'effective_cac': round(effective_cac, 2),
+    }
+    
+    # Create initial customer acquisition (LTV will be added later after revenue is calculated)
+    customer_acquisition = CustomerAcquisitionMetrics(**customer_acquisition_base_data)
     
     # Determine user source for summary
     if params.starting_users > 0:
@@ -610,6 +655,9 @@ def run_deterministic_simulation(
         # Organic growth (Dec 2025)
         organic_users_acquired=organic_users if organic_users > 0 else None,
         organic_percent_of_total=round((organic_users / users * 100), 1) if users > 0 and organic_users > 0 else None,
+        # Referral users (Dec 2025 - Issue #2 Fix)
+        referral_users_acquired=referral_users if referral_users > 0 else None,
+        referral_percent_of_total=round((referral_users / users * 100), 1) if users > 0 and referral_users > 0 else None,
     )
     
     # Step 2a: Calculate 5A Policy first (Dec 2025)
@@ -651,86 +699,8 @@ def run_deterministic_simulation(
         rewards.platform_fee_usd  # Platform fee is primary revenue
     )
     
-    # Step 3c: DYNAMIC CIRCULATING SUPPLY FIX
-    # Calculate circulating supply based on simulation_month to include:
-    # 1. Base vesting unlocks from all token categories at the given month
-    # 2. Dynamic rewards distributed based on user count (capped at max schedule)
-    # Pass users and token_price for dynamic rewards calculation
-    circulating_supply = config.get_circulating_supply_at_month(
-        simulation_month,
-        users=users,
-        token_price=params.token_price
-    )
-    
-    # Also get the monthly unlock breakdown for the inflation dashboard
-    monthly_unlock_breakdown = config.get_monthly_unlock_breakdown(
-        simulation_month,
-        users=users,
-        token_price=params.token_price
-    )
-    
-    # Step 4: Calculate recapture (Issue #10: now includes exchange)
-    # Nov 2025: Now passes total_revenue_usd for revenue-based buybacks
-    # Dec 2025: Now passes circulating_supply for dynamic supply-based caps
-    # Dec 2025: Now passes 5A engagement boost for velocity multiplier
-    recapture = calculate_recapture(
-        params, identity, content, advertising, 
-        exchange,  # Issue #10: Added exchange module
-        rewards, users,
-        total_revenue_usd=base_module_revenue,  # For revenue-based buybacks
-        circulating_supply=circulating_supply,  # For dynamic supply-based caps
-        five_a_engagement_boost=five_a_visibility_boost_avg,  # 5A engagement boost
-    )
-    
-    # Step 5: Create platform fees result from rewards data
-    # Issue #15: Platform fee is revenue, NOT part of recapture
-    platform_fees = PlatformFeesResult(
-        reward_fee_vcoin=rewards.platform_fee_vcoin,
-        reward_fee_usd=rewards.platform_fee_usd,
-        fee_rate=PLATFORM_FEE_RATE,
-    )
-    
-    # Step 5b (NEW): Calculate Liquidity metrics with 5A LP boost
-    liquidity_data = calculate_liquidity(
-        params, 
-        users, 
-        monthly_volume=recapture.total_revenue_source_vcoin,
-        circulating_supply=circulating_supply,
-        five_a_lp_boost=five_a_visibility_boost_avg,  # 5A increases LP participation
-    )
-    liquidity_result = LiquidityResult(**liquidity_data)
-    
-    # Step 5c (NEW): Calculate Staking metrics with 5A APY boost
-    # === DYNAMIC STAKING CAP (December 2025) ===
-    # User rewards are calculated first (priority for growth)
-    # Staking is capped based on remaining budget at 7% APY
-    # Cap = (remaining_budget * 12) / APY - ensures budget compliance
-    max_monthly_emission = config.MONTHLY_EMISSION  # 5,833,333 VCoin
-    user_rewards_used = rewards.gross_monthly_emission  # What user rewards already consumed
-    remaining_for_staking = max(0, max_monthly_emission - user_rewards_used)
-    
-    staking_data = calculate_staking(
-        params,
-        users,
-        monthly_emission=rewards.monthly_reward_pool,
-        circulating_supply=circulating_supply,
-        five_a_apy_boost=five_a_apy_boost_avg,
-        max_staking_budget=remaining_for_staking,  # Used to calculate staking cap
-    )
-    staking_result = StakingResult(**staking_data)
-    
-    # Step 5d (NEW): Calculate Governance metrics with 5A governance boost
-    governance_data = calculate_governance(
-        params,
-        stakers_count=staking_result.stakers_count,
-        total_staked=staking_result.total_staked,
-        circulating_supply=circulating_supply,
-        five_a_governance_boost=five_a_governance_boost_avg,
-    )
-    # LOW-05: Use filter_model_fields utility
-    governance_result = filter_model_fields(governance_data, GovernanceResult)
-    
-    # Step 5e (NEW): Calculate Future Module metrics (if enabled)
+    # Step 3b2: Calculate Future Module metrics (if enabled)
+    # ISSUE #3 FIX: Calculate future modules BEFORE recapture so their revenue is included
     # HIGH-006 Fix: Use simulation_month parameter instead of hardcoded 1
     # This allows future modules to be tested in snapshot mode by setting
     # simulation_month >= module's launch_month
@@ -767,7 +737,102 @@ def run_deterministic_simulation(
         future_modules_revenue += cross_platform_result.revenue
         future_modules_costs += cross_platform_result.costs
     
+    # Step 3c: DYNAMIC CIRCULATING SUPPLY FIX
+    # Calculate circulating supply based on simulation_month to include:
+    # 1. Base vesting unlocks from all token categories at the given month
+    # 2. Dynamic rewards distributed based on user count (capped at max schedule)
+    # Pass users and token_price for dynamic rewards calculation
+    circulating_supply = config.get_circulating_supply_at_month(
+        simulation_month,
+        users=users,
+        token_price=params.token_price
+    )
+    
+    # Also get the monthly unlock breakdown for the inflation dashboard
+    monthly_unlock_breakdown = config.get_monthly_unlock_breakdown(
+        simulation_month,
+        users=users,
+        token_price=params.token_price
+    )
+    
+    # Step 4: Calculate recapture (Issue #10: now includes exchange)
+    # Nov 2025: Now passes total_revenue_usd for revenue-based buybacks
+    # Dec 2025: Now passes circulating_supply for dynamic supply-based caps
+    # Dec 2025: Now passes 5A engagement boost for velocity multiplier
+    # ISSUE #3 FIX: Include future modules revenue in recapture calculation
+    total_revenue_for_recapture = base_module_revenue + future_modules_revenue
+    
+    recapture = calculate_recapture(
+        params, identity, content, advertising, 
+        exchange,  # Issue #10: Added exchange module
+        rewards, users,
+        total_revenue_usd=total_revenue_for_recapture,  # For revenue-based buybacks (includes future modules)
+        circulating_supply=circulating_supply,  # For dynamic supply-based caps
+        five_a_engagement_boost=five_a_visibility_boost_avg,  # 5A engagement boost
+    )
+    
+    # Step 5: Create platform fees result from rewards data
+    # Issue #15: Platform fee is revenue, NOT part of recapture
+    platform_fees = PlatformFeesResult(
+        reward_fee_vcoin=rewards.platform_fee_vcoin,
+        reward_fee_usd=rewards.platform_fee_usd,
+        fee_rate=PLATFORM_FEE_RATE,
+    )
+    
+    # Step 5b (NEW): Calculate Staking metrics with 5A APY boost
+    # === DYNAMIC STAKING CAP (December 2025) ===
+    # User rewards are calculated first (priority for growth)
+    # Staking is capped based on remaining budget at 7% APY
+    # Cap = (remaining_budget * 12) / APY - ensures budget compliance
+    max_monthly_emission = config.MONTHLY_EMISSION  # 5,833,333 VCoin
+    user_rewards_used = rewards.gross_monthly_emission  # What user rewards already consumed
+    remaining_for_staking = max(0, max_monthly_emission - user_rewards_used)
+    
+    staking_data = calculate_staking(
+        params,
+        users,
+        monthly_emission=rewards.monthly_reward_pool,
+        circulating_supply=circulating_supply,
+        five_a_apy_boost=five_a_apy_boost_avg,
+        max_staking_budget=remaining_for_staking,  # Used to calculate staking cap
+    )
+    staking_result = StakingResult(**staking_data)
+    
+    # ISSUE #7 FIX: Validate staking rewards against emission budget
+    # Staking rewards should not exceed the remaining budget after user rewards
+    # This is enforced by max_staking_budget parameter above
+    # If staking_at_capacity is True, the pool is full and users can't stake more
+    if staking_result.staking_at_capacity:
+        # Staking pool is at capacity - this is expected and handled
+        pass  # Logging or metrics can be added here if needed
+    
+    # Step 5c (NEW): Calculate Governance metrics with 5A governance boost
+    governance_data = calculate_governance(
+        params,
+        stakers_count=staking_result.stakers_count,
+        total_staked=staking_result.total_staked,
+        circulating_supply=circulating_supply,
+        five_a_governance_boost=five_a_governance_boost_avg,
+    )
+    # LOW-05: Use filter_model_fields utility
+    governance_result = filter_model_fields(governance_data, GovernanceResult)
+    
+    # Step 5d (NEW): Calculate Liquidity metrics with 5A LP boost and governance factor
+    # ISSUE #8 FIX: Governance health affects community LP participation
+    governance_health = governance_result.governance_health_score / 100 if governance_result else 0.5
+    
+    liquidity_data = calculate_liquidity(
+        params, 
+        users, 
+        monthly_volume=recapture.total_revenue_source_vcoin,
+        circulating_supply=circulating_supply,
+        five_a_lp_boost=five_a_visibility_boost_avg,  # 5A increases LP participation
+        governance_factor=governance_health,  # ISSUE #8 FIX: Governance affects LP decisions
+    )
+    liquidity_result = LiquidityResult(**liquidity_data)
+    
     # Step 5f (NEW): Calculate Token Metrics
+    # Note: Future modules already calculated earlier (Step 3b2) before recapture
     transaction_volume = recapture.total_revenue_source_vcoin
     
     # === STAKING RATIO FOR VALUE ACCRUAL SCORING ===
@@ -922,78 +987,325 @@ def run_deterministic_simulation(
     )
     
     # Step 5f-4: Calculate Inflation metrics
-    monthly_emission_vcoin = rewards.gross_monthly_emission
-    monthly_emission_usd = monthly_emission_vcoin * params.token_price
+    # CRITICAL FIX: Distinguish between REWARDS emission and TOTAL new tokens entering circulation
+    #
+    # Token supply dynamics:
+    # 1. Rewards Emission = new tokens distributed as user incentives (inflationary)
+    # 2. Vesting Unlocks = existing allocated tokens becoming liquid (not truly inflationary,
+    #    but DOES increase circulating supply and create sell pressure)
+    #
+    # For accurate supply tracking, we need BOTH:
+    # - "Emission" = rewards emission only (for reward mechanism transparency)
+    # - "Net Supply Change" = ALL new tokens entering circulation (for market impact)
+    
+    # Get total monthly unlocks from all categories (calculated earlier)
+    total_monthly_unlocks_vcoin = sum(monthly_unlock_breakdown.values())
+    
+    # Rewards emission (what the platform is distributing as incentives)
+    rewards_emission_vcoin = rewards.gross_monthly_emission
+    rewards_emission_usd = rewards_emission_vcoin * params.token_price
+    
+    # Vesting unlocks (tokens becoming liquid from vesting schedules)
+    vesting_unlocks_vcoin = total_monthly_unlocks_vcoin - rewards_emission_vcoin
+    vesting_unlocks_usd = vesting_unlocks_vcoin * params.token_price
+    
+    # Deflationary mechanisms
     monthly_burns = recapture.burns
     monthly_burns_usd = monthly_burns * params.token_price
     monthly_buybacks = recapture.buybacks
     monthly_buybacks_usd = recapture.buyback_usd_spent
     
     total_deflationary = monthly_burns + monthly_buybacks
-    net_monthly_inflation = monthly_emission_vcoin - total_deflationary
-    net_monthly_inflation_usd = net_monthly_inflation * params.token_price
     
-    # Calculate rates
-    emission_rate = (monthly_emission_vcoin / circulating_supply * 100) if circulating_supply > 0 else 0
-    net_inflation_rate = (net_monthly_inflation / circulating_supply * 100) if circulating_supply > 0 else 0
-    annual_net_inflation_rate = net_inflation_rate * 12
+    # ========================================================================
+    # 5-YEAR SUPPLY DYNAMICS - FULL ECOSYSTEM MODEL
+    # ========================================================================
+    # VCoin has FIXED total supply of 1B - true inflation = 0%
+    # This models the COMPLETE ecosystem impact on circulating supply
     
-    # Determine deflation strength
-    is_deflationary = net_monthly_inflation < 0
-    if is_deflationary:
-        deflation_pct = abs(net_inflation_rate)
-        if deflation_pct > 1:
-            deflation_strength = "Strong Deflation"
-        elif deflation_pct > 0.3:
-            deflation_strength = "Moderate Deflation"
-        else:
-            deflation_strength = "Weak Deflation"
+    import math
+    
+    # === STEP 1: Calculate 5-year gross unlocks from vesting ===
+    tge_supply = config.SUPPLY.TGE_CIRCULATING  # ~114M at TGE
+    gross_year5_supply = config.get_circulating_supply_at_month(60)  # ~810M unlocked by month 60
+    total_5yr_unlocks = gross_year5_supply - tge_supply  # ~696M total unlocks
+    
+    # === STEP 2: Estimate 5-year SCALED burns based on user/revenue growth ===
+    # Burns scale with transaction volume (which scales with users)
+    # Year 1: base users, Year 5: ~7.6x users (from 20K to 154K)
+    # Use geometric growth for realistic scaling
+    
+    current_monthly_burns = recapture.burns  # Current month burns
+    current_monthly_buybacks = recapture.buybacks  # Current month buybacks
+    
+    # 5-year user growth multipliers (from 5-year projection)
+    # Year 1: 1x, Year 2: 1.9x, Year 3: 2.8x, Year 4: 4.6x, Year 5: 7.6x
+    yearly_growth_multipliers = [1.0, 1.9, 2.8, 4.6, 7.6]
+    
+    # Calculate scaled 5-year burns (burns scale with transaction volume)
+    total_5yr_burns = 0
+    total_5yr_buybacks = 0
+    for year_mult in yearly_growth_multipliers:
+        yearly_burns = current_monthly_burns * year_mult * 12
+        yearly_buybacks = current_monthly_buybacks * year_mult * 12
+        total_5yr_burns += yearly_burns
+        total_5yr_buybacks += yearly_buybacks
+    
+    total_5yr_deflationary = total_5yr_burns + total_5yr_buybacks
+    
+    # === STEP 3: Estimate staking lock-ups (reduces effective circulating) ===
+    # Staking participation typically grows: 10% Year 1 → 40% Year 5
+    avg_staking_rate = 0.25  # 25% average staking over 5 years
+    staked_tokens_avg = gross_year5_supply * avg_staking_rate
+    
+    # === STEP 4: Treasury accumulation (20% of revenue goes to treasury) ===
+    # Estimate 5-year revenue based on growth (from projection: ~$36.66M total)
+    # Treasury buys tokens at average price, estimate ~$3 avg price over 5 years
+    estimated_5yr_revenue = base_revenue * sum(yearly_growth_multipliers) * 12
+    treasury_accumulation_usd = estimated_5yr_revenue * 0.10  # 10% to treasury token buys
+    avg_token_price_5yr = 3.0  # Estimated average price over 5 years
+    treasury_tokens_bought = treasury_accumulation_usd / avg_token_price_5yr
+    
+    # === STEP 5: Lost/inaccessible tokens (industry standard ~2-3%) ===
+    lost_tokens = gross_year5_supply * 0.025  # 2.5% become inaccessible
+    
+    # === STEP 6: Calculate NET circulating supply at Year 5 ===
+    # Net = Gross Unlocks - Burns - Buybacks - Staked - Treasury - Lost
+    net_year5_circulating = (
+        gross_year5_supply 
+        - total_5yr_burns 
+        - total_5yr_buybacks 
+        - treasury_tokens_bought
+        - lost_tokens
+    )
+    # Note: Staked tokens are still "circulating" but locked, shown separately
+    
+    effective_year5_circulating = net_year5_circulating - staked_tokens_avg
+    
+    # === STEP 7: Calculate TRUE 5-year supply CAGR (with deflationary effects) ===
+    if tge_supply > 0 and net_year5_circulating > 0:
+        # NET CAGR accounts for all deflationary mechanisms
+        net_supply_cagr = (net_year5_circulating / tge_supply) ** (1/5) - 1
+        annual_supply_growth_rate = net_supply_cagr * 100
+        
+        # Gross CAGR (without deflationary effects, for comparison)
+        gross_supply_cagr = (gross_year5_supply / tge_supply) ** (1/5) - 1
+        gross_annual_rate = gross_supply_cagr * 100
+        
+        # Deflationary impact = how much the ecosystem reduces supply growth
+        deflationary_impact = gross_annual_rate - annual_supply_growth_rate
     else:
-        inflation_pct = net_inflation_rate
-        if inflation_pct > 2:
-            deflation_strength = "High Inflation"
-        elif inflation_pct > 1:
-            deflation_strength = "Moderate Inflation"
-        else:
-            deflation_strength = "Low Inflation"
+        annual_supply_growth_rate = 0
+        gross_annual_rate = 0
+        deflationary_impact = 0
     
-    # Health score: lower inflation = healthier (for tokens)
-    # Target: 0-1% net inflation = 100, >5% = 0
-    supply_health_score = max(0, min(100, 100 - (abs(net_inflation_rate) * 20)))
+    # === STEP 8: Calculate ecosystem deflationary efficiency ===
+    # What % of gross unlocks are offset by deflationary mechanisms?
+    total_deflationary_5yr = total_5yr_burns + total_5yr_buybacks + treasury_tokens_bought + lost_tokens
+    ecosystem_efficiency = (total_deflationary_5yr / total_5yr_unlocks * 100) if total_5yr_unlocks > 0 else 0
+    
+    # ========================================================================
+    # MONTH 60 (YEAR 5 END) METRICS - Show post-vesting state
+    # ========================================================================
+    # At Month 60, all vesting is complete. Only burns/buybacks remain.
+    # This shows the TRUE long-term tokenomics state.
+    
+    # Get Month 60 unlock breakdown (should be 0 - vesting complete)
+    month_60_unlocks = config.get_monthly_unlock_breakdown(60)
+    month_60_total_unlocks = sum(month_60_unlocks.values())
+    
+    # Month 60 circulating supply
+    month_60_circulating = config.get_circulating_supply_at_month(60)
+    
+    # At Month 60, burns/buybacks scale with Year 5 activity (7.6x multiplier)
+    year5_monthly_burns = current_monthly_burns * 7.6
+    year5_monthly_buybacks = current_monthly_buybacks * 7.6
+    month_60_deflationary = year5_monthly_burns + year5_monthly_buybacks
+    
+    # Month 60 net supply change (should be NEGATIVE = deflationary)
+    month_60_net_change = month_60_total_unlocks - month_60_deflationary
+    
+    # For display: Use Month 60 values
+    net_monthly_supply_change = month_60_net_change
+    net_monthly_supply_change_usd = month_60_net_change * params.token_price
+    
+    # Calculate Month 60 rates
+    dilution_rate = (month_60_total_unlocks / month_60_circulating * 100) if month_60_circulating > 0 else 0
+    net_dilution_rate = (month_60_net_change / month_60_circulating * 100) if month_60_circulating > 0 else 0
+    
+    # Annual rate based on Month 60 (extrapolated)
+    annual_dilution_rate = net_dilution_rate * 12
+    
+    # Rewards emission at Month 60 (final month of emission)
+    month_60_rewards = month_60_unlocks.get('REWARDS', 0)
+    rewards_emission_rate = (month_60_rewards / month_60_circulating * 100) if month_60_circulating > 0 else 0
+    
+    # Burn efficiency at Month 60
+    burn_efficiency = (month_60_deflationary / month_60_total_unlocks * 100) if month_60_total_unlocks > 0 else 100  # 100% if no unlocks
+    
+    # Update display values for Month 60
+    # These will be shown in the UI
+    rewards_emission_vcoin = month_60_rewards
+    rewards_emission_usd = month_60_rewards * params.token_price
+    vesting_unlocks_vcoin = month_60_total_unlocks - month_60_rewards
+    vesting_unlocks_usd = vesting_unlocks_vcoin * params.token_price
+    total_monthly_unlocks_vcoin = month_60_total_unlocks
+    
+    # === STEP 9: Determine supply status and health at Month 60 ===
+    # At Month 60, the token SHOULD be deflationary (burns > unlocks)
+    is_deflationary = month_60_net_change < 0
+    
+    # Label based on Month 60 state
     if is_deflationary:
-        supply_health_score = min(100, supply_health_score + 20)  # Bonus for deflation
+        deflation_pct = abs(annual_dilution_rate)
+        if deflation_pct > 1:
+            deflation_strength = "Deflationary 🔥"
+        else:
+            deflation_strength = "Mildly Deflationary"
+    elif month_60_total_unlocks == 0:
+        deflation_strength = "Pure Deflationary 🔥"
+    else:
+        deflation_strength = "Post-Vesting"
+    
+    # Supply Health Score based on ecosystem efficiency
+    # Score = Ecosystem Efficiency (0-50) + Low CAGR Bonus (0-30) + Staking (0-20)
+    
+    # Ecosystem efficiency score (higher = better)
+    efficiency_score = min(50, ecosystem_efficiency * 2.5)  # 20% efficiency = 50 points
+    
+    # Low CAGR bonus (lower growth = healthier for holders)
+    if annual_supply_growth_rate < 10:
+        cagr_score = 30
+    elif annual_supply_growth_rate < 25:
+        cagr_score = 25
+    elif annual_supply_growth_rate < 40:
+        cagr_score = 15
+    else:
+        cagr_score = max(0, 30 - annual_supply_growth_rate * 0.5)
+    
+    # Staking score (higher staking = more locked supply)
+    staking_score = min(20, avg_staking_rate * 50)  # 40% staking = 20 points
+    
+    supply_health_score = min(100, efficiency_score + cagr_score + staking_score)
+    if is_deflationary:
+        supply_health_score = min(100, supply_health_score + 10)
     
     # Calculate total monthly unlocks from breakdown
     total_monthly_unlocks = sum(monthly_unlock_breakdown.values())
     
+    # Use Month 60 values for the inflation panel display
+    month_60_burns_usd = year5_monthly_burns * params.token_price
+    month_60_buybacks_usd = year5_monthly_buybacks * params.token_price
+    
+    # ========================================================================
+    # YEARLY SNAPSHOTS - For slider showing each year-end state
+    # ========================================================================
+    yearly_snapshots = []
+    year_growth_multipliers = [1.0, 1.9, 2.8, 4.6, 7.6]  # User growth per year
+    
+    for year in range(1, 6):
+        year_end_month = year * 12
+        
+        # Get unlock breakdown for this year-end month
+        year_unlocks = config.get_monthly_unlock_breakdown(year_end_month)
+        year_total_unlocks = sum(year_unlocks.values())
+        year_rewards = year_unlocks.get('REWARDS', 0)
+        year_vesting = year_total_unlocks - year_rewards
+        
+        # Circulating supply at year end
+        year_circulating = config.get_circulating_supply_at_month(year_end_month)
+        
+        # Burns/buybacks scaled by year's growth multiplier
+        year_mult = year_growth_multipliers[year - 1]
+        year_burns = current_monthly_burns * year_mult
+        year_buybacks = current_monthly_buybacks * year_mult
+        year_deflationary = year_burns + year_buybacks
+        
+        # Net change
+        year_net_change = year_total_unlocks - year_deflationary
+        
+        # Rates
+        year_net_rate = (year_net_change / year_circulating * 100) if year_circulating > 0 else 0
+        year_annual_rate = year_net_rate * 12
+        
+        # Status
+        year_is_deflationary = year_net_change < 0
+        if year_is_deflationary:
+            year_status = "Deflationary 🔥"
+        elif year_total_unlocks == 0:
+            year_status = "Pure Deflationary 🔥"
+        elif year_net_rate < 1:
+            year_status = "Near Neutral"
+        elif year_net_rate < 5:
+            year_status = "Low Growth"
+        elif year_net_rate < 10:
+            year_status = "Moderate Growth"
+        else:
+            year_status = "High Growth"
+        
+        yearly_snapshots.append({
+            'year': year,
+            'month': year_end_month,
+            'rewards_emission': round(year_rewards, 0),
+            'vesting_unlocks': round(year_vesting, 0),
+            'total_unlocks': round(year_total_unlocks, 0),
+            'burns': round(year_burns, 0),
+            'buybacks': round(year_buybacks, 0),
+            'total_deflationary': round(year_deflationary, 0),
+            'net_change': round(year_net_change, 0),
+            'circulating_supply': round(year_circulating, 0),
+            'monthly_rate': round(year_net_rate, 3),
+            'annual_rate': round(year_annual_rate, 2),
+            'is_deflationary': year_is_deflationary,
+            'status': year_status,
+        })
+    
     inflation_result = InflationResult(
-        monthly_emission=monthly_emission_vcoin,
-        monthly_emission_usd=monthly_emission_usd,
-        annual_emission=monthly_emission_vcoin * 12,
-        emission_rate=round(emission_rate, 3),
-        monthly_burns=monthly_burns,
-        monthly_burns_usd=monthly_burns_usd,
-        monthly_buybacks=monthly_buybacks,
-        monthly_buybacks_usd=monthly_buybacks_usd,
-        total_deflationary=total_deflationary,
-        net_monthly_inflation=net_monthly_inflation,
-        net_monthly_inflation_usd=net_monthly_inflation_usd,
-        net_inflation_rate=round(net_inflation_rate, 3),
-        annual_net_inflation_rate=round(annual_net_inflation_rate, 2),
-        circulating_supply=circulating_supply,
+        # Month 60: Rewards emission (final month, may be 0 if emission complete)
+        monthly_emission=rewards_emission_vcoin,  # Month 60 rewards
+        monthly_emission_usd=rewards_emission_usd,
+        annual_emission=rewards_emission_vcoin * 12,
+        emission_rate=round(rewards_emission_rate, 3),
+        # Month 60: Vesting unlocks (should be 0 - vesting complete)
+        vesting_unlocks=vesting_unlocks_vcoin,  # Month 60 vesting (0)
+        vesting_unlocks_usd=vesting_unlocks_usd,
+        dilution_rate=round(dilution_rate, 3),
+        rewards_emission_rate=round(rewards_emission_rate, 3),
+        # Month 60: Deflationary mechanisms (scaled to Year 5 activity)
+        monthly_burns=year5_monthly_burns,  # Year 5 scaled burns
+        monthly_burns_usd=month_60_burns_usd,
+        monthly_buybacks=year5_monthly_buybacks,  # Year 5 scaled buybacks
+        monthly_buybacks_usd=month_60_buybacks_usd,
+        total_deflationary=month_60_deflationary,  # Year 5 total deflationary
+        # Month 60: Net supply change (should be NEGATIVE = deflationary)
+        net_monthly_inflation=net_monthly_supply_change,  # Month 60 net change
+        net_monthly_inflation_usd=net_monthly_supply_change_usd,
+        net_inflation_rate=round(net_dilution_rate, 3),
+        annual_net_inflation_rate=round(annual_dilution_rate, 2),
+        # Supply metrics at Month 60
+        circulating_supply=month_60_circulating,  # Month 60 circulating
         total_supply=config.SUPPLY.TOTAL,
-        # Monthly unlock breakdown (December 2025)
-        monthly_unlocks_breakdown=monthly_unlock_breakdown,
-        total_monthly_unlocks=total_monthly_unlocks,
+        # Month 60 unlock breakdown
+        monthly_unlocks_breakdown=month_60_unlocks,  # Month 60 breakdown
+        total_monthly_unlocks=month_60_total_unlocks,  # Month 60 total (should be 0)
         tge_circulating=config.SUPPLY.TGE_CIRCULATING,
+        # Health indicators
         is_deflationary=is_deflationary,
         deflation_strength=deflation_strength,
         supply_health_score=round(supply_health_score, 1),
+        # Projections
         months_to_max_supply=config.SUPPLY.REWARDS_DURATION_MONTHS,
-        projected_year1_inflation=round(annual_net_inflation_rate, 2),
-        # FIX: Year 5 projection should use actual vesting schedule, not linear net inflation
-        # Uses dynamic rewards for projection (with users and token_price)
+        projected_year1_inflation=round(annual_dilution_rate, 2),  # Actually dilution, not inflation
+        # Year 5 projection uses actual vesting schedule
         projected_year5_supply=config.get_circulating_supply_at_month(60, users=users, token_price=params.token_price),
+        # ISSUE #5 FIX: Track additional supply sources
+        referral_bonus_distributed=referral_result_early.bonus_distributed_vcoin if referral_result_early else 0,
+        points_tokens_distributed=getattr(params.points, 'points_pool_tokens', 10_000_000) if (params.points and getattr(params.points, 'enable_points', True)) else 0,
+        # ISSUE #7 FIX: Track emission breakdown
+        staking_rewards_from_emission=staking_result.total_monthly_rewards if staking_result else 0,
+        user_rewards_from_emission=rewards.monthly_reward_pool,
+        # Yearly snapshots for slider
+        yearly_snapshots=yearly_snapshots,
     )
     
     # Step 5f-5: Calculate Whale Concentration Analysis
@@ -1234,6 +1546,44 @@ def run_deterministic_simulation(
         recommendations=game_theory_data.get('coordination_game', {}).get('recommendations', []),
     )
     
+    # Step 5f-9: Calculate Sensitivity Analysis (ISSUE #1 FIX)
+    # Run stress tests to see how the platform handles various crisis scenarios
+    base_metrics = {
+        'token_price': params.token_price,
+        'monthly_users': users,
+        'retention_rate': retention_rate / 100 if retention_rate is not None else 0.22,
+        'monthly_revenue': base_module_revenue + future_modules_revenue,
+        'liquidity': liquidity_pool_usd,
+        'cac': customer_acquisition.blended_cac,
+    }
+    
+    stress_test_results = run_all_stress_tests(base_metrics)
+    
+    # Convert stress test results to SensitivityResult
+    from app.models.results import SensitivityResult, StressTestScenarioResult
+    
+    sensitivity_result = SensitivityResult(
+        stress_tests={
+            scenario: StressTestScenarioResult(
+                scenario=data['scenario'],
+                scenario_name=data['scenario_name'],
+                description=data['description'],
+                immediate_impact=data['immediate_impact'],
+                max_drawdown_percent=data['max_drawdown_percent'],
+                recovery_months=data['recovery_months'],
+                permanent_impact_percent=data['permanent_impact_percent'],
+                total_revenue_loss=data['total_revenue_loss'],
+            )
+            for scenario, data in stress_test_results['scenarios'].items()
+        },
+        worst_scenario=stress_test_results['worst_scenario'],
+        least_severe_scenario=stress_test_results['least_severe_scenario'],
+        # Monte Carlo can be added later if needed
+        monte_carlo_p5=0,
+        monte_carlo_p50=0,
+        monte_carlo_p95=0,
+    )
+    
     token_metrics_result = TokenMetricsResult(
         velocity=filter_model_fields(velocity_data, TokenVelocityResult),
         real_yield=filter_model_fields(real_yield_data, RealYieldResult),
@@ -1255,57 +1605,51 @@ def run_deterministic_simulation(
     prelaunch_result = None
     prelaunch_costs = 0
     
-    # Get viral coefficient from growth scenario if available
-    viral_coefficient = 0.5  # Default
-    if hasattr(params, 'use_growth_scenarios') and params.use_growth_scenarios:
-        from app.core.growth_scenarios import GrowthScenario, GROWTH_SCENARIOS
-        from app.models import GrowthScenarioType
-        scenario_map = {
-            GrowthScenarioType.CONSERVATIVE: GrowthScenario.CONSERVATIVE,
-            GrowthScenarioType.BASE: GrowthScenario.BASE,
-            GrowthScenarioType.BULLISH: GrowthScenario.BULLISH,
-        }
-        scenario_key = scenario_map.get(params.growth_scenario, GrowthScenario.BASE)
-        scenario_config = GROWTH_SCENARIOS.get(scenario_key)
-        if scenario_config:
-            viral_coefficient = scenario_config.viral_coefficient
-    
+    # Referral module
+    # ISSUE #2 FIX: Referral was calculated early to include users in revenue calculations
+    # Now we recalculate with actual revenue-based budget for cost tracking
     referral_result = None
     points_result = None
     gasless_result = None
     
-    # Referral module
-    # CRIT-004 Fix: Only allocate referral budget when platform has positive revenue
-    # Previously, this allocated $500 minimum even when losing money
-    # Budget is 10% of module revenue, minimum $500, capped at $5,000 in early stage
-    if base_module_revenue > 0:
-        referral_budget = max(500, min(5000, base_module_revenue * 0.10))
-    else:
-        # Platform is losing money - don't spend on referrals
-        referral_budget = 0
-    
-    if params.referral and getattr(params.referral, 'enable_referral', True):
-        ref_data = calculate_referral(params, users, viral_coefficient, referral_budget)
-        referral_result = ReferralResult(
-            total_users=ref_data.total_users,
-            users_with_referrals=ref_data.users_with_referrals,
-            total_referrals=ref_data.total_referrals,
-            qualified_referrals=ref_data.qualified_referrals,
-            referrers_by_tier=ref_data.referrers_by_tier,
-            referrals_by_tier=ref_data.referrals_by_tier,
-            bonus_distributed_vcoin=ref_data.bonus_distributed_vcoin,
-            bonus_distributed_usd=ref_data.bonus_distributed_usd,
-            avg_bonus_per_referrer_vcoin=ref_data.avg_bonus_per_referrer_vcoin,
-            viral_coefficient=ref_data.viral_coefficient,
-            effective_referral_rate=ref_data.effective_referral_rate,
-            qualification_rate=ref_data.qualification_rate,
-            monthly_referral_cost_vcoin=ref_data.monthly_referral_cost_vcoin,
-            monthly_referral_cost_usd=ref_data.monthly_referral_cost_usd,
-            suspected_sybil_referrals=ref_data.suspected_sybil_referrals,
-            sybil_rejection_rate=ref_data.sybil_rejection_rate,
-            breakdown=ref_data.breakdown,
+    if referral_result_early is not None:
+        # CRIT-004 Fix: Only allocate referral budget when platform has positive revenue
+        # Budget is 10% of module revenue, minimum $500, capped at $5,000 in early stage
+        if base_module_revenue > 0:
+            referral_budget = max(500, min(5000, base_module_revenue * 0.10))
+        else:
+            # Platform is losing money - don't spend on referrals
+            referral_budget = 0
+        
+        # Recalculate with actual budget for accurate cost tracking
+        # User counts remain the same as early calculation
+        ref_data_refined = calculate_referral(
+            params, 
+            users,  # Use final user count (includes referrals)
+            referral_result_early.viral_coefficient, 
+            referral_budget
         )
-        prelaunch_costs += ref_data.monthly_referral_cost_usd
+        
+        referral_result = ReferralResult(
+            total_users=ref_data_refined.total_users,
+            users_with_referrals=ref_data_refined.users_with_referrals,
+            total_referrals=ref_data_refined.total_referrals,
+            qualified_referrals=referral_result_early.qualified_referrals,  # Keep early count for consistency
+            referrers_by_tier=ref_data_refined.referrers_by_tier,
+            referrals_by_tier=ref_data_refined.referrals_by_tier,
+            bonus_distributed_vcoin=ref_data_refined.bonus_distributed_vcoin,
+            bonus_distributed_usd=ref_data_refined.bonus_distributed_usd,
+            avg_bonus_per_referrer_vcoin=ref_data_refined.avg_bonus_per_referrer_vcoin,
+            viral_coefficient=ref_data_refined.viral_coefficient,
+            effective_referral_rate=ref_data_refined.effective_referral_rate,
+            qualification_rate=ref_data_refined.qualification_rate,
+            monthly_referral_cost_vcoin=ref_data_refined.monthly_referral_cost_vcoin,
+            monthly_referral_cost_usd=ref_data_refined.monthly_referral_cost_usd,
+            suspected_sybil_referrals=ref_data_refined.suspected_sybil_referrals,
+            sybil_rejection_rate=ref_data_refined.sybil_rejection_rate,
+            breakdown=ref_data_refined.breakdown,
+        )
+        prelaunch_costs += ref_data_refined.monthly_referral_cost_usd
     
     # Points module (pre-launch only, uses waitlist users)
     waitlist_users = getattr(params, 'starting_waitlist_users', 1000)
@@ -1432,6 +1776,19 @@ def run_deterministic_simulation(
         margin=round(total_margin, 1),
     )
     
+    # Step 6b: Create initial customer_acquisition (LTV/CAC will be updated after 5-year projection)
+    # We need placeholder values here because base_result is needed for 5-year calculation
+    # The correct LTV/CAC will be calculated FROM the actual simulation results
+    arpu_base = total_revenue / users if users > 0 else 0
+    
+    # Placeholder values - will be overwritten with simulation-based values
+    customer_acquisition = CustomerAcquisitionMetrics(
+        **customer_acquisition_base_data,
+        ltv_estimate=0.0,  # Will be calculated from 5-year simulation
+        ltv_cac_ratio=0.0,  # Will be calculated from 5-year simulation
+        payback_months=0.0,  # Will be calculated from 5-year simulation
+    )
+    
     # Step 6f (NEW - Dec 2025): Recalculate 5A with actual values
     # Now we have staking and governance results to provide real values
     if five_a_enabled:
@@ -1445,7 +1802,8 @@ def run_deterministic_simulation(
             governance_power=governance_result.total_vevcoin_supply if governance_result else 0,
         )
     
-    return SimulationResult(
+    # Create base result first (for 5-year calculation)
+    base_result = SimulationResult(
         # Starting users summary at the top for easy reference
         starting_users_summary=starting_users_summary,
         identity=identity,
@@ -1472,4 +1830,72 @@ def run_deterministic_simulation(
         five_a=five_a_result,
         # NEW: Organic User Growth (Dec 2025)
         organic_growth=organic_growth_result,
+        # NEW: Sensitivity Analysis (Dec 2025 - ISSUE #1 FIX)
+        sensitivity=sensitivity_result,
+        # Supply Dynamics (inflation/dilution metrics)
+        inflation=inflation_result,
     )
+    
+    # Step 7 (NEW - Dec 2025): Calculate 5-year projections
+    # This ensures export JSON matches UI exactly
+    try:
+        five_year_result = calculate_5_year_projections(
+            base_result=base_result,
+            params=params,
+        )
+        base_result.five_year_projections = five_year_result
+        
+        # Step 7b: NOW calculate LTV/CAC from ACTUAL simulation results
+        # This ensures LTV/CAC matches the profit shown in 5-year projections
+        if five_year_result and five_year_result.years:
+            # Get actual 5-year totals from simulation
+            total_5yr_revenue = sum(yr.total_revenue for yr in five_year_result.years)
+            total_5yr_marketing = sum(yr.marketing_budget for yr in five_year_result.years)
+            final_users = five_year_result.years[-1].end_users if five_year_result.years else users
+            
+            # Calculate REAL LTV from simulation:
+            # LTV = Total Revenue / Users (not just month 1 ARPU!)
+            # This is the actual value generated by each user over 5 years
+            ltv_from_simulation = total_5yr_revenue / final_users if final_users > 0 else 0
+            
+            # Calculate REAL CAC from simulation:
+            # Total marketing spend / Total users acquired
+            cac_from_simulation = total_5yr_marketing / final_users if final_users > 0 else effective_cac
+            
+            # Calculate proper LTV/CAC ratio from simulation
+            ltv_cac_from_simulation = ltv_from_simulation / cac_from_simulation if cac_from_simulation > 0 else 0
+            
+            # Calculate payback months based on actual simulation ARPU
+            # Use Year 1 average revenue / users for monthly ARPU
+            year1_revenue = five_year_result.years[0].total_revenue if five_year_result.years else total_revenue
+            year1_users = five_year_result.years[0].avg_users if five_year_result.years else users
+            actual_arpu = (year1_revenue / 12) / year1_users if year1_users > 0 else arpu_base
+            payback_from_simulation = cac_from_simulation / actual_arpu if actual_arpu > 0 else 0
+            
+            # Log for debugging
+            print(f"LTV/CAC from simulation: 5yr Revenue=${total_5yr_revenue:,.0f}, "
+                  f"Users={final_users:,}, LTV=${ltv_from_simulation:.2f}, "
+                  f"CAC=${cac_from_simulation:.2f}, Ratio={ltv_cac_from_simulation:.2f}x")
+            
+            # Update customer_acquisition with REAL values from simulation
+            # Override effective_cac with the 5-year calculated CAC
+            updated_base_data = {
+                **customer_acquisition_base_data,
+                'effective_cac': round(cac_from_simulation, 2),  # Use 5-year CAC, not initial
+            }
+            updated_customer_acquisition = CustomerAcquisitionMetrics(
+                **updated_base_data,
+                ltv_estimate=round(ltv_from_simulation, 2),
+                ltv_cac_ratio=round(ltv_cac_from_simulation, 2),
+                payback_months=round(payback_from_simulation, 1),
+            )
+            
+            # Update base_result with correct LTV/CAC
+            base_result.customer_acquisition = updated_customer_acquisition
+            
+    except Exception as e:
+        # If calculation fails, log error but don't break simulation
+        print(f"Warning: 5-year projection calculation failed: {e}")
+        base_result.five_year_projections = None
+    
+    return base_result

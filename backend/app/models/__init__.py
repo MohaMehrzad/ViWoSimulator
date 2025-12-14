@@ -62,6 +62,9 @@ from .results import (
     PointsResult,
     GaslessResult,
     PreLaunchResult,
+    # 5-year projections (Dec 2025)
+    YearlyProjection,
+    FiveYearProjectionResult,
 )
 
 __all__ = [
@@ -87,6 +90,9 @@ __all__ = [
     'ReferralParameters',
     'PointsParameters',
     'GaslessParameters',
+    # 5-year projections
+    'YearlyProjection',
+    'FiveYearProjectionResult',
     # Results
     'ModuleResult',
     'RecaptureResult',

@@ -4,6 +4,7 @@ Pydantic models for simulation results.
 Updated to include MonthlyProgressionResult for Issue #16.
 Nov 2025: Added LiquidityResult, StakingResult, and Growth Scenario results.
 Nov 2025: Added CirculatingSupplyResult and TreasuryResult for token allocation tracking.
+Dec 2025: Added FiveYearProjectionResult for backend-calculated 5-year projections.
 """
 
 from pydantic import BaseModel, field_validator
@@ -428,19 +429,39 @@ class RunwayResult(BaseModel):
 
 class InflationResult(BaseModel):
     """
-    Token inflation metrics - tracks supply dynamics over time.
+    Token Supply Dynamics - tracks circulating supply changes over time.
+    
+    IMPORTANT TERMINOLOGY (Dec 2025):
+    - VCoin has a FIXED total supply of 1 billion tokens
+    - TRUE INFLATION = 0% (no new tokens created beyond the cap)
+    - What we track is "Circulating Supply Dilution" - previously locked tokens becoming liquid
     
     Key metrics:
-    - Gross inflation: Total new tokens entering circulation (emission)
-    - Net inflation: Emission - Burns - Buybacks
-    - Inflation rate: Net inflation as % of circulating supply
-    - Monthly unlock breakdown: Per-category token releases
+    - Rewards Emission: Tokens distributed from the 350M rewards pool (35% of supply)
+    - Vesting Unlocks: Pre-allocated tokens becoming liquid (seed, private, team, etc.)
+    - Circulating Supply Growth: Total new tokens entering circulation
+    - Net Supply Change: Growth - Burns - Buybacks
+    - Dilution Rate: Net change as % of current circulating supply
+    
+    Why token price can grow despite high dilution:
+    1. Total supply is FIXED - dilution is temporary (ends month 60)
+    2. Burns permanently remove tokens from circulation
+    3. Utility demand creates buy pressure
+    4. Post-vesting, the token becomes deflationary
     """
-    # Emission (new tokens entering)
-    monthly_emission: float = 0  # VCoin minted this month
+    # Emission (rewards distributed to users from fixed 350M pool)
+    monthly_emission: float = 0  # VCoin distributed as rewards this month
     monthly_emission_usd: float = 0
     annual_emission: float = 0
-    emission_rate: float = 0  # As % of circulating
+    emission_rate: float = 0  # Emission as % of circulating (for rewards only)
+    
+    # Vesting Unlocks (pre-allocated tokens becoming liquid - NOT inflation!)
+    vesting_unlocks: float = 0  # VCoin unlocking from vesting schedules
+    vesting_unlocks_usd: float = 0
+    
+    # Circulating supply growth rate (often mislabeled as "inflation")
+    dilution_rate: float = 0  # All unlocks as % of circulating (NOT true inflation!)
+    rewards_emission_rate: float = 0  # Rewards-only emission as % of circulating
     
     # Deflationary mechanisms
     monthly_burns: float = 0  # VCoin burned
@@ -476,6 +497,17 @@ class InflationResult(BaseModel):
     projected_year5_supply: float = 0
     runway_health: float = 0
     months_to_sustainability: float = 0
+    
+    # Additional supply sources (ISSUE #5 FIX)
+    referral_bonus_distributed: float = 0  # VCoin distributed as referral bonuses
+    points_tokens_distributed: float = 0  # VCoin from points airdrop (TGE only)
+    
+    # Emission breakdown (ISSUE #7 FIX)
+    staking_rewards_from_emission: float = 0  # How much of emission goes to staking
+    user_rewards_from_emission: float = 0  # How much goes to user rewards
+    
+    # Year-by-year supply snapshots (for slider)
+    yearly_snapshots: Optional[List[Dict[str, Any]]] = None  # 5 snapshots for years 1-5
 
 
 class DumpScenarioResult(BaseModel):
@@ -1001,6 +1033,12 @@ class CustomerAcquisitionMetrics(BaseModel):
     organic_users: int = 0
     total_users_with_organic: int = 0
     organic_percent: float = 0.0
+    # ISSUE #6 FIX: Effective CAC including organic/free users
+    effective_cac: float = 0.0  # CAC including organic users (marketing_spend / all_users)
+    # LTV/CAC metrics
+    ltv_estimate: float = 0.0  # Estimated lifetime value per user
+    ltv_cac_ratio: float = 0.0  # LTV/CAC ratio (target: 3.0+)
+    payback_months: float = 0.0  # Months to recover CAC
 
 
 class TotalsResult(BaseModel):
@@ -1470,6 +1508,52 @@ class StartingUsersSummary(BaseModel):
     # Organic growth tracking (Dec 2025)
     organic_users_acquired: Optional[int] = None
     organic_percent_of_total: Optional[float] = None
+    
+    # Referral users tracking (Dec 2025 - Issue #2 Fix)
+    referral_users_acquired: Optional[int] = None
+    referral_percent_of_total: Optional[float] = None
+
+
+# === 5-YEAR PROJECTIONS (Dec 2025) ===
+
+class YearlyProjection(BaseModel):
+    """
+    Single year projection data for 5-year forecasts.
+    Contains detailed metrics for user growth, revenue, and token price.
+    """
+    year: int
+    start_month: int
+    end_month: int
+    start_users: int
+    end_users: int
+    avg_users: int
+    total_revenue: float
+    total_profit: float
+    avg_margin: float
+    token_price_start: float
+    token_price_end: float
+    core_modules_revenue: float
+    future_modules_revenue: float
+    active_modules: List[str]
+    market_cycle: str
+    cycle_multiplier: float
+    # Marketing budget (Dec 2025)
+    marketing_budget: float
+    marketing_multiplier: float
+    # User growth price impact (Dec 2025)
+    user_growth_price_multiplier: float
+    user_growth_ratio: float
+
+
+class FiveYearProjectionResult(BaseModel):
+    """
+    Complete 5-year projection results calculated in backend.
+    This ensures export JSON matches what user sees in UI.
+    """
+    available: bool
+    source: str  # "calculated" or "estimated"
+    years: List[YearlyProjection]
+    summary: Dict[str, Any]
 
 
 class SimulationResult(BaseModel):
@@ -1506,6 +1590,10 @@ class SimulationResult(BaseModel):
     five_a: Optional[FiveAResult] = None
     # NEW: Organic User Growth (Dec 2025)
     organic_growth: Optional[OrganicGrowthResult] = None
+    # NEW: 5-Year Projections (Dec 2025)
+    five_year_projections: Optional[FiveYearProjectionResult] = None
+    # Supply Dynamics (Dec 2025) - circulating supply growth, NOT true inflation
+    inflation: Optional[InflationResult] = None
 
 
 class PercentileResults(BaseModel):

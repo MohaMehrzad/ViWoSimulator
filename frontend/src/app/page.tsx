@@ -30,7 +30,6 @@ import {
   FiveAPolicySection,
   OrganicGrowthSection,
 } from '@/components/modules';
-import { calculate5YearProjections } from '@/components/modules/Year5Overview';
 import { formatNumber, formatCurrency } from '@/lib/utils';
 import { ExportButtons } from '@/components/simulation/ExportButtons';
 import { SaveDefaultButton } from '@/components/SaveDefaultButton';
@@ -40,22 +39,12 @@ export default function Home() {
   const [activeTab, setActiveTab] = useState<PageTab>('year1');
   const [activeSection, setActiveSection] = useState('overview');
 
-  // Calculate 5-year projection stats for header (uses same function as Year5Overview)
+  // Get 5-year projection stats for header from backend results
   const fiveYearStats = useMemo(() => {
-    if (!simulation.activeResult) return null;
+    if (!simulation.activeResult?.fiveYearProjections?.available) return null;
     
-    const scenario = (simulation.parameters.growthScenario || 'base') as keyof typeof GROWTH_SCENARIOS;
-    const marketCondition = (simulation.parameters.marketCondition || 'bull') as keyof typeof MARKET_CONDITIONS;
-    const scenarioConfig = GROWTH_SCENARIOS[scenario];
-    const marketConfig = MARKET_CONDITIONS[marketCondition];
-    
-    const projections = calculate5YearProjections(
-      simulation.activeResult,
-      scenarioConfig,
-      marketConfig,
-      simulation.parameters.tokenPrice,
-      simulation.parameters
-    );
+    const projections = simulation.activeResult.fiveYearProjections.years;
+    if (!projections || projections.length === 0) return null;
     
     const totalRevenue = projections.reduce((s, y) => s + y.totalRevenue, 0);
     const totalProfit = projections.reduce((s, y) => s + y.totalProfit, 0);
@@ -69,7 +58,7 @@ export default function Home() {
       tokenPriceMultiplier,
       treasury: totalProfit * 0.15,
     };
-  }, [simulation.activeResult, simulation.parameters]);
+  }, [simulation.activeResult, simulation.parameters.tokenPrice]);
 
   // Reset active section and auto-toggle future modules when switching tabs
   useEffect(() => {
